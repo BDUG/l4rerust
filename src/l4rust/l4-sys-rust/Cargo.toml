@@ -1,0 +1,15 @@
+[package]
+name = "l4_sys"
+version = "0.1.0"
+authors = ["Sebastian Humenda <shumenda @ gmx . de>"]
+edition = "2018"
+
+[lib]
+path = "lib.rs"
+
+[build-dependencies]
+bindgen = "0.68"
+
+[dependencies]
+core-ffi-helpers = { path = "../core-ffi-helpers" }
+libc = "0.2.147"

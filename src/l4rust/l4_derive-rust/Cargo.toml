@@ -1,0 +1,18 @@
+[package]
+name = "l4_derive"
+version = "0.1.0"
+authors = ["Sebastian Humenda <shumenda@gmx.de>"]
+edition = "2021"
+
+[lib]
+proc-macro = true
+path = "lib.rs"
+
+[dependencies]
+lazy_static = "1.2.0"
+quote = "0.6.11"
+proc-macro2 = "0.4.27"
+
+[dependencies.syn]
+version = "0.15.29"
+features = ["derive", "clone-impls", "full", "parsing", "printing", "proc-macro", "extra-traits"]
