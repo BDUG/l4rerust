@@ -1,0 +1,8 @@
+[package]
+name = "example_server"
+version = "0.1.0"
+
+[[bin]]
+name = "example_server"
+path = "src/server.rs"
+
