@@ -7,3 +7,4 @@ edition = "2021"
 l4re = { path = "../l4rust/l4re-rust" }
 l4re-libc = { path = "../l4rust/l4re-libc" }
 fatfs = "0.3"
+libc = "0.2"
