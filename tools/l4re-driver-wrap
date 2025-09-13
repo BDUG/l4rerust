@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+Usage: $0 [--config FILE] [--linux-src PATH] [--driver NAME]
+
+Combines driver selection, scaffolding, build, and packaging into one step.
+
+Options:
+  --config FILE     Configuration file with LINUX_SRC and DRIVER variables
+  --linux-src PATH  Path to Linux kernel sources
+  --driver NAME     Driver name for packaging (defaults to manifest value)
+  -h, --help        Show this help
+USAGE
+}
+
+CONFIG=""
+LINUX_SRC=""
+DRIVER=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      CONFIG="$2"
+      shift 2
+      ;;
+    --linux-src)
+      LINUX_SRC="$2"
+      shift 2
+      ;;
+    --driver)
+      DRIVER="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -n "$CONFIG" ]]; then
+  if [[ -f "$CONFIG" ]]; then
+    source "$CONFIG"
+  else
+    echo "Config file $CONFIG not found" >&2
+    exit 1
+  fi
+fi
+
+if [[ -z "${LINUX_SRC:-}" ]]; then
+  echo "LINUX_SRC not specified" >&2
+  exit 1
+fi
+
+# Step 1: run driver_picker selection/extraction tool
+picker_output=$(cargo run --manifest-path driver_picker/Cargo.toml -- --linux-src "$LINUX_SRC")
+echo "$picker_output"
+workspace=$(echo "$picker_output" | sed -n 's/^Workspace: //p' | tail -n1)
+manifest="$workspace/driver.yaml"
+
+if [[ -z "$workspace" || ! -f "$manifest" ]]; then
+  echo "Failed to determine extraction workspace" >&2
+  exit 1
+fi
+
+if [[ -z "${DRIVER:-}" ]]; then
+  DRIVER=$(grep '^driver:' "$manifest" | awk '{print $2}')
+fi
+
+# Step 2: generate build scaffolding by copying sources
+src_dir="src/driver/src/linux"
+rm -rf "$src_dir"
+mkdir -p "$src_dir"
+cp -r "$workspace"/* "$src_dir/"
+cp "$manifest" "$src_dir/"
+
+echo "Scaffolding generated under $src_dir"
+
+# Step 3: build virtio-enabled driver server
+cargo build --manifest-path src/driver_server/Cargo.toml --release
+
+# Step 4: create L4Re package
+pkg_dir="src/pkg/$DRIVER"
+mkdir -p "$pkg_dir"
+cat > "$pkg_dir/Makefile" <<PKG
+PKGDIR ?= .
+L4DIR ?= \$(PKGDIR)/../..
+
+TARGET := $DRIVER
+
+install:: \$(TARGET)
+\$(INSTALL) -m 755 \$(TARGET) \$(INSTDIR)/boot/
+
+include \$(L4DIR)/mk/subdir.mk
+PKG
+
+cp target/release/driver_server "$pkg_dir/$DRIVER"
+
+echo "Package created at $pkg_dir"
