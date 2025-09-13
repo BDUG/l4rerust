@@ -1,0 +1,11 @@
+[package]
+name = "net_client"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+l4re = { path = "../l4re-rust" }
+l4 = { path = "../l4-rust" }
