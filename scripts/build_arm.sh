@@ -225,6 +225,15 @@ else
   echo "openssh for arm and arm64 already built, skipping"
 fi
 
+# Link the OpenSSH server binary into the package directory so the
+# L4Re build system can pick it up when creating images.
+mkdir -p src/pkg/openssh
+for arch in arm arm64; do
+  if [ -f "obj/openssh/$arch/sshd" ]; then
+    ln -sf ../../obj/openssh/$arch/sshd src/pkg/openssh/sshd
+  fi
+done
+
 # Build the tree including libc, Leo, and Rust crates
 make
 
