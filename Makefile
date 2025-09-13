@@ -97,6 +97,13 @@ bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_image
 obj/bash/%/bash:
 	@scripts/build_arm.sh --no-clean
 
+SYSTEMD_ARCHES := arm arm64
+
+systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
+
+obj/systemd/%/systemd:
+	@scripts/build_arm.sh --no-clean
+
 EXAMPLE_CRATES := \
 src/ipc-example/client \
 src/ipc-example/server \
@@ -161,8 +168,9 @@ help:
 	@echo "  setup"
 	@echo "  gen_prebuilt"
 	@echo "  bash-image    Build image with Bash as first program"
+	@echo "  systemd-image Build image with systemd"
 	@echo "  examples      Build Rust example servers and clients"
 
 .PHONY: setup all build_all clean help \
 build_images build_fiasco build_l4re build_l4linux bash-image \
-examples
+systemd-image examples
