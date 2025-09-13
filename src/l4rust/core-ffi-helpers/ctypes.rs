@@ -23,4 +23,6 @@ mod aarch64 {
 #[cfg(target_arch = "aarch64")]
 pub use aarch64::*;
 #[cfg(target_arch = "x86_64")]
+use l4re_libc as libc;
+#[cfg(target_arch = "x86_64")]
 pub use libc::*;
