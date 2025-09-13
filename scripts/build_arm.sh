@@ -304,17 +304,23 @@ if [ -d "$units_dir" ]; then
   done
 fi
 
-# Enable bash service
-bash_unit="files/systemd/bash.service"
-if [ -f "$bash_unit" ]; then
-  mkdir -p files/lsb_root/etc/systemd/system/multi-user.target.wants
-  ln -sf ../../../../lib/systemd/system/bash.service \
-    files/lsb_root/etc/systemd/system/multi-user.target.wants/bash.service
-  debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
-  debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
-  debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
-  debugfs -w -R "symlink /lib/systemd/system/bash.service /etc/systemd/system/multi-user.target.wants/bash.service" "$lsb_img" >/dev/null
-fi
+# Enable services
+enable_service() {
+  local name="$1"
+  local unit="files/systemd/${name}.service"
+  if [ -f "$unit" ]; then
+    mkdir -p files/lsb_root/etc/systemd/system/multi-user.target.wants
+    ln -sf ../../../../lib/systemd/system/${name}.service \
+      files/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
+    debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
+    debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
+    debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
+    debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
+  fi
+}
+
+enable_service bash
+enable_service sshd
 
 # Collect build artifacts
 out_dir="out"
