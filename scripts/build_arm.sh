@@ -239,6 +239,16 @@ if [ -d "$sys_root" ]; then
   fi
 fi
 
+# Install fs_server systemd unit into the image
+fs_unit="files/systemd/fs_server.service"
+if [ -f "$fs_unit" ]; then
+  mkdir -p files/lsb_root/lib/systemd/system
+  cp "$fs_unit" files/lsb_root/lib/systemd/system/
+  debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+  debugfs -w -R "write $fs_unit /lib/systemd/system/fs_server.service" "$lsb_img" >/dev/null
+  debugfs -w -R "chmod 0644 /lib/systemd/system/fs_server.service" "$lsb_img" >/dev/null
+fi
+
 # Collect build artifacts
 out_dir="out"
 rm -rf "$out_dir"
