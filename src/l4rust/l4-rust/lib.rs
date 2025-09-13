@@ -22,6 +22,12 @@ pub mod ipc;
 pub mod nostd_helper;
 pub mod task;
 
+#[cfg(feature = "scheduler")]
+pub mod scheduler;
+
+#[cfg(feature = "scheduler")]
+pub use scheduler::{SchedulerKind, SchedulerPolicy};
+
 pub use crate::error::{Error, Result};
 pub use crate::utcb::*;
 
