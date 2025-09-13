@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use libc::{c_int, c_uint, c_void, sigset_t, clockid_t, itimerspec};
+use libc::{c_int, c_uint, c_void, sigset_t, clockid_t, itimerspec, size_t};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -29,6 +29,9 @@ pub const TFD_NONBLOCK: c_int = 0o4000;
 pub const TFD_TIMER_ABSTIME: c_int = 1;
 pub const TFD_TIMER_CANCEL_ON_SET: c_int = 2;
 
+pub const SFD_CLOEXEC: c_int = 0o2000000;
+pub const SFD_NONBLOCK: c_int = 0o4000;
+
 pub const EPOLLIN: u32 = 0x001;
 pub const EPOLLPRI: u32 = 0x002;
 pub const EPOLLOUT: u32 = 0x004;
@@ -49,6 +52,33 @@ pub const EPOLL_CTL_ADD: c_int = 1;
 pub const EPOLL_CTL_DEL: c_int = 2;
 pub const EPOLL_CTL_MOD: c_int = 3;
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct signalfd_siginfo {
+    pub ssi_signo: u32,
+    pub ssi_errno: i32,
+    pub ssi_code: i32,
+    pub ssi_pid: u32,
+    pub ssi_uid: u32,
+    pub ssi_fd: i32,
+    pub ssi_tid: u32,
+    pub ssi_band: u32,
+    pub ssi_overrun: u32,
+    pub ssi_trapno: u32,
+    pub ssi_status: i32,
+    pub ssi_int: i32,
+    pub ssi_ptr: u64,
+    pub ssi_utime: u64,
+    pub ssi_stime: u64,
+    pub ssi_addr: u64,
+    pub ssi_addr_lsb: u16,
+    pub __pad2: u16,
+    pub ssi_syscall: i32,
+    pub ssi_call_addr: u64,
+    pub ssi_arch: u32,
+    pub __pad: [u8; 28],
+}
+
 extern "C" {
     pub fn eventfd(initval: c_uint, flags: c_int) -> c_int;
     pub fn eventfd_read(fd: c_int, value: *mut eventfd_t) -> c_int;
@@ -64,5 +94,8 @@ extern "C" {
     pub fn timerfd_create(clockid: clockid_t, flags: c_int) -> c_int;
     pub fn timerfd_settime(fd: c_int, flags: c_int, new_value: *const itimerspec,
         old_value: *mut itimerspec) -> c_int;
-    pub fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
-}
+      pub fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
+
+      pub fn signalfd(fd: c_int, mask: *const sigset_t, flags: c_int) -> c_int;
+      pub fn signalfd4(fd: c_int, mask: *const sigset_t, size: size_t, flags: c_int) -> c_int;
+  }
