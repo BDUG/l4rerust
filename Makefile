@@ -97,6 +97,18 @@ bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_image
 obj/bash/%/bash:
 	@scripts/build_arm.sh --no-clean
 
+EXAMPLE_CRATES := \
+src/ipc-example/client \
+src/ipc-example/server \
+src/fs_server \
+src/net_server
+
+examples:
+	@for crate in $(EXAMPLE_CRATES); do \
+		echo "Building $$crate"; \
+		cargo build --manifest-path $$crate/Cargo.toml --release; \
+	done
+
 gen_prebuilt: copy_prebuilt pre-built-images/l4image
 
 copy_prebuilt2:
@@ -149,6 +161,8 @@ help:
 	@echo "  setup"
 	@echo "  gen_prebuilt"
 	@echo "  bash-image    Build image with Bash as first program"
+	@echo "  examples      Build Rust example servers and clients"
 
 .PHONY: setup all build_all clean help \
-	build_images build_fiasco build_l4re build_l4linux bash-image
+build_images build_fiasco build_l4re build_l4linux bash-image \
+examples
