@@ -12,3 +12,21 @@ The script also accepts a `--test` flag which performs a brief QEMU boot using
 the generated image `obj/l4/arm64/images/bootstrap_hello_arm_virt.elf`. The
 script aborts if the QEMU run fails, providing a quick smoke test of the
 build.
+
+The build process first compiles the `l4re-libc` crate to provide a static
+libc for the Rust components. The resulting library is made available through
+the `LIBRARY_PATH` environment variable so that subsequent Rust crates link
+against it automatically.
+
+To rebuild manually outside of the script:
+
+```
+cd src/l4rust
+cargo build -p l4re-libc --release
+export LIBRARY_PATH=$(pwd)/target/release:${LIBRARY_PATH}
+cd -
+make
+```
+
+Ensuring `LIBRARY_PATH` is set correctly allows the Rust crates to link against
+the freshly built static libc.

@@ -75,6 +75,14 @@ fi
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 SETUP_CONFIG_ALL=1 ./setup config
 
+# Build the Rust libc crate so other crates can link against it
+(
+  cd src/l4rust
+  cargo build -p l4re-libc --release
+)
+# Ensure Rust crates pick up the freshly built static libc
+export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
+
 # Build the tree including libc, Leo, and Rust crates
 make
 
