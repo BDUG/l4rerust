@@ -239,14 +239,30 @@ if [ -d "$sys_root" ]; then
   fi
 fi
 
-# Install fs_server systemd unit into the image
-fs_unit="files/systemd/fs_server.service"
-if [ -f "$fs_unit" ]; then
+# Install systemd unit files into the image
+units_dir="files/systemd"
+if [ -d "$units_dir" ]; then
   mkdir -p files/lsb_root/lib/systemd/system
-  cp "$fs_unit" files/lsb_root/lib/systemd/system/
   debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-  debugfs -w -R "write $fs_unit /lib/systemd/system/fs_server.service" "$lsb_img" >/dev/null
-  debugfs -w -R "chmod 0644 /lib/systemd/system/fs_server.service" "$lsb_img" >/dev/null
+  for unit in "$units_dir"/*.service; do
+    [ -f "$unit" ] || continue
+    base="$(basename "$unit")"
+    cp "$unit" files/lsb_root/lib/systemd/system/
+    debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+  done
+fi
+
+# Enable bash service
+bash_unit="files/systemd/bash.service"
+if [ -f "$bash_unit" ]; then
+  mkdir -p files/lsb_root/etc/systemd/system/multi-user.target.wants
+  ln -sf ../../../../lib/systemd/system/bash.service \
+    files/lsb_root/etc/systemd/system/multi-user.target.wants/bash.service
+  debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
+  debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
+  debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
+  debugfs -w -R "symlink /lib/systemd/system/bash.service /etc/systemd/system/multi-user.target.wants/bash.service" "$lsb_img" >/dev/null
 fi
 
 # Collect build artifacts
