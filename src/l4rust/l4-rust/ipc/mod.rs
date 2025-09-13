@@ -25,7 +25,17 @@ pub use self::types::*;
 pub use syscall::*;
 
 use core::{convert::From, mem::transmute};
-use l4_sys::{l4_msgtag_flags::*, l4_msgtag_t, msgtag};
+use core::ffi::{c_int, c_long, c_ulong};
+use l4_sys::{
+    c_api::{
+        l4_error_code_t::L4_ENOMEM,
+        l4_msg_item_consts_t::{L4_ITEM_CONT, L4_ITEM_MAP},
+    },
+    consts::UTCB_GENERIC_DATA_SIZE,
+    l4_fpage_t, l4_msg_regs_t, l4_msgtag_t, l4_umword_t, l4_utcb_t,
+    l4_utcb_mr_u, l4_msgtag_flags::*, msgtag,
+};
+use l4_sys::cap;
 use num_traits::FromPrimitive;
 
 use crate::error::{Error, Result};
@@ -205,64 +215,79 @@ impl From<l4_msgtag_t> for MsgTag {
 ////////////////////////////////////////////////////////////////////////////////
 // re-implemented inline functions from l4/sys/ipc.h:
 
-// ToDo
-//#[inline]
-//pub unsafe fn l4_msgtag_flags(t: l4_msgtag_t) -> c_ulong {
-//    (t.raw & 0xf000) as c_ulong
-//}
-//
-///// Re-implementation returning bool instead of int
-//#[inline]
-//pub fn l4_msgtag_has_error(t: l4_msgtag_t) -> bool {
-//    (t.raw & MSGTAG_ERROR) != 0
-//}
-//
-///// This function's return type is altered in comparison to the orig: c_uint -> usize, return value
-///// is used as index and this needs to be usize in Rust world.
-//#[inline]
-//pub unsafe fn l4_msgtag_items(t: l4_msgtag_t) -> usize {
-//    ((t.raw >> 6) & 0x3f) as usize
-//}
-//
-//#[inline]
-//pub unsafe fn l4_msgtag_label(t: l4_msgtag_t) -> c_long {
-//    t.raw >> 16
-//}
-//
-///// re-implementation of the inline function from l4sys/include/ipc.h
-//#[inline]
-//pub unsafe fn l4_sndfpage_add_u(snd_fpage: l4_fpage_t, snd_base: c_ulong,
-//                  tag: *mut l4_msgtag_t, utcb: *mut l4_utcb_t) -> c_int {
-//    let v = l4_utcb_mr_u(utcb);
-//    let i = l4_msgtag_words(*tag) as usize + 2 * l4_msgtag_items(*tag);
-//    if i >= (UTCB_GENERIC_DATA_SIZE - 1) {
-//        return L4_ENOMEM as i32 * -1;
-//    }
-//
-//    (*v).mr[i] = snd_base | MSG_ITEM_CONSTS_ITEM_MAP | MSG_ITEM_CONSTS_ITEM_CONT;
-//    (*v).mr[i + 1] = snd_fpage.raw;
-//
-//    *tag = l4_msgtag(l4_msgtag_label(*tag), l4_msgtag_words(*tag),
-//                   l4_msgtag_items(*tag) as u32 + 1, l4_msgtag_flags(*tag) as u32);
-//    0
-//}
-//
-// re-implementation of the inline function from l4sys/include/ipc.h
-//#[inline]
-//pub unsafe fn l4_sndfpage_add(snd_fpage: l4_fpage_t, snd_base: c_ulong,
-//        tag: *mut l4_msgtag_t) -> c_int {
-//    l4_sndfpage_add_u(snd_fpage, snd_base, tag, l4_utcb())
-//}
+#[inline]
+pub fn l4_msgtag_flags(t: l4_msgtag_t) -> c_ulong {
+    (t.raw & 0xf000) as c_ulong
+}
 
-//// ToDo: write test
-//#[inline]
-//pub unsafe fn l4_map_control(snd_base: l4_umword_t, cache: u8,
-//         grant: u32) -> l4_umword_t {
-//    (snd_base & L4_FPAGE_CONTROL_MASK)
-//                   | ((cache as l4_umword_t) << 4)
-//                   | MSG_ITEM_MAP
-//                   | (grant as l4_umword_t)
-//}
+/// Re-implementation returning bool instead of int
+#[inline]
+pub fn l4_msgtag_has_error(t: l4_msgtag_t) -> bool {
+    (t.raw & l4_sys::consts::MSGTAG_ERROR) != 0
+}
+
+/// This function's return type is altered in comparison to the orig: c_uint -> usize, return value
+/// is used as index and this needs to be usize in Rust world.
+#[inline]
+pub fn l4_msgtag_items(t: l4_msgtag_t) -> usize {
+    ((t.raw >> 6) & 0x3f) as usize
+}
+
+#[inline]
+pub fn l4_msgtag_label(t: l4_msgtag_t) -> c_long {
+    (t.raw >> 16) as c_long
+}
+
+#[inline]
+pub fn l4_msgtag_words(t: l4_msgtag_t) -> u32 {
+    (t.raw & 0x3f) as u32
+}
+
+/// Add a flex-page for sending
+///
+/// This function adds a flex page to the first message register of the UTCB.
+/// Additionally, the given message tag is modified by increasing the word count.
+/// A return code of 0 denotes success, errors are negative.
+#[inline]
+pub unsafe fn l4_sndfpage_add_u(
+    snd_fpage: l4_fpage_t,
+    snd_base: c_ulong,
+    tag: *mut l4_msgtag_t,
+    utcb: *mut l4_utcb_t,
+) -> c_int {
+    let i = l4_msgtag_words(*tag) as usize + 2 * l4_msgtag_items(*tag);
+    if i >= (UTCB_GENERIC_DATA_SIZE - 1) {
+        return (L4_ENOMEM as c_int) * -1;
+    }
+
+    let v = l4_utcb_mr_u(utcb);
+    (*v).mr[i] = snd_base | L4_ITEM_MAP as u64 | L4_ITEM_CONT as u64;
+    (*v).mr[i + 1] = snd_fpage.raw;
+
+    *tag = msgtag(
+        l4_msgtag_label(*tag) as i64,
+        l4_msgtag_words(*tag),
+        l4_msgtag_items(*tag) as u32 + 1,
+        l4_msgtag_flags(*tag) as u32,
+    );
+    0
+}
+
+/// See `l4_sndfpage_add_u`
+#[inline]
+pub unsafe fn l4_sndfpage_add(
+    snd_fpage: l4_fpage_t,
+    snd_base: c_ulong,
+    tag: *mut l4_msgtag_t,
+) -> c_int {
+    l4_sndfpage_add_u(snd_fpage, snd_base, tag, l4_sys::l4_utcb())
+}
+
+/// Create the first word for a map item for the memory space.
+#[inline]
+pub fn l4_map_control(snd_base: l4_umword_t, cache: u8, grant: u32) -> l4_umword_t {
+    cap::l4_map_control(snd_base, cache, grant)
+}
 
 // ToDo: broken
 //#[inline]
@@ -277,3 +302,104 @@ impl From<l4_msgtag_t> for MsgTag {
 //                l4_msgtag(l4_msgtag_protocol_L4_PROTO_KOBJECT as i64, 2, 1, 0),
 //                l4_timeout_t { raw: 0 })
 //}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem::MaybeUninit;
+    use l4_sys::{ipc_ext as c, l4_msgtag_flags};
+
+    #[test]
+    fn msgtag_helpers_match_c() {
+        let flags = (l4_msgtag_flags::L4_MSGTAG_PROPAGATE as u32)
+            | (l4_msgtag_flags::L4_MSGTAG_SCHEDULE as u32);
+        let tag = c::msgtag(0x1234, 3, 2, flags);
+
+        assert_eq!(l4_msgtag_flags(tag), c::msgtag_flags(tag) as c_ulong);
+        assert_eq!(l4_msgtag_has_error(tag), c::msgtag_has_error(tag));
+        assert_eq!(l4_msgtag_items(tag), c::msgtag_items(tag));
+        assert_eq!(l4_msgtag_label(tag), c::msgtag_label(tag) as c_long);
+        assert_eq!(l4_msgtag_words(tag), c::msgtag_words(tag));
+    }
+
+    #[test]
+    fn msgtag_has_error_matches_c() {
+        let tag = c::msgtag(
+            0,
+            0,
+            0,
+            l4_msgtag_flags::L4_MSGTAG_ERROR as u32,
+        );
+        assert!(l4_msgtag_has_error(tag) == c::msgtag_has_error(tag));
+    }
+
+    #[test]
+    fn sndfpage_add_u_matches_c() {
+        unsafe {
+            let mut utcb1 = MaybeUninit::<l4_utcb_t>::zeroed();
+            let mut utcb2 = MaybeUninit::<l4_utcb_t>::zeroed();
+            let utcb1_ptr = utcb1.as_mut_ptr();
+            let utcb2_ptr = utcb2.as_mut_ptr();
+
+            let mut tag1 = c::msgtag(0, 0, 0, 0);
+            let mut tag2 = tag1;
+
+            let fpage = l4_fpage_t { raw: 0x1000 };
+            let base: c_ulong = 0x2000;
+
+            l4_sndfpage_add_u(fpage, base, &mut tag1, utcb1_ptr);
+            c::sndfpage_add_u(fpage, base, &mut tag2, utcb2_ptr);
+
+            let mr1 = l4_utcb_mr_u(utcb1_ptr);
+            let mr2 = l4_utcb_mr_u(utcb2_ptr);
+
+            assert_eq!((*mr1).mr[0], (*mr2).mr[0]);
+            assert_eq!((*mr1).mr[1], (*mr2).mr[1]);
+            assert_eq!(tag1.raw, tag2.raw);
+        }
+    }
+
+    static mut CURRENT_UTCB: *mut l4_utcb_t = core::ptr::null_mut();
+
+    #[no_mangle]
+    pub extern "C" fn l4_utcb_w() -> *mut l4_utcb_t {
+        unsafe { CURRENT_UTCB }
+    }
+
+    #[test]
+    fn sndfpage_add_matches_c() {
+        unsafe {
+            let mut utcb1 = MaybeUninit::<l4_utcb_t>::zeroed();
+            let mut utcb2 = MaybeUninit::<l4_utcb_t>::zeroed();
+            let utcb1_ptr = utcb1.as_mut_ptr();
+            let utcb2_ptr = utcb2.as_mut_ptr();
+
+            let mut tag1 = c::msgtag(0, 0, 0, 0);
+            let mut tag2 = tag1;
+
+            let fpage = l4_fpage_t { raw: 0x3000 };
+            let base: c_ulong = 0x4000;
+
+            CURRENT_UTCB = utcb1_ptr;
+            l4_sndfpage_add(fpage, base, &mut tag1);
+
+            CURRENT_UTCB = utcb2_ptr;
+            c::sndfpage_add(fpage, base, &mut tag2);
+
+            let mr1 = l4_utcb_mr_u(utcb1_ptr);
+            let mr2 = l4_utcb_mr_u(utcb2_ptr);
+
+            assert_eq!((*mr1).mr[0], (*mr2).mr[0]);
+            assert_eq!((*mr1).mr[1], (*mr2).mr[1]);
+            assert_eq!(tag1.raw, tag2.raw);
+        }
+    }
+
+    #[test]
+    fn map_control_matches_c() {
+        let base: l4_umword_t = 0x1234;
+        let cache: u8 = 3;
+        let grant: u32 = 1;
+        assert_eq!(l4_map_control(base, cache, grant), c::map_control(base, cache, grant));
+    }
+}
