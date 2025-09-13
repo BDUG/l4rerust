@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use libc::{c_int, c_uint, c_void, sigset_t};
+use libc::{c_int, c_uint, c_void, sigset_t, clockid_t, itimerspec};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -23,6 +23,11 @@ pub type eventfd_t = u64;
 pub const EFD_SEMAPHORE: c_int = 1;
 pub const EFD_CLOEXEC: c_int = 0o2000000;
 pub const EFD_NONBLOCK: c_int = 0o4000;
+
+pub const TFD_CLOEXEC: c_int = 0o2000000;
+pub const TFD_NONBLOCK: c_int = 0o4000;
+pub const TFD_TIMER_ABSTIME: c_int = 1;
+pub const TFD_TIMER_CANCEL_ON_SET: c_int = 2;
 
 pub const EPOLLIN: u32 = 0x001;
 pub const EPOLLPRI: u32 = 0x002;
@@ -55,4 +60,9 @@ extern "C" {
     pub fn epoll_wait(epfd: c_int, events: *mut epoll_event, maxevents: c_int, timeout: c_int) -> c_int;
     pub fn epoll_pwait(epfd: c_int, events: *mut epoll_event, maxevents: c_int, timeout: c_int,
         sigmask: *const sigset_t) -> c_int;
+
+    pub fn timerfd_create(clockid: clockid_t, flags: c_int) -> c_int;
+    pub fn timerfd_settime(fd: c_int, flags: c_int, new_value: *const itimerspec,
+        old_value: *mut itimerspec) -> c_int;
+    pub fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
 }
