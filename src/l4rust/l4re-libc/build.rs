@@ -5,5 +5,6 @@ fn main() {
     build.file("src/eventfd.c");
     build.file("src/signalfd.c");
     build.file("src/timerfd.c");
+    build.file("src/inotify.c");
     build.compile("l4re_libc_c");
 }
