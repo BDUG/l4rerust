@@ -9,4 +9,4 @@ authors = ["Sebastian Humenda <shumenda @ gmx . de>"]
 path = "lib.rs"
 
 [dependencies]
-libc = "0.2.103"
+l4re-libc = { path = "../l4re-libc" }
