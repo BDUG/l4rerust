@@ -36,6 +36,7 @@ CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-aarch64-linux-gnu-}
 required_tools=(
   git
   make
+  curl
   "${CROSS_COMPILE_ARM}gcc"
   "${CROSS_COMPILE_ARM64}gcc"
 )
@@ -82,6 +83,48 @@ SETUP_CONFIG_ALL=1 ./setup config
 )
 # Ensure Rust crates pick up the freshly built static libc
 export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
+
+# Build a statically linked Bash for ARM and ARM64
+build_bash() {
+  local arch="$1" cross="$2" host="$3"
+  local out_dir="obj/bash/$arch"
+  if [ -f "$out_dir/bash" ]; then
+    echo "bash for $arch already built, skipping"
+    return
+  fi
+  mkdir -p "$out_dir"
+  (
+    cd "$bash_src_dir"
+    make distclean >/dev/null 2>&1 || true
+    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
+      ./configure --host="$host" --without-bash-malloc
+    make clean
+    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
+      make STATIC_LDFLAGS=-static
+    cp bash "$repo_root/$out_dir/"
+  )
+}
+repo_root=$(pwd)
+
+need_bash=false
+for arch in arm arm64; do
+  if [ ! -f "obj/bash/$arch/bash" ]; then
+    need_bash=true
+    break
+  fi
+done
+
+if [ "$need_bash" = true ]; then
+  BASH_VERSION=5.2.21
+  BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
+  bash_src_dir=$(mktemp -d src/bash-XXXXXX)
+  curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
+  build_bash arm "$CROSS_COMPILE_ARM" arm-linux-gnueabihf
+  build_bash arm64 "$CROSS_COMPILE_ARM64" aarch64-linux-gnu
+  rm -rf "$bash_src_dir"
+else
+  echo "bash for arm and arm64 already built, skipping"
+fi
 
 # Build the tree including libc, Leo, and Rust crates
 make
