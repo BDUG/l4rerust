@@ -158,12 +158,12 @@ pub fn l4_client(macro_attrs: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Example:
 ///
-/// ```
+/// ```ignore
 /// use l4_derive::iface;
 ///
 /// iface! {
 ///     trait Example {
-///         const PROTOCOL_ID = 98765432;
+///         const PROTOCOL_ID: i64 = 98765432;
 ///         fn signal(&mut self);
 ///         fn sum(&mut self, x: Vec<i32>) -> i64;
 ///         fn greet(&mut self, how: String) -> String;
