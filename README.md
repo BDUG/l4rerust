@@ -40,6 +40,44 @@ Linux hosts, or Homebrew's `arm-none-eabi-` and `aarch64-none-elf-` on macOS.
 When these variables are unset, the scripts attempt to choose sensible defaults
 based on `uname`.
 
+### macOS (Apple Silicon)
+
+On Apple Silicon hosts, Homebrew provides the required build tools and cross
+compilers:
+
+```bash
+brew install qemu e2fsprogs coreutils meson ninja pkg-config
+brew tap ArmMbed/homebrew-formulae
+brew install arm-none-eabi-gcc aarch64-none-elf-gcc
+```
+
+Ensure the Homebrew prefixes are in your `PATH` and define the compiler
+prefixes expected by the build scripts:
+
+```bash
+export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-none-eabi-gcc)/bin:$(brew --prefix aarch64-none-elf-gcc)/bin:$PATH"
+export CROSS_COMPILE_ARM=arm-none-eabi-
+export CROSS_COMPILE_ARM64=aarch64-none-elf-
+```
+
+macOS does not ship GNU `timeout`; the `coreutils` formula installs it as
+`gtimeout`. Either invoke `gtimeout` directly or alias it:
+
+```bash
+alias timeout=gtimeout
+```
+
+With the environment set up, a smoke test of the build can be run with:
+
+```bash
+CROSS_COMPILE_ARM=arm-none-eabi- \
+CROSS_COMPILE_ARM64=aarch64-none-elf- \
+scripts/build_arm.sh --test
+```
+
+Some tools, such as `mke2fs` from `e2fsprogs`, live outside Homebrew's default
+`bin` prefix; the `PATH` example above includes these locations.
+
 ## Driver packaging workflow
 
 The `tools/l4re-driver-wrap` helper bundles driver selection, build scaffolding
