@@ -7,6 +7,11 @@ fn main() {
         .ctypes_prefix("core::ffi")
         .rustified_enum(".*")
         .header("bindgen.h");
+
+    let libc_include =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../l4re-libc/include");
+    bindings = bindings.clang_arg(format!("-I{}", libc_include.display()));
+
     if let Ok(include_dirs) = ::std::env::var("L4_INCLUDE_DIRS") {
         for item in include_dirs.split(" ") {
             bindings = bindings.clang_arg(item);
