@@ -90,12 +90,15 @@ mod l4 {
         use core::ffi::c_void;
         pub type Callback = fn(*mut c_void, MsgTag, &mut crate::l4::utcb::UtcbMr, &mut BufferAccess) -> Result<MsgTag>;
         pub fn server_impl_callback<T>(
-            _srv: *mut c_void,
-            _tag: MsgTag,
-            _mr: &mut crate::l4::utcb::UtcbMr,
-            _bufs: &mut BufferAccess,
-        ) -> Result<MsgTag> {
-            unimplemented!()
+            srv: *mut c_void,
+            tag: MsgTag,
+            mr: &mut crate::l4::utcb::UtcbMr,
+            bufs: &mut BufferAccess,
+        ) -> Result<MsgTag>
+        where
+            T: types::Callable + types::Dispatch,
+        {
+            unsafe { (&mut *(srv as *mut T)).dispatch(tag, mr, bufs) }
         }
     }
 }
