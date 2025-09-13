@@ -12,3 +12,4 @@ linux_shims = { path = "../linux_shims" }
 
 [build-dependencies]
 cc = "1"
+walkdir = "2"
