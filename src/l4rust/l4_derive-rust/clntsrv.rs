@@ -122,6 +122,9 @@ pub fn gen_server_struct(
             unsafe fn access_buffers(&mut self) -> l4::ipc::BufferAccess {
                 panic!("Not implemented for servers");
             }
+            fn ensure_slots(&mut self, _cap_demand: u8) -> l4::error::Result<()> {
+                Ok(())
+            }
         }
         #cimpl
     };
@@ -197,6 +200,10 @@ pub fn gen_client_struct(
             unsafe fn access_buffers(&mut self) -> l4::ipc::BufferAccess {
                 use l4::ipc::CapProvider;
                 self.__slots.access_buffers()
+            }
+            fn ensure_slots(&mut self, cap_demand: u8) -> l4::error::Result<()> {
+                use l4::ipc::CapProvider;
+                self.__slots.alloc_capslots(cap_demand)
             }
         }
     };
