@@ -206,18 +206,11 @@ impl SndFlexPage {
     }
 }
 
-/// Align the given pointer
-///
-/// # Safety
-///
-/// The given pointer MUST stay within the allocated bounds and is UB otherwise.
+/// Calculate the next aligned offset for a type `T`.
 #[inline(always)]
-unsafe fn align<T>(ptr: *mut u8) -> *mut u8 {
-    let new_offset = ptr.align_offset(align_of::<T>());
-    // SAFETY: the given pointer MUST stay within the allocated object.
-    unsafe {
-        ptr.add(new_offset)
-    }
+fn align_offset<T>(off: usize) -> usize {
+    let align = align_of::<T>();
+    (off + align - 1) & !(align - 1)
 }
 
 // make the dumb C types more smart: let them know their limits
@@ -241,8 +234,8 @@ impl UtcbRegSize for l4_buf_regs_t {
 /// be stuffed in or dragged out. It is not meant to be used directly, but through the more
 /// convenient and safe [UtcbMr](struct.UtcbMr.html) and [UtcbBr](struct.UtcbBr.html) types.
 pub struct Registers<B: UtcbRegSize> {
-    buf: *mut u8, // casted u64 pointer to msg or buf registers
     base: *mut u8,
+    offset: usize,
     size: PhantomData<B>,
 }
 
@@ -252,11 +245,7 @@ impl<U: UtcbRegSize> Registers<U> {
     /// The pointer must be valid.
     pub unsafe fn from_raw(buf: *mut u64) -> Self {
         let base = buf as *mut _ as *mut u8;
-        Registers {
-            base,
-            buf: base,
-            size: PhantomData,
-        }
+        Registers { base, offset: 0, size: PhantomData }
     }
 
     /// Write given value to the next free, type-aligned slot
@@ -264,21 +253,16 @@ impl<U: UtcbRegSize> Registers<U> {
     /// The value is aligned and written into the message registers.
     #[inline]
     pub fn write<T: Serialisable>(&mut self, val: T) -> Result<()> {
-        // SAFETY: The ponter must be checked for the bounds of the object beforehand.
-        let ptr = unsafe {
-            align::<T>(self.buf)
-        };
-        // SAFETY: The ponter must be checked for the bounds of the object beforehand.
-        let next = unsafe {
-            ptr.add(size_of::<T>())
-        };
-        l4_err_if!((next as usize - self.base as usize) > U::BUF_SIZE
-                   => Generic, MsgTooLong);
-        // SAFETY: Bounds and alignment have been checked.
+        let start = align_offset::<T>(self.offset);
+        let end = start
+            .checked_add(size_of::<T>())
+            .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
+        // SAFETY: bounds have been checked above.
         unsafe {
-            *(ptr as *mut T) = val;
+            *(self.base.add(start) as *mut T) = val;
         }
-        self.buf = next;
+        self.offset = end;
         Ok(())
     }
 
@@ -289,21 +273,14 @@ impl<U: UtcbRegSize> Registers<U> {
     /// attempted, an error is returned.
     #[inline]
     pub fn read<T: Serialisable>(&mut self) -> Result<T> {
-        // SAFETY: ToDo, this is unsafe unless bounds are checked
-        let ptr = unsafe {
-            align::<T>(self.buf)
-        };
-        // SAFETY: ToDo, this is unsafe unless bounds are checked
-        let next = unsafe {
-            ptr.add(size_of::<T>())
-        };
-        l4_err_if!((next as usize - self.base as usize) > U::BUF_SIZE
-                   => Generic, MsgTooLong);
-        // SAFETY: ToDo, this is unsafe unless bounds are checked
-        let val: T = unsafe {
-            (*(ptr as *mut T)).clone()
-        };
-        self.buf = next;
+        let start = align_offset::<T>(self.offset);
+        let end = start
+            .checked_add(size_of::<T>())
+            .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
+        // SAFETY: bounds have been checked above.
+        let val: T = unsafe { (*(self.base.add(start) as *mut T)).clone() };
+        self.offset = end;
         Ok(val)
     }
 
@@ -313,24 +290,21 @@ impl<U: UtcbRegSize> Registers<U> {
         Len: Serialisable + NumCast,
         T: Serialisable,
     {
-        // SAFETY: this is safe as the pointer calculations are not used for accessing an object,
-        // but only for its bounds calculation.
-        let (buf_start, buf_end) = unsafe {
-            let ptr = align::<Len>(self.buf);
-            let ptr = ptr.add(1);
-            // ToDo: does C align?
-            let buf_start = align::<T>(ptr);
-            (buf_start, buf_start.add(size_of::<T>() * val.len()))
-        };
-        l4_err_if!(buf_end as usize - self.base as usize > U::BUF_SIZE
-                   => Generic, MsgTooLong);
-        // SAFETY: The bounds and the alignment has been checked above.
+        self.write::<Len>(NumCast::from(val.len()).ok_or(Error::Generic(GenericErr::InvalidArg))?)?;
+        let start = align_offset::<T>(self.offset);
+        let size_bytes = val
+            .len()
+            .checked_mul(size_of::<T>())
+            .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
+        let end = start
+            .checked_add(size_bytes)
+            .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
         unsafe {
-            self.write::<Len>(NumCast::from(val.len()).ok_or(Error::Generic(GenericErr::InvalidArg))?)?;
             val.as_ptr()
-                .copy_to_nonoverlapping(buf_start as *mut T, val.len());
+                .copy_to_nonoverlapping(self.base.add(start) as *mut T, val.len());
         }
-        self.buf = buf_end; // move pointer
+        self.offset = end;
         Ok(())
     }
 
@@ -357,11 +331,16 @@ impl<U: UtcbRegSize> Registers<U> {
     {
         let len = ToPrimitive::to_usize(&self.read::<Len>()?)
             .ok_or(Error::Generic(GenericErr::InvalidArg))?;
-        let ptr = align::<T>(self.buf);
-        let end = ptr.add(size_of::<T>() * len);
-        l4_err_if!(end as usize - self.base as usize > U::BUF_SIZE => Generic, OutOfBounds);
-        self.buf = end; // advance offset behind last element
-        Ok(core::slice::from_raw_parts(ptr as *const _, len))
+        let start = align_offset::<T>(self.offset);
+        let size_bytes = len
+            .checked_mul(size_of::<T>())
+            .ok_or(Error::Generic(GenericErr::OutOfBounds))?;
+        let end = start
+            .checked_add(size_bytes)
+            .ok_or(Error::Generic(GenericErr::OutOfBounds))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, OutOfBounds);
+        self.offset = end; // advance offset behind last element
+        Ok(core::slice::from_raw_parts(self.base.add(start) as *const T, len))
     }
 
     /// Read a str from the message registers
@@ -375,24 +354,26 @@ impl<U: UtcbRegSize> Registers<U> {
     /// See [Self::read_slice].
     pub unsafe fn read_str<'a>(&mut self) -> Result<&'a str> {
         let len = self.read::<usize>()?;
-        let end = self.buf.add(len);
-        l4_err_if!(end as usize - self.base as usize > U::BUF_SIZE => Generic, OutOfBounds);
-        let str = core::str::from_utf8(core::slice::from_raw_parts(
-            self.buf, // ↓ match 0-byte (C str?)
-            match *end.offset(-1) {
-                0 => len - 1,
-                _ => len,
-            },
-        ))
-        .map_err(|e| crate::error::Error::InvalidEncoding(Some(e)))?;
-        self.buf = end; // advance offset behind last element
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or(Error::Generic(GenericErr::OutOfBounds))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, OutOfBounds);
+        let slice = core::slice::from_raw_parts(self.base.add(self.offset), len);
+        let usable = match slice.last().copied() {
+            Some(0) => len - 1,
+            _ => len,
+        };
+        let str = core::str::from_utf8(&slice[..usable])
+            .map_err(|e| crate::error::Error::InvalidEncoding(Some(e)))?;
+        self.offset = end; // advance offset behind last element
         Ok(str)
     }
 
     /// Mwords written to this buffer (rounded up)
     #[inline]
     pub fn words(&self) -> u32 {
-        let offset = self.buf as usize - self.base as usize;
+        let offset = self.offset;
         (offset / size_of::<Mword>()
             + match offset % size_of::<usize>() {
                 0 => 0,
@@ -403,15 +384,17 @@ impl<U: UtcbRegSize> Registers<U> {
     /// Reset internal offset to beginning of message registers
     #[inline]
     pub fn reset(&mut self) {
-        self.buf = self.base;
+        self.offset = 0;
     }
 
     /// Skip the amount of memory that the given type would occupy
     pub fn skip<T: Serialisable>(&mut self) -> Result<()> {
-        let next = unsafe { align::<T>(self.buf).add(size_of::<T>()) };
-        l4_err_if!(next as usize - self.base as usize > U::BUF_SIZE
-                   => Generic, MsgTooLong);
-        self.buf = next;
+        let start = align_offset::<T>(self.offset);
+        let end = start
+            .checked_add(size_of::<T>())
+            .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
+        l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
+        self.offset = end;
         Ok(())
     }
 }
@@ -561,5 +544,39 @@ impl Deref for UtcbBr {
 impl DerefMut for UtcbBr {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestRegs;
+    impl UtcbRegSize for TestRegs {
+        const BUF_SIZE: usize = 16;
+    }
+
+    #[test]
+    fn write_out_of_range() {
+        let mut raw = [0u64; 2];
+        let mut regs: Registers<TestRegs> = unsafe { Registers::from_raw(raw.as_mut_ptr()) };
+        assert!(regs.write(1u64).is_ok());
+        assert!(regs.write(2u64).is_ok());
+        assert!(matches!(
+            regs.write(3u64),
+            Err(Error::Generic(GenericErr::MsgTooLong))
+        ));
+    }
+
+    #[test]
+    fn read_out_of_range() {
+        let mut raw = [0u64; 2];
+        let mut regs: Registers<TestRegs> = unsafe { Registers::from_raw(raw.as_mut_ptr()) };
+        regs.skip::<u64>().unwrap();
+        regs.skip::<u32>().unwrap();
+        assert!(matches!(
+            regs.read::<u64>(),
+            Err(Error::Generic(GenericErr::MsgTooLong))
+        ));
     }
 }
