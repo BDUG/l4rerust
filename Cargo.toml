@@ -1,2 +1,2 @@
 [workspace]
-members = ["driver_picker"]
+members = ["driver_picker", "src/linux_shims", "src/driver"]
