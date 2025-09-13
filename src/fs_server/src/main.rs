@@ -6,7 +6,59 @@
 
 use fatfs::{FileSystem, FsOptions};
 use l4re::sys::{l4re_env, l4re_env_get_cap};
-use l4_sys::{l4_ipc_error, l4_msgtag, l4_utcb};
+use l4_sys::{l4_ipc_error, l4_msgtag, l4_utcb, l4_utcb_br};
+use std::cmp::min;
+use std::io::{Read, Seek, SeekFrom, Write};
+
+/// POSIX error numbers for reporting back to clients.
+use libc::{EBADF, EIO, ENOENT};
+
+const BR_WORDS: usize = l4_sys::consts::UtcbConsts::L4_UTCB_GENERIC_BUFFERS_SIZE as usize;
+const BR_DATA_MAX: usize = BR_WORDS * 8 - 8; // reserve first word for length
+
+/// Read a byte vector from buffer registers. First word contains length.
+unsafe fn br_read_bytes() -> Vec<u8> {
+    let br = &(*l4_utcb_br()).br;
+    let len = min(br[0] as usize, BR_DATA_MAX);
+    let ptr = br.as_ptr().add(1) as *const u8;
+    let slice = std::slice::from_raw_parts(ptr, len);
+    slice.to_vec()
+}
+
+/// Read a UTF-8 path string from buffer registers.
+unsafe fn br_read_path() -> Option<String> {
+    let data = br_read_bytes();
+    std::str::from_utf8(&data).ok().map(|s| s.to_owned())
+}
+
+/// Write a byte slice into buffer registers.
+unsafe fn br_write_bytes(data: &[u8]) {
+    let br = &mut (*l4_utcb_br()).br;
+    let len = min(data.len(), BR_DATA_MAX);
+    br[0] = len as u64;
+    let dst = br.as_mut_ptr().add(1) as *mut u8;
+    std::ptr::copy_nonoverlapping(data.as_ptr(), dst, len);
+}
+
+/// Resolve LSB style paths to FAT paths. Supports /bin, /etc and /usr.
+fn resolve_path(p: &str) -> Option<String> {
+    if !p.starts_with('/') {
+        return None;
+    }
+    let rel = &p[1..];
+    if rel.starts_with("bin/") || rel.starts_with("etc/") || rel.starts_with("usr/") {
+        Some(rel.to_string())
+    } else {
+        None
+    }
+}
+
+fn io_to_errno(e: std::io::ErrorKind) -> i32 {
+    match e {
+        std::io::ErrorKind::NotFound => ENOENT,
+        _ => EIO,
+    }
+}
 
 mod virtio;
 use virtio::VirtioDisk;
@@ -37,46 +89,126 @@ unsafe fn run() {
     // access to the backing store which is consumed by the FAT32 layer.
     let disk = unsafe { VirtioDisk::new().expect("virtio-blk device not available") };
     let fs = FileSystem::new(disk, FsOptions::new()).expect("failed to mount FAT32 volume");
+    // Leak filesystem to obtain 'static references for open file handles.
+    let fs: &'static FileSystem<VirtioDisk> = Box::leak(Box::new(fs));
+    let mut handles: Vec<Option<fatfs::File<'static, VirtioDisk>>> = Vec::new();
 
     // Ready to serve requests.
     println!("filesystem server ready");
 
-    // Simple IPC loop handling basic operations.  Clients place the desired
-    // operation in message register 0.  Additional arguments would be encoded
-    // in further registers or in the buffer registers.  For brevity only a
-    // directory listing operation is implemented.
+    // IPC loop handling filesystem calls.
     let mut label = 0u64;
     let mut tag = l4::l4_ipc_wait(l4_utcb(), &mut label, l4::l4_timeout_t { raw: 0 });
     loop {
         if l4_ipc_error(tag, l4_utcb()) != 0 {
-            // Wait again on IPC errors.
             tag = l4::l4_ipc_wait(l4_utcb(), &mut label, l4::l4_timeout_t { raw: 0 });
             continue;
         }
 
-        match (*l4::l4_utcb_mr()).mr[0] {
+        let mr = unsafe { &mut (*l4::l4_utcb_mr()).mr };
+        match mr[0] {
             // Operation 0: list root directory entries.  The server returns the
-            // number of entries in MR0.  A real implementation would transfer
-            // names via buffer registers.
+            // number of entries in MR0.
             0 => {
                 let mut count = 0usize;
-                for _entry in fs.root_dir().iter() {
-                    count += 1;
-                }
-                (*l4::l4_utcb_mr()).mr[0] = count as u64;
+                for _e in fs.root_dir().iter() { count += 1; }
+                mr[0] = count as u64;
             }
-            // Placeholder for additional operations such as open, read and
-            // write.  These would decode arguments from the message registers
-            // and operate on the mounted filesystem accordingly.
+            // 1: open file. Path string in buffer registers. Returns descriptor.
+            1 => {
+                let path = unsafe { br_read_path() };
+                if let Some(p) = path.and_then(|p| resolve_path(&p)) {
+                    match fs.root_dir().create_file(&p) {
+                        Ok(f) => {
+                            let fd = handles.iter().position(|h| h.is_none()).unwrap_or_else(|| {
+                                handles.push(None);
+                                handles.len() - 1
+                            });
+                            handles[fd] = Some(f);
+                            mr[0] = fd as u64;
+                        }
+                        Err(e) => {
+                            mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64;
+                        }
+                    }
+                } else {
+                    mr[0] = (-(ENOENT as i64)) as u64;
+                }
+            }
+            // 2: read from descriptor. MR1=fd, MR2=len. Data returned in BRs.
+            2 => {
+                let fd = mr[1] as usize;
+                let len = mr[2] as usize;
+                if let Some(Some(file)) = handles.get_mut(fd) {
+                    let mut buf = vec![0u8; min(len, BR_DATA_MAX)];
+                    match file.read(&mut buf) {
+                        Ok(n) => {
+                            unsafe { br_write_bytes(&buf[..n]); }
+                            mr[0] = n as u64;
+                        }
+                        Err(e) => {
+                            mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64;
+                        }
+                    }
+                } else {
+                    mr[0] = (-(EBADF as i64)) as u64;
+                }
+            }
+            // 3: write to descriptor. MR1=fd, data in BRs.
+            3 => {
+                let fd = mr[1] as usize;
+                if let Some(Some(file)) = handles.get_mut(fd) {
+                    let data = unsafe { br_read_bytes() };
+                    match file.write(&data) {
+                        Ok(n) => mr[0] = n as u64,
+                        Err(e) => mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64,
+                    }
+                } else {
+                    mr[0] = (-(EBADF as i64)) as u64;
+                }
+            }
+            // 4: close descriptor. MR1=fd.
+            4 => {
+                let fd = mr[1] as usize;
+                if let Some(slot) = handles.get_mut(fd) {
+                    if slot.take().is_some() {
+                        mr[0] = 0;
+                    } else {
+                        mr[0] = (-(EBADF as i64)) as u64;
+                    }
+                } else {
+                    mr[0] = (-(EBADF as i64)) as u64;
+                }
+            }
+            // 5: stat path. Path string in BRs, file size returned in MR1.
+            5 => {
+                let path = unsafe { br_read_path() };
+                if let Some(p) = path.and_then(|p| resolve_path(&p)) {
+                    match fs.root_dir().open_file(&p) {
+                        Ok(mut f) => {
+                            if let Ok(size) = f.seek(SeekFrom::End(0)) {
+                                mr[0] = 0;
+                                mr[1] = size as u64;
+                            } else {
+                                mr[0] = (-(EIO as i64)) as u64;
+                            }
+                        }
+                        Err(e) => mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64,
+                    }
+                } else {
+                    mr[0] = (-(ENOENT as i64)) as u64;
+                }
+            }
+            // unknown operation
             _ => {
-                (*l4::l4_utcb_mr()).mr[0] = u64::MAX; // signal unsupported op
+                mr[0] = (-(ENOENT as i64)) as u64;
             }
         }
 
         // Reply to the client and wait for the next request.
         tag = l4::l4_ipc_reply_and_wait(
             l4_utcb(),
-            l4_msgtag(0, 1, 0, 0),
+            l4_msgtag(0, 2, 0, 0),
             &mut label,
             l4::l4_timeout_t { raw: 0 },
         );
