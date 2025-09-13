@@ -29,10 +29,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate required tools
-CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-linux-gnueabihf-}
-CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-aarch64-linux-gnu-}
+# Determine cross-compilers
+if [ -z "${CROSS_COMPILE_ARM:-}" ] || [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
+  case "$(uname -s)" in
+  Darwin)
+    CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-none-eabi-}
+    if [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
+      if command -v aarch64-unknown-linux-gnu-gcc >/dev/null 2>&1; then
+        CROSS_COMPILE_ARM64=aarch64-unknown-linux-gnu-
+      else
+        CROSS_COMPILE_ARM64=aarch64-none-elf-
+      fi
+    fi
+    ;;
+  *)
+    CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-linux-gnueabihf-}
+    CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-aarch64-linux-gnu-}
+    ;;
+  esac
+fi
 
+# Validate required tools
 required_tools=(
   git
   make

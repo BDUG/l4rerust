@@ -31,6 +31,15 @@ make
 Ensuring `LIBRARY_PATH` is set correctly allows the Rust crates to link against
 the freshly built static libc.
 
+### Cross-compilation toolchains
+
+Both the `setup` script and `scripts/build_arm.sh` look for compiler prefixes
+via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
+Typical prefixes include `arm-linux-gnueabihf-` and `aarch64-linux-gnu-` on
+Linux hosts, or Homebrew's `arm-none-eabi-` and `aarch64-none-elf-` on macOS.
+When these variables are unset, the scripts attempt to choose sensible defaults
+based on `uname`.
+
 ## Driver packaging workflow
 
 The `tools/l4re-driver-wrap` helper bundles driver selection, build scaffolding
