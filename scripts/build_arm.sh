@@ -39,6 +39,8 @@ required_tools=(
   curl
   "${CROSS_COMPILE_ARM}gcc"
   "${CROSS_COMPILE_ARM64}gcc"
+  mke2fs
+  debugfs
 )
 for tool in "${required_tools[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -129,11 +131,34 @@ fi
 # Build the tree including libc, Leo, and Rust crates
 make
 
+# Create a minimal LSB root filesystem image
+lsb_img="files/lsb_root/lsb_root.img"
+rm -f "$lsb_img"
+mkdir -p "$(dirname "$lsb_img")"
+dd if=/dev/zero of="$lsb_img" bs=1M count=8
+mke2fs -F "$lsb_img" >/dev/null
+for d in /bin /etc /usr /usr/bin; do
+  debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
+done
+tmpfile=$(mktemp)
+cat <<'EOF' > "$tmpfile"
+DISTRIB_ID=L4Re
+DISTRIB_RELEASE=1.0
+DISTRIB_DESCRIPTION="L4Re root image"
+EOF
+debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
+rm "$tmpfile"
+debugfs -w -R "write obj/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+debugfs -w -R "write obj/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+
 # Collect build artifacts
 out_dir="out"
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
 find obj -type f \( -name '*.rlib' -o -name '*.elf' -o -name '*.img' -o -name '*.image' \) -exec cp {} "$out_dir" \;
+cp "$lsb_img" "$out_dir/"
 
 echo "Artifacts placed in $out_dir"
 
