@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use libc::{c_int, c_void, sigset_t};
+use libc::{c_int, c_uint, c_void, sigset_t};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -17,6 +17,12 @@ pub struct epoll_event {
     pub events: u32,
     pub data: epoll_data_t,
 }
+
+pub type eventfd_t = u64;
+
+pub const EFD_SEMAPHORE: c_int = 1;
+pub const EFD_CLOEXEC: c_int = 0o2000000;
+pub const EFD_NONBLOCK: c_int = 0o4000;
 
 pub const EPOLLIN: u32 = 0x001;
 pub const EPOLLPRI: u32 = 0x002;
@@ -39,6 +45,10 @@ pub const EPOLL_CTL_DEL: c_int = 2;
 pub const EPOLL_CTL_MOD: c_int = 3;
 
 extern "C" {
+    pub fn eventfd(initval: c_uint, flags: c_int) -> c_int;
+    pub fn eventfd_read(fd: c_int, value: *mut eventfd_t) -> c_int;
+    pub fn eventfd_write(fd: c_int, value: eventfd_t) -> c_int;
+
     pub fn epoll_create(size: c_int) -> c_int;
     pub fn epoll_create1(flags: c_int) -> c_int;
     pub fn epoll_ctl(epfd: c_int, op: c_int, fd: c_int, event: *mut epoll_event) -> c_int;
