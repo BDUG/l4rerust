@@ -1,0 +1,10 @@
+[package]
+name = "driver_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+l4re = { path = "../../l4rust/l4re-rust" }
+l4re-libc = { path = "../../l4rust/l4re-libc" }
+
+[workspace]
