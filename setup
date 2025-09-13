@@ -128,7 +128,7 @@ do_config()
 
   if command -v dialog; then
 
-    tmpfile=`tempfile 2>/dev/null` || tmpfile=/tmp/test$$
+    tmpfile=$(mktemp)
     trap "rm -f $tmpfile" 0 1 2 5 15
 
     dialog \
