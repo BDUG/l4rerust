@@ -1,0 +1,14 @@
+[package]
+name = "driver"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "driver"
+crate-type = ["staticlib"]
+
+[dependencies]
+linux_shims = { path = "../linux_shims" }
+
+[build-dependencies]
+cc = "1"
