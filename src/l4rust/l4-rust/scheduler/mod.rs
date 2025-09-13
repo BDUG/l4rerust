@@ -64,15 +64,4 @@ pub fn from_env() -> Option<Box<dyn SchedulerPolicy>> {
 mod autosar;
 
 #[cfg(feature = "linux_like")]
-mod linux_like {
-    use super::SchedulerPolicy;
-
-    /// Placeholder implementation for a Linux-like scheduler.
-    pub struct LinuxLikeScheduler;
-
-    impl SchedulerPolicy for LinuxLikeScheduler {
-        fn name(&self) -> &'static str {
-            "linux_like"
-        }
-    }
-}
+mod linux_like;
