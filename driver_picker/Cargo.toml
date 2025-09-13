@@ -1,0 +1,14 @@
+[package]
+name = "driver_picker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+walkdir = "2"
+regex = "1"
+dialoguer = "0.10"
+tempfile = "3"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+anyhow = "1"
