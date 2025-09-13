@@ -45,13 +45,50 @@ required_tools=(
   meson
   ninja
   pkg-config
+  "timeout|gtimeout|python3"
 )
 for tool in "${required_tools[@]}"; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "Required tool $tool not found" >&2
-    exit 1
+  if [[ "$tool" == *"|"* ]]; then
+    IFS="|" read -r -a alts <<<"$tool"
+    found=false
+    for alt in "${alts[@]}"; do
+      if command -v "$alt" >/dev/null 2>&1; then
+        found=true
+        break
+      fi
+    done
+    if [ "$found" = false ]; then
+      echo "Required tool missing: one of ${alts[*]} is needed" >&2
+      exit 1
+    fi
+  else
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "Required tool $tool not found" >&2
+      exit 1
+    fi
   fi
 done
+
+run_with_timeout() {
+  local duration="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${duration}s" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${duration}s" "$@"
+  else
+    python3 - "$duration" "$@" <<'PYTHON'
+import subprocess, sys
+timeout=int(sys.argv[1]); cmd=sys.argv[2:]
+proc=subprocess.Popen(cmd)
+try:
+    proc.wait(timeout)
+    sys.exit(proc.returncode)
+except subprocess.TimeoutExpired:
+    proc.kill()
+    sys.exit(124)
+PYTHON
+  fi
+}
 
 # Clone or update ham build tool
 if [ ! -d ham ]; then
@@ -360,7 +397,7 @@ if [ "$run_test" = true ]; then
     exit 1
   fi
   echo "Running QEMU test..."
-  if ! timeout 5s qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -serial mon:stdio -kernel "$boot_img" >/dev/null; then
+  if ! run_with_timeout 5 qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -serial mon:stdio -kernel "$boot_img" >/dev/null; then
     echo "QEMU test run failed" >&2
     exit 1
   fi
