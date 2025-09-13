@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage: build_arm.sh [--clean|--no-clean]
+#   --clean     Remove previous build directories before building (default)
+#   --no-clean  Skip removal of build directories
+
+clean=true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --clean)
+      clean=true
+      shift
+      ;;
+    --no-clean)
+      clean=false
+      shift
+      ;;
+    *)
+      echo "Usage: $0 [--clean|--no-clean]" >&2
+      exit 1
+      ;;
+  esac
+done
+
 # Validate required tools
 CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-linux-gnueabihf-}
 CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-aarch64-linux-gnu-}
@@ -34,7 +56,14 @@ make -C ham
 )
 
 # Start from a clean state
-rm -rf obj
+if [ "$clean" = true ]; then
+  # Remove common build directories if they exist
+  for dir in obj lib out; do
+    if [ -d "$dir" ]; then
+      rm -rf "$dir"
+    fi
+  done
+fi
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
