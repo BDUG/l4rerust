@@ -85,11 +85,8 @@ macro_rules! derive_ipc_calls {
             fn $name(&mut self $(, $argname: $type)*)
                         -> $crate::error::Result<$return>
                             where Self: $crate::cap::Interface {
-                use $crate::ipc::Serialiser;
-                use $crate::ipc::CapProvider;
-                // ToDo: would re-allocate a capability each time; how to control number of
-                // required slots
-                let mut caps = $crate::ipc::types::Bufferless { };
+                use $crate::ipc::{Serialiser, CapProviderAccess};
+                self.ensure_slots(Self::CAP_DEMAND)?;
                 // SAFETY: We have to assume that the UTCB is unused, see #5.
                 let mut mr = unsafe {
                     $crate::utcb::Utcb::current().mr()
@@ -110,10 +107,10 @@ macro_rules! derive_ipc_calls {
                                 $crate::sys::l4_utcb(), tag.raw(),
                                 $crate::sys::timeout_never())
                     }).result()?;
-                mr.reset(); // read again from start of registers, `caps` still untouched
+                mr.reset(); // read again from start of registers
                 // return () if "empty" return value, val otherwise
                 unsafe {
-                    let mut cap_buf = caps.access_buffers();
+                    let mut cap_buf = self.access_buffers();
                     <$return>::read(
                             &mut mr, &mut cap_buf)
                 }
@@ -205,3 +202,84 @@ iface_back! {
     }
 }
 */
+
+#[cfg(test)]
+mod tests {
+    use core::sync::atomic::{AtomicU32, Ordering};
+    use crate as l4;
+    use l4::cap::{Cap, IfaceInit, Interface, Untyped};
+    use l4_derive::{iface, l4_client};
+
+    // Fake UTCB infrastructure -------------------------------------------------
+    use l4_sys::{l4_buf_regs_t, l4_msg_regs_t, l4_msgtag_t, l4_timeout_t, l4_utcb_t};
+    use core::mem::MaybeUninit;
+
+    static mut UTCB_DUMMY: u8 = 0;
+    static mut MR: MaybeUninit<l4_msg_regs_t> = MaybeUninit::zeroed();
+    static mut BR: MaybeUninit<l4_buf_regs_t> = MaybeUninit::zeroed();
+
+    #[no_mangle]
+    pub extern "C" fn l4_utcb() -> *mut l4_utcb_t {
+        unsafe { &mut UTCB_DUMMY as *mut _ as *mut l4_utcb_t }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn l4_utcb_mr_u(_: *mut l4_utcb_t) -> *mut l4_msg_regs_t {
+        unsafe { MR.as_mut_ptr() }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn l4_utcb_br_u(_: *mut l4_utcb_t) -> *mut l4_buf_regs_t {
+        unsafe { BR.as_mut_ptr() }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn timeout_never() -> l4_timeout_t { 0 }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn l4_ipc_call_w(
+        _obj: u64,
+        _utcb: *mut l4_utcb_t,
+        _tag: l4_msgtag_t,
+        _timeout: l4_timeout_t,
+    ) -> l4_msgtag_t {
+        l4_msgtag_t { raw: 0 }
+    }
+
+    // fake capability allocator ------------------------------------------------
+    static ALLOC_COUNT: AtomicU32 = AtomicU32::new(0);
+    static mut NEXT_CAP: u64 = 1;
+
+    #[no_mangle]
+    pub extern "C" fn l4re_util_cap_alloc() -> u64 {
+        ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
+        unsafe {
+            let c = NEXT_CAP;
+            NEXT_CAP += 1;
+            c
+        }
+    }
+
+    // Interface and client -----------------------------------------------------
+    iface! {
+        trait TestIface {
+            const PROTOCOL_ID: i64 = 0x1234;
+            fn ping(&mut self, c: Cap<Untyped>) -> ();
+        }
+    }
+
+    #[l4_client(TestIface, demand = 1)]
+    struct Client;
+
+    #[test]
+    fn reuse_preallocated_slots() {
+        ALLOC_COUNT.store(0, Ordering::SeqCst);
+        let mut c: Client = <Client as IfaceInit>::new(0);
+        let cap = Cap::<Untyped>::new(0);
+
+        c.ping(cap).unwrap();
+        c.ping(cap).unwrap();
+
+        assert_eq!(ALLOC_COUNT.load(Ordering::SeqCst), 1);
+    }
+}

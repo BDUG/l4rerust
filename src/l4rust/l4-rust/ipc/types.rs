@@ -55,6 +55,7 @@ pub trait Demand {
 #[doc(hidden)]
 pub trait CapProviderAccess {
     unsafe fn access_buffers(&mut self) -> BufferAccess;
+    fn ensure_slots(&mut self, cap_demand: u8) -> Result<()>;
 }
 
 pub struct BufferAccess {
