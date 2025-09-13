@@ -1,0 +1,14 @@
+[Unit]
+Description=Interactive Bash Shell
+After=fs_server.service net_server.service
+Requires=fs_server.service net_server.service
+
+[Service]
+ExecStart=/boot/bash
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+
+[Install]
+WantedBy=multi-user.target
