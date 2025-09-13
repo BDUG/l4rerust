@@ -1,11 +1,18 @@
 //! L4(Re) Task API
 
-use crate::cap::{Cap, CapIdx, Interface};
+use crate::cap::{Cap, CapIdx, Interface, Untyped};
 use crate::error::Result;
 use crate::ipc::MsgTag;
 use crate::types::UMword;
 use crate::utcb::Utcb;
-use l4_sys::{self, l4_addr_t, l4_cap_idx_t, l4_fpage_t};
+use l4_sys::{
+    self,
+    l4_addr_t,
+    l4_cap_idx_t,
+    l4_fpage_t,
+    l4_msg_item_consts_t::L4_MAP_ITEM_MAP,
+    L4_cap_fpage_rights::L4_CAP_FPAGE_RWSD,
+};
 
 /// Task kernel object
 /// The `Task` represents a combination of the address spaces provided
@@ -207,32 +214,39 @@ impl Task {
     pub unsafe fn add_ku_mem(&self, fpage: l4_fpage_t, utcb: &Utcb) -> Result<MsgTag> {
         MsgTag::from(l4_sys::l4_task_add_ku_mem_u(self.cap, fpage, utcb.raw)).result()
     }
+    /// Create a new L4 task.
+    ///
+    /// The new task's capability and the parent's task capability are mapped into the
+    /// child's object space so the task can reference itself and its creator.
+    pub unsafe fn create_from(
+        mut task_cap: Cap<Untyped>,
+        utcb_area: l4_fpage_t,
+    ) -> Result<Task> {
+        MsgTag::from(l4_sys::l4_factory_create_task(
+            (*l4_sys::l4re_env()).factory,
+            &mut task_cap.raw(),
+            utcb_area,
+        ))
+        .result()?;
 
-    //    /// Create a L4 task
-    //    ///
-    //    /// This creates a L4 task, mapping its own capability and the parent capability into the
-    //    /// object space for later use.
-    //    pub unsafe fn create_from<T: Interface>(mut task_cap: Cap<Untyped>,
-    //            utcb_area: l4_fpage_t) -> Result<Task> {
-    //        let tag = MsgTag::from(l4_sys::l4_factory_create_task(
-    //                l4re_env()?.factory, &mut task_cap.raw(), utcb_area)).result()?;
-    //        panic!("ToDo: the first two need to be reimplemented, the last one is up to the caller");
-    //        //map_obj_to_other(task_cap, pager_gate, pager_id, "pager"); /* Map pager cap */
-    //        //map_obj_to(task_cap, main_id, L4_FPAGE_RO, "main"); /* Make us visible */
-    //        //map_obj_to(task_cap, l4re_env()->log, L4_FPAGE_RO, "log"); /* Make print work */
-    //    }
-}
+        let current = Task::current();
 
-/*
-pub fn create_task() -> Result<Cap<Task>> {
-    let newtask = Cap::alloc();
-    let _ = MsgTag::from(l4_sys::l4_factory_create_task(l4re_env()?.factory,
-            &mut newtask.raw(),
-            ToDo_created_utcb)).result()?;
-    // map our region manager to child, use C-alike function to avoid creation of task object for
-    // current task
-    let _ = l4_sys::l4_task_map(newtask.raw(), Task::current().raw(),
-            l4_obj_fpage((*l4re_env()).rm, 0, L4_FPAGE_RO),
-            l4_map_obj_control((*l4re_env()).rm, l4_sys::L4_MAP_ITEM_MAP)).result()?;
+        MsgTag::from(l4_sys::l4_task_map(
+            task_cap.raw(),
+            current.raw(),
+            l4_sys::l4_obj_fpage(task_cap.raw(), 0, L4_CAP_FPAGE_RWSD as u8),
+            l4_sys::l4_map_obj_control(task_cap.raw(), L4_MAP_ITEM_MAP),
+        ))
+        .result()?;
+
+        MsgTag::from(l4_sys::l4_task_map(
+            task_cap.raw(),
+            current.raw(),
+            l4_sys::l4_obj_fpage(current.raw(), 0, L4_CAP_FPAGE_RWSD as u8),
+            l4_sys::l4_map_obj_control(current.raw(), L4_MAP_ITEM_MAP),
+        ))
+        .result()?;
+
+        Ok(unsafe { Task::new(task_cap.raw()) })
+    }
 }
-*/
