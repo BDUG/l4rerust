@@ -430,11 +430,18 @@ fn gen_cpp_rpc_method(
         x
     }
     let mut cpp = format!("  L4_INLINE_RPC(int, {}, (", method.sig.ident.to_string());
+    let mut inferred_tys: Vec<syn::Type> = Vec::new();
 
     for (idx, fnarg) in method.sig.decl.inputs.iter().enumerate() {
-        let (mut name, argtype) = match fnarg {
+        let (mut name, argtype): (String, &syn::Type) = match fnarg {
             FnArg::SelfRef(_) | FnArg::SelfValue(_) => continue,
-            FnArg::Inferred(_pat) => unimplemented!(),
+            // argument pattern without explicit name; derive type from pattern tokens
+            FnArg::Inferred(pat) => {
+                let ty: syn::Type = syn::parse2(pat.clone().into_token_stream())
+                    .map_err(|e| syn::Error::new(pat.span(), e.to_string()))?;
+                inferred_tys.push(ty);
+                (String::new(), inferred_tys.last().unwrap())
+            }
             FnArg::Ignored(ty) => (String::new(), ty),
             FnArg::Captured(argty) => match &argty.pat {
                 syn::Pat::Ident(i) => (i.ident.to_string(), &argty.ty),
@@ -466,4 +473,53 @@ fn gen_cpp_rpc_method(
     }
     cpp.push_str("));\n");
     Ok(cpp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::iface::{Demand, IfaceMethod};
+    use std::collections::{HashMap, HashSet};
+
+    #[test]
+    fn gen_cpp_rpc_method_inferred_arg() {
+        let mut method: TraitItemMethod = syn::parse_quote! {
+            fn foo(&mut self, bar: u32);
+        };
+        let mut inputs = syn::punctuated::Punctuated::new();
+        inputs.push(syn::parse_quote!(&mut self));
+        let pat: syn::Pat = syn::parse_quote!(u32);
+        inputs.push(FnArg::Inferred(pat));
+        method.sig.decl.inputs = inputs;
+
+        let mut ns = HashSet::new();
+        let mut includes = HashSet::new();
+        let cpp = gen_cpp_rpc_method(&method, &HashMap::new(), &mut ns, &mut includes)
+            .expect("generation failed");
+
+        assert!(cpp.contains("l4_uint32_t a"));
+    }
+
+    #[test]
+    fn export_trait_with_inferred_arg_names() {
+        let method: TraitItemMethod = syn::parse_quote! { fn foo(&mut self, u32); };
+        let iface = Iface {
+            name: syn::Ident::new("Example", proc_macro2::Span::call_site()),
+            protocol: syn::parse_quote!(1u32),
+            opattrs: Vec::new(),
+            optype: syn::parse_quote!(i32),
+            demand: Demand { caps: 0 },
+            methods: vec![IfaceMethod::Numbered(0, method)],
+        };
+        let opts = ExportOptions {
+            input_file: String::new(),
+            output_file: String::new(),
+            name: None,
+            protocol: None,
+            type_mappings: HashMap::new(),
+            includes: HashSet::new(),
+        };
+        let cpp = gen_cpp_interface(&iface, &opts).unwrap();
+        assert!(cpp.contains("l4_uint32_t a"));
+    }
 }
