@@ -5,14 +5,7 @@ use crate::error::Result;
 use crate::ipc::MsgTag;
 use crate::types::UMword;
 use crate::utcb::Utcb;
-use l4_sys::{self, l4_addr_t, l4_cap_consts_t::L4_CAP_SHIFT, l4_cap_idx_t, l4_fpage_t};
-
-// ToDo
-pub static THIS_TASK: Cap<Task> = Cap {
-    interface: Task {
-        cap: 1u64 << L4_CAP_SHIFT as u64,
-    },
-};
+use l4_sys::{self, l4_addr_t, l4_cap_idx_t, l4_fpage_t};
 
 /// Task kernel object
 /// The `Task` represents a combination of the address spaces provided
@@ -23,8 +16,28 @@ pub static THIS_TASK: Cap<Task> = Cap {
 /// Task objects are created using the Factory interface.
 ///
 pub struct Task {
-    // ToDo: a non-public, private capability handle; this is unsafe and should be rethought
     cap: l4_cap_idx_t,
+}
+
+impl Task {
+    /// Create a task interface from a raw capability selector.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `cap` is a valid task capability.
+    pub const unsafe fn new(cap: l4_cap_idx_t) -> Self {
+        Task { cap }
+    }
+
+    /// Retrieve the capability for the currently running task.
+    pub fn current() -> Cap<Task> {
+        // SAFETY: Every running task has a valid environment structure.
+        unsafe {
+            Cap {
+                interface: Task::new((*l4_sys::l4re_env()).task),
+            }
+        }
+    }
 }
 // ToDo: inherits from:
 //  public Kobject_t<Task, Kobject, L4_PROTO_TASK,
@@ -218,7 +231,7 @@ pub fn create_task() -> Result<Cap<Task>> {
             ToDo_created_utcb)).result()?;
     // map our region manager to child, use C-alike function to avoid creation of task object for
     // current task
-    let _ = l4_sys::l4_task_map(newtask.raw(), THIS_TASK,
+    let _ = l4_sys::l4_task_map(newtask.raw(), Task::current().raw(),
             l4_obj_fpage((*l4re_env()).rm, 0, L4_FPAGE_RO),
             l4_map_obj_control((*l4re_env()).rm, l4_sys::L4_MAP_ITEM_MAP)).result()?;
 }
