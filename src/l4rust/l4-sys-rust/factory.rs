@@ -16,7 +16,23 @@ use core::ptr;
 use crate::c_api::{l4_msgtag_protocol as MsgTagProto, *};
 use crate::cap;
 use crate::consts::UtcbConsts;
+#[cfg(not(test))]
 use crate::ipc_basic::{l4_ipc_call, l4_utcb, l4_utcb_br_u, l4_utcb_mr_u, timeout_never};
+#[cfg(test)]
+use crate::ipc_basic::{l4_utcb, l4_utcb_br_u, l4_utcb_mr_u, timeout_never};
+
+// During testing we don't have a kernel to answer IPC calls.  Provide a
+// lightweight stub that simply echoes the tag back to the caller so the helper
+// functions can be exercised without performing any system interaction.
+#[cfg(test)]
+unsafe fn l4_ipc_call(
+    _dest: l4_cap_idx_t,
+    _utcb: *mut l4_utcb_t,
+    tag: l4_msgtag_t,
+    _timeout: l4_timeout_t,
+) -> l4_msgtag_t {
+    tag
+}
 use crate::ipc_ext::{msgtag, msgtag_flags, msgtag_label, msgtag_words};
 
 /// Create a new task.
@@ -138,58 +154,51 @@ pub unsafe fn l4_factory_create_gate_u(
     l4_factory_create_commit_u(factory, tag, u)
 }
 
-// ToDo: unported
-///**
-// * \ingroup l4_factory_api
-// * Create a new IRQ sender.
-// *
-// * \param      factory     Factory to use for creation.
-// * \param[out] target_cap  The kernel stores the new IRQ's capability into this
-// *                         slot.
-// *
-// * \return Syscall return tag
-// *
-// * \see \ref l4_irq_api
-// */
-//L4_INLINE l4_msgtag_t
-//l4_factory_create_irq(l4_cap_idx_t factory,
-//                      l4_cap_idx_t target_cap) L4_NOTHROW;
-//
-///**
-// * \ingroup l4_factory_api
-// * \copybrief L4::Factory::create_irq
-// * \param factory  Factory to use for creation.
-// * \copydetails L4::Factory::create_irq
-// */
-//L4_INLINE l4_msgtag_t
-//l4_factory_create_irq_u(l4_cap_idx_t factory,
-//                        l4_cap_idx_t target_cap, l4_utcb_t *utcb) L4_NOTHROW;
-//
-///**
-// * \ingroup l4_factory_api
-// * \copybrief L4::Factory::create_vm
-// * \param      factory     Capability selector for factory to use for creation.
-// * \param[out] target_cap  The kernel stores the new VM's capability into this
-// *                         slot.
-// *
-// * \return Syscall return tag
-// *
-// * \see \ref l4_vm_api
-// */
-//L4_INLINE l4_msgtag_t
-//l4_factory_create_vm(l4_cap_idx_t factory,
-//                     l4_cap_idx_t target_cap) L4_NOTHROW;
-//
-///**
-// * \ingroup l4_factory_api
-// * \copybrief L4::Factory::create_vm
-// * \param factory  Capability selector for factory to use for creation.
-// * \copydetails L4::Factory::create_vm
-// */
-//L4_INLINE l4_msgtag_t
-//l4_factory_create_vm_u(l4_cap_idx_t factory,
-//                       l4_cap_idx_t target_cap, l4_utcb_t *utcb) L4_NOTHROW;
-//
+/// Create a new IRQ sender.
+///
+/// This allocates an IRQ sender object and places the resulting capability in
+/// `target_cap` which must point to a pre-allocated slot.
+#[inline]
+pub unsafe fn l4_factory_create_irq(
+    factory: l4_cap_idx_t,
+    target_cap: l4_cap_idx_t,
+) -> l4_msgtag_t {
+    l4_factory_create_irq_u(factory, target_cap, l4_utcb())
+}
+
+/// Create a new IRQ sender using an explicitly supplied UTCB pointer.
+#[inline]
+pub unsafe fn l4_factory_create_irq_u(
+    factory: l4_cap_idx_t,
+    target_cap: l4_cap_idx_t,
+    utcb: *mut l4_utcb_t,
+) -> l4_msgtag_t {
+    l4_factory_create_u(
+        factory,
+        MsgTagProto::L4_PROTO_IRQ_SENDER as i32,
+        target_cap,
+        utcb,
+    )
+}
+
+/// Create a new virtual machine (VM).
+///
+/// The kernel stores the capability to the new VM in `target_cap`.
+#[inline]
+pub unsafe fn l4_factory_create_vm(factory: l4_cap_idx_t, target_cap: l4_cap_idx_t) -> l4_msgtag_t {
+    l4_factory_create_vm_u(factory, target_cap, l4_utcb())
+}
+
+/// Create a new VM using an explicitly supplied UTCB pointer.
+#[inline]
+pub unsafe fn l4_factory_create_vm_u(
+    factory: l4_cap_idx_t,
+    target_cap: l4_cap_idx_t,
+    utcb: *mut l4_utcb_t,
+) -> l4_msgtag_t {
+    l4_factory_create_u(factory, MsgTagProto::L4_PROTO_VM as i32, target_cap, utcb)
+}
+
 //L4_INLINE l4_msgtag_t
 // ToDo: docs
 #[inline]
@@ -389,4 +398,32 @@ pub unsafe fn l4_factory_create_add_nil_u(tag: &mut l4_msgtag_t, u: *mut l4_utcb
     w += 1;
     tag.raw = (tag.raw & !0x3fi64) | (w as i64 & 0x3f);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem::MaybeUninit;
+
+    #[test]
+    fn create_irq_protocol_written() {
+        unsafe {
+            let mut utcb = MaybeUninit::<l4_utcb_t>::zeroed();
+            let u = utcb.as_mut_ptr();
+            l4_factory_create_irq_u(0, 0, u);
+            let regs = l4_utcb_mr_u(u);
+            assert_eq!((*regs).mr[0], MsgTagProto::L4_PROTO_IRQ_SENDER as u64);
+        }
+    }
+
+    #[test]
+    fn create_vm_protocol_written() {
+        unsafe {
+            let mut utcb = MaybeUninit::<l4_utcb_t>::zeroed();
+            let u = utcb.as_mut_ptr();
+            l4_factory_create_vm_u(0, 0, u);
+            let regs = l4_utcb_mr_u(u);
+            assert_eq!((*regs).mr[0], MsgTagProto::L4_PROTO_VM as u64);
+        }
+    }
 }
