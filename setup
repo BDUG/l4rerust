@@ -1,9 +1,6 @@
 #! /bin/bash
 
 # This scripts sets up a snapshot on the target build machine.
-# TODO: Add question for compiler location :(
-# TODO: do export CROSS_COMPILE before setting up the obj-dirs, so that we get the right prefix
-# TODO: Use CROSS_COMPILE from environement as default (in case it is already set)
 
 set -e
 
@@ -17,6 +14,14 @@ if [ -n "$SYSTEM" ]; then
   echo "SYSTEM environment variable set, not good"
   exit 1
 fi
+
+if [ -n "$CROSS_COMPILE" ]; then
+  read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
+  CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
+else
+  read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+fi
+export CROSS_COMPILE
 
 CC=${CC:-${CROSS_COMPILE}gcc}
 CXX=${CXX:-${CROSS_COMPILE}g++}
