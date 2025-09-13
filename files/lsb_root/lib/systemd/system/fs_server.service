@@ -1,0 +1,20 @@
+[Unit]
+Description=L4Re File Server
+Before=net_server.service
+
+[Service]
+ExecStart=/boot/fs_server
+# Provide capabilities and environment entries needed by fs_server.
+# These map virtio block device and scheduler resources and export the global filesystem gate.
+Environment="L4_CAP_GLOBAL_FS=global_fs" \
+           "L4_CAP_LSB_ROOT=lsb_root" \
+           "L4_CAP_VIRTIO_BLK=virtio_blk" \
+           "L4_CAP_VIRTIO_BLK_IRQ=virtio_blk_irq" \
+           "L4_CAP_IOMEM=iomem" \
+           "L4_CAP_SCHED=scheduler"
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_MKNOD CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_SYS_ADMIN CAP_MKNOD CAP_DAC_OVERRIDE
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

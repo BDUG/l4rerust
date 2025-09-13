@@ -1,0 +1,10 @@
+[Unit]
+Description=L4Re Network Server
+After=fs_server.service
+Requires=fs_server.service
+
+[Service]
+ExecStart=/boot/net_server
+
+[Install]
+WantedBy=multi-user.target
