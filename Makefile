@@ -90,6 +90,13 @@ build_images: build_l4linux build_l4re build_fiasco
 	done	
 	@echo "=============== Build done ===================================="
 
+BASH_ARCHES := arm arm64
+
+bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_images
+
+obj/bash/%/bash:
+	@scripts/build_arm.sh --no-clean
+
 gen_prebuilt: copy_prebuilt pre-built-images/l4image
 
 copy_prebuilt2:
@@ -141,6 +148,7 @@ help:
 	@echo "  all"
 	@echo "  setup"
 	@echo "  gen_prebuilt"
+	@echo "  bash-image    Build image with Bash as first program"
 
 .PHONY: setup all build_all clean help \
-        build_images build_fiasco build_l4re build_l4linux
+	build_images build_fiasco build_l4re build_l4linux bash-image
