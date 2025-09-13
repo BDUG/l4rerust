@@ -184,40 +184,38 @@ impl CapProvider for Bufferless {
     }
 }
 
-pub struct BufferManager {
+pub struct BufferManager<const N: usize = { L4_UTCB_GENERIC_BUFFERS_SIZE as usize }> {
     /// number of allocated capabilities
     caps: u8,
     cap_flags: u64,
-    // ToDo: reimplement this with the (ATM unstable) const generics
-    br: [u64; l4_sys::consts::UtcbConsts::L4_UTCB_GENERIC_BUFFERS_SIZE as usize],
+    br: [u64; N],
 }
 
-impl CapProvider for BufferManager {
+impl<const N: usize> CapProvider for BufferManager<N> {
     fn new() -> Self {
         BufferManager {
             caps: 0,
             cap_flags: L4_RCV_ITEM_LOCAL_ID as u64,
-            br: [0u64; L4_UTCB_GENERIC_BUFFERS_SIZE as usize],
+            br: [0u64; N],
         }
     }
 
     fn alloc_capslots(&mut self, cap_demand: u8) -> Result<()> {
         // take two extra buffers for a possible timeout and a zero terminator (taken from the c++
         // version)
-        if cap_demand + 3 >= self.br.len() as u8 {
+        if cap_demand + 3 >= N as u8 {
             return Err(Error::InvalidArg(
                 "Capability slot demand too large",
                 Some(cap_demand as isize),
             ));
         }
-        // ToDo: set up is wrong, +1 caps allocated than actually required
-        while cap_demand + 1 > self.caps {
+        while cap_demand > self.caps {
             let cap = unsafe { l4_sys::l4re_util_cap_alloc() };
             if (cap & L4_INVALID_CAP_BIT as u64) != 0 {
                 return Err(Error::Generic(GenericErr::NoMem));
             }
 
-            // safe this cap as a "receive item" in the format that the kernel
+            // save this cap as a "receive item" in the format that the kernel
             // understands
             self.br[self.caps as usize] = cap | L4_RCV_ITEM_SINGLE_CAP as u64 | self.cap_flags;
             self.caps += 1;
@@ -259,7 +257,7 @@ impl CapProvider for BufferManager {
 
     #[inline]
     fn max_slots(&self) -> u32 {
-        self.br.len() as u32
+        N as u32
     }
 
     #[inline]
@@ -434,5 +432,51 @@ impl<'a> core::convert::AsRef<str> for BufStr<'a> {
             // this struct can only be initialised from a rust str
             core::str::from_utf8_unchecked(core::slice::from_raw_parts(self.0.as_ptr(), self.1))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cap::{IfaceInit, Interface, Untyped};
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    // Simple fake allocator returning incrementing capability numbers.
+    static ALLOC_COUNT: AtomicU32 = AtomicU32::new(0);
+    static mut NEXT_CAP: u64 = 1;
+
+    #[no_mangle]
+    pub extern "C" fn l4re_util_cap_alloc() -> u64 {
+        ALLOC_COUNT.fetch_add(1, Ordering::SeqCst);
+        unsafe {
+            let c = NEXT_CAP;
+            NEXT_CAP += 1;
+            c
+        }
+    }
+
+    #[test]
+    fn allocs_exact_demand() {
+        let mut mgr = BufferManager::new();
+        mgr.alloc_capslots(1).unwrap();
+        assert_eq!(mgr.caps_used(), 1);
+        let _c: Cap<Untyped> = mgr.rcv_cap(0).unwrap();
+        assert!(mgr.rcv_cap::<Untyped>(1).is_err());
+        unsafe {
+            let mut access = mgr.access_buffers();
+            let ptr = access.ptr.unwrap().as_ptr();
+            assert_eq!(*ptr.add(1), 0);
+        }
+    }
+
+    #[test]
+    fn no_extra_allocation_on_same_demand() {
+        ALLOC_COUNT.store(0, Ordering::SeqCst);
+        let mut mgr = BufferManager::new();
+        mgr.alloc_capslots(2).unwrap();
+        assert_eq!(ALLOC_COUNT.load(Ordering::SeqCst), 2);
+        mgr.alloc_capslots(2).unwrap();
+        assert_eq!(ALLOC_COUNT.load(Ordering::SeqCst), 2);
+        assert_eq!(mgr.caps_used(), 2);
     }
 }
