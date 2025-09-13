@@ -1,6 +1,6 @@
 use super::super::{
     cap::{Cap, IfaceInit, Interface},
-    error::Result,
+    error::{Error, Result},
     utcb::{FpageRights, SndFlexPage, UtcbMr},
 };
 use super::types::BufferAccess;
@@ -90,8 +90,38 @@ unsafe impl Serialiser for SndFlexPage {
     }
 
     #[inline]
-    fn read(_: &mut UtcbMr, _: &mut BufferAccess) -> Result<Self> {
-        unimplemented!("flex pages are read by the concrete type, e.g. Cap");
+    fn read(mr: &mut UtcbMr, bufs: &mut BufferAccess) -> Result<Self> {
+        // Read the raw item from the message registers first. The object
+        // reference in the second word is replaced with the capability read
+        // from the receive buffer to mirror the C++ implementation.
+
+        // first word: item description (map control, etc.)
+        let description = mr.read::<u64>()?;
+        // second word: flexpage with rights information
+        let fp_raw = mr.read::<u64>()?;
+
+        // Extract rights from the received flexpage and obtain the capability
+        // from the buffer access. Fallback to an error if no capability is
+        // available.
+        let rights = FpageRights::from_bits_truncate((fp_raw & 0xff) as u8);
+
+        let cap_idx = if let Some(ptr) = bufs.ptr {
+            // SAFETY: `ptr` originates from the buffer manager and is assumed
+            // to be valid and pointing to a capability slot. We manually
+            // advance the pointer to mimic sequential buffer access.
+            unsafe {
+                let cap_idx = *ptr.as_ptr();
+                bufs.ptr = Some(core::ptr::NonNull::new_unchecked(ptr.as_ptr().add(1)));
+                cap_idx
+            }
+        } else {
+            return Err(Error::InvalidState("missing capability for flex page"));
+        };
+
+        // Reconstruct flexpage word with the capability from the buffer.
+        let fpage = unsafe { ::l4_sys::l4_obj_fpage(cap_idx, 0, rights.bits() as u8).raw };
+
+        Ok(SndFlexPage { description, fpage })
     }
 }
 
