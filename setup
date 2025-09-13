@@ -785,6 +785,7 @@ EOF
     add_std_qemu_options obj/l4/x86/conf/Makeconf.boot
 
     echo "ENTRY=hello"               >> $odir/.imagebuilds
+    echo "ENTRY=bash"                >> $odir/.imagebuilds
     echo "ENTRY=hello-shared"        >> $odir/.imagebuilds
     echo "ENTRY=framebuffer-example" >> $odir/.imagebuilds
     if [ -n "$l4lx_avail" ]; then
@@ -803,6 +804,7 @@ MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/amd64:$(pwd)/obj/l4linux/amd64:$common_path
 EOF
     add_std_qemu_options obj/l4/amd64/conf/Makeconf.boot
     echo "ENTRY=hello"               >> $odir/.imagebuilds
+    echo "ENTRY=bash"                >> $odir/.imagebuilds
     echo "ENTRY=hello-shared"        >> $odir/.imagebuilds
     echo "ENTRY=framebuffer-example" >> $odir/.imagebuilds
     if [ -n "$l4lx_avail" ]; then
@@ -826,6 +828,7 @@ EOF
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
 EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
@@ -834,18 +837,21 @@ EOF
     if [ "$CONF_DO_ARM_RPIZ" ]; then
       echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
     fi
 
     if [ "$CONF_DO_ARM_RPI3" ]; then
       echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
     fi
 
     if [ "$CONF_DO_ARM_RPI4" ]; then
       echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
@@ -854,12 +860,14 @@ EOF
     if [ "$CONF_DO_ARM_IMX6UL_PL1" ]; then
       echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
     fi
 
     if [ "$CONF_DO_ARM_IMX6UL_PL2" ]; then
       echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
@@ -884,6 +892,7 @@ EOF
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a57 -smp 2
 EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
@@ -891,6 +900,7 @@ EOF
 
     if [ "$CONF_DO_ARM64_RCAR3" ]; then
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
@@ -898,11 +908,13 @@ EOF
 
     if [ "$CONF_DO_ARM64_RPI3" ]; then
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
     fi
 
     if [ "$CONF_DO_ARM64_RPI4" ]; then
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
@@ -910,6 +922,7 @@ EOF
 
     if [ "$CONF_DO_ARM64_S32" ]; then
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
@@ -920,6 +933,7 @@ EOF
 QEMU_OPTIONS-zynqmp   += -M xlnx-zcu102,virtualization=true -m 2048
 EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
