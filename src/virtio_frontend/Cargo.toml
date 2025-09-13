@@ -1,0 +1,8 @@
+[package]
+name = "virtio_frontend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "virtio_frontend"
+crate-type = ["rlib", "cdylib"]
