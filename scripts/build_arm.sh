@@ -41,6 +41,7 @@ required_tools=(
   "${CROSS_COMPILE_ARM64}gcc"
   mke2fs
   debugfs
+  ssh-keygen
   meson
   ninja
   pkg-config
@@ -258,6 +259,23 @@ debugfs -w -R "write obj/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
 debugfs -w -R "write obj/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+
+# Set up SSH configuration and host keys
+mkdir -p files/lsb_root/etc/ssh
+debugfs -w -R "mkdir /etc/ssh" "$lsb_img" >/dev/null
+chmod 0644 files/lsb_root/etc/ssh/sshd_config
+hostkey_tmp=$(mktemp)
+ssh-keygen -t rsa -N '' -f "$hostkey_tmp" >/dev/null
+cp "$hostkey_tmp" files/lsb_root/etc/ssh/ssh_host_rsa_key
+cp "$hostkey_tmp.pub" files/lsb_root/etc/ssh/ssh_host_rsa_key.pub
+chmod 600 files/lsb_root/etc/ssh/ssh_host_rsa_key files/lsb_root/etc/ssh/ssh_host_rsa_key.pub
+debugfs -w -R "write files/lsb_root/etc/ssh/sshd_config /etc/ssh/sshd_config" "$lsb_img" >/dev/null
+debugfs -w -R "chmod 0644 /etc/ssh/sshd_config" "$lsb_img" >/dev/null
+debugfs -w -R "write $hostkey_tmp /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
+debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
+debugfs -w -R "write $hostkey_tmp.pub /etc/ssh/ssh_host_rsa_key.pub" "$lsb_img" >/dev/null
+debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key.pub" "$lsb_img" >/dev/null
+rm "$hostkey_tmp" "$hostkey_tmp.pub"
 
 # Install systemd into the root filesystem image and staging area
 sys_root="obj/systemd/arm64/root"
