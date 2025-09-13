@@ -163,6 +163,27 @@ EOF
   )
 }
 
+# Build OpenSSH for ARM and ARM64
+build_openssh() {
+  local arch="$1" cross="$2" host="$3"
+  local out_dir="obj/openssh/$arch"
+  if [ -f "$out_dir/sshd" ]; then
+    echo "openssh for $arch already built, skipping"
+    return
+  fi
+  mkdir -p "$out_dir"
+  (
+    cd "$openssh_src_dir"
+    make distclean >/dev/null 2>&1 || true
+    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
+      ./configure --host="$host" --with-privsep-path=/var/empty --disable-strip
+    make clean
+    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
+      make sshd
+    cp sshd "$repo_root/$out_dir/"
+  )
+}
+
 need_systemd=false
 for arch in arm arm64; do
   if [ ! -f "obj/systemd/$arch/systemd" ]; then
@@ -181,6 +202,27 @@ if [ "$need_systemd" = true ]; then
   rm -rf "$systemd_src_dir"
 else
   echo "systemd for arm and arm64 already built, skipping"
+fi
+
+# Build OpenSSH for ARM and ARM64
+need_openssh=false
+for arch in arm arm64; do
+  if [ ! -f "obj/openssh/$arch/sshd" ]; then
+    need_openssh=true
+    break
+  fi
+done
+
+if [ "$need_openssh" = true ]; then
+  OPENSSH_VERSION=9.6p1
+  OPENSSH_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz"
+  openssh_src_dir=$(mktemp -d src/openssh-XXXXXX)
+  curl -L "$OPENSSH_URL" | tar -xz -C "$openssh_src_dir" --strip-components=1
+  build_openssh arm "$CROSS_COMPILE_ARM" arm-linux-gnueabihf
+  build_openssh arm64 "$CROSS_COMPILE_ARM64" aarch64-linux-gnu
+  rm -rf "$openssh_src_dir"
+else
+  echo "openssh for arm and arm64 already built, skipping"
 fi
 
 # Build the tree including libc, Leo, and Rust crates
@@ -269,7 +311,7 @@ fi
 out_dir="out"
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
-find obj -type f \( -name '*.rlib' -o -name '*.elf' -o -name '*.img' -o -name '*.image' -o -name systemd \) -exec cp {} "$out_dir" \;
+find obj -type f \( -name '*.rlib' -o -name '*.elf' -o -name '*.img' -o -name '*.image' -o -name bash -o -name systemd -o -name sshd \) -exec cp {} "$out_dir" \;
 cp "$lsb_img" "$out_dir/"
 
 echo "Artifacts placed in $out_dir"
