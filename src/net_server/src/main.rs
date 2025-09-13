@@ -50,14 +50,17 @@ unsafe fn run() {
             // Operation 0: send a packet. For demonstration we simply
             // acknowledge the request.
             0 => {
-                let _ = net.send(&[]);
+                let _ = net.send_frame(&[]);
                 (*l4::l4_utcb_mr()).mr[0] = 0;
             }
             // Operation 1: receive a packet. We currently signal that no
             // data is available.
             1 => {
                 let mut buf = [0u8; 0];
-                let res = net.recv(&mut buf).map(|len| len as u64).unwrap_or(u64::MAX);
+                let res = net
+                    .receive_frame(&mut buf)
+                    .map(|len| len as u64)
+                    .unwrap_or(u64::MAX);
                 (*l4::l4_utcb_mr()).mr[0] = res;
             }
             // Unsupported operations are indicated with all bits set.
