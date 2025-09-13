@@ -4,6 +4,7 @@ use l4::{
     cap::Cap,
     utcb::SndFlexPage as FlexPage,
     sys::{l4_addr_t, l4_size_t},
+    ipc::PROTO_EMPTY,
 };
 use l4_derive::{iface, l4_client};
 use super::sys::L4ReProtocols::L4RE_PROTO_DATASPACE;
@@ -57,14 +58,18 @@ unsafe impl l4::ipc::Serialiser for DeprecatedPhys {
     }
 }
 
-// ToDo: this interface is not functional, the map operation is **broken**; it serves mostly as a
-// marker trait and needs to be fixed; only the info() operation is tested
 iface! {
     trait DataspaceProvider {
         const PROTOCOL_ID: i64 = PROTO_DATASPACE;
-        // ToDo: docs
+        /// Request a mapping from this dataspace.
+        ///
+        /// Maps a portion of the dataspace starting at `offset` to the
+        /// address defined by `spot`.  Mapping options are controlled through
+        /// `flags`.  The receive flexpage `r` specifies the receive window of
+        /// the mapping.  The returned flexpage describes the mapping that was
+        /// actually established.
         fn map(&mut self, offset: l4_addr_t, spot: l4_addr_t, flags: u64,
-                r: FlexPage) -> Cap<Dataspace>;
+                r: FlexPage) -> FlexPage;
 
         /// Clear parts of a dataspace.
         ///
@@ -86,13 +91,15 @@ iface! {
                 src_offset: l4_addr_t, size: l4_addr_t) -> ();
 
         /// Take operation.
-        /// **Deprecated**: Dataspaces exists as long as a capability on the dataspace exists.
-        fn take(&mut self, todo_delme: i32) -> ();
+        /// **Deprecated**: Dataspaces exist as long as a capability on the
+        /// dataspace exists. `flags` is ignored and should be set to zero.
+        fn take(&mut self, flags: i32) -> ();
 
         /// Release operation.
-        /// **Deprecated:** Dataspaces exist as long as a capability on the dataspace exists.
-        fn release(&mut self, todo_delme: i32) -> ();
-
+        /// **Deprecated:** Dataspaces exist as long as a capability on the
+        /// dataspace exists. `flags` is ignored and should be set to zero.
+        fn release(&mut self, flags: i32) -> ();
+    
         /// Get the physical addresses of a dataspace.
         ///
         /// This call will only succeed on pinned memory dataspaces.  
@@ -124,12 +131,6 @@ pub enum MemAllocFlags {
     SuperPages  = 0x04,
 }
 
-// TODO: this interface is not functional
-// The Mem_alloc (C++) interface just mimics the ipc_iface framework, but is actually a plain C++
-// task. To expose this interface, the factory interface (also mimicking the framework interface to
-// some extend) needs to be ported and then this stub needs to be rewritten to expose Cap, Demand,
-// etc. manually.
-/*
 /// Memory allocation interface.
 ///
 /// The memory-allocator API is the basic API to allocate memory from the L4Re
@@ -171,4 +172,3 @@ iface! {
 
 #[l4_client(MemoryAllocator, demand = 1)]
 pub struct MemAlloc;
-*/
