@@ -4,11 +4,12 @@
 //! using the L4Re libraries.  The implementation is intentionally minimal and
 //! mainly aims to show how such a server could be structured in Rust.
 
-use fatfs::{FileSystem, FsOptions, StdIoWrapper};
+use fatfs::{FileSystem, FsOptions};
 use l4re::sys::{l4re_env, l4re_env_get_cap};
 use l4_sys::{l4_ipc_error, l4_msgtag, l4_utcb};
 
-use std::fs::File;
+mod virtio;
+use virtio::VirtioDisk;
 
 fn main() {
     unsafe { run(); }
@@ -32,11 +33,10 @@ unsafe fn run() {
         panic!("failed to bind IPC gate");
     }
 
-    // Mount a FAT32 file system from a disk image.
-    // In a real deployment the image could reside on a block device
-    // dataspace.  Here we simply read a local file `fat.img`.
-    let img = File::open("fat.img").expect("missing FAT image 'fat.img'");
-    let fs = FileSystem::new(img, FsOptions::new()).expect("failed to mount FAT32 volume");
+    // Initialise the virtio block driver. The driver provides sector based
+    // access to the backing store which is consumed by the FAT32 layer.
+    let disk = unsafe { VirtioDisk::new().expect("virtio-blk device not available") };
+    let fs = FileSystem::new(disk, FsOptions::new()).expect("failed to mount FAT32 volume");
 
     // Ready to serve requests.
     println!("filesystem server ready");
