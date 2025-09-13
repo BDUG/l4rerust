@@ -8,6 +8,8 @@ cd src/ &&
 cd .. &&
 make setup &&
 make &&
+# Build example Rust crates including the network server
+make examples &&
 mkdir lib &&
 cd lib/ &&
 find ../obj/ -type f | grep "\.rlib" | xargs -i cp {} . 
