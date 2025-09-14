@@ -17,17 +17,18 @@ detect_cross_compilers() {
       fi
 
       if [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
-        if command -v aarch64-none-linux-gnu-gcc >/dev/null 2>&1; then
-          CROSS_COMPILE_ARM64=aarch64-none-linux-gnu-
+        if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+          CROSS_COMPILE_ARM64=aarch64-linux-gnu-
         elif command -v aarch64-unknown-linux-gnu-gcc >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-unknown-linux-gnu-
         else
-          CROSS_COMPILE_ARM64=aarch64-none-elf-
+          echo "No AArch64 cross compiler found. Please install aarch64-linux-gnu-gcc or aarch64-unknown-linux-gnu-gcc." >&2
+          exit 1
         fi
       fi
 
       if [[ ${CROSS_COMPILE_ARM64} != *linux* ]]; then
-        echo "No Linux-targeted AArch64 cross compiler found (expected aarch64-none-linux-gnu- or aarch64-unknown-linux-gnu-)." >&2
+        echo "No Linux-targeted AArch64 cross compiler found (expected aarch64-linux-gnu- or aarch64-unknown-linux-gnu-)." >&2
         exit 1
       fi
 
@@ -77,7 +78,13 @@ validate_tools() {
       fi
     else
       if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "Required tool $tool not found" >&2
+        if [[ "$tool" == "${CROSS_COMPILE_ARM}gcc" ]]; then
+          echo "Required tool $tool not found (CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM})" >&2
+        elif [[ "$tool" == "${CROSS_COMPILE_ARM64}gcc" ]]; then
+          echo "Required tool $tool not found (CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64})" >&2
+        else
+          echo "Required tool $tool not found" >&2
+        fi
         exit 1
       fi
     fi
