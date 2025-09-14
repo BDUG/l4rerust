@@ -34,11 +34,28 @@ validate_tools
 ARTIFACTS_DIR="out"
 mkdir -p "$ARTIFACTS_DIR"
 
+# Ensure the ham build tool is available
+HAM_PATH="$(realpath "$SCRIPT_DIR/../ham")"
+HAM_BIN="$HAM_PATH/ham"
+if [ ! -x "$HAM_BIN" ]; then
+  echo "ham binary not found, fetching..."
+  if [ ! -d "$HAM_PATH" ]; then
+    git clone https://github.com/kernkonzept/ham.git "$HAM_PATH"
+  fi
+  if [ ! -x "$HAM_BIN" ]; then
+    (cd "$HAM_PATH" && make >/dev/null 2>&1 || true)
+  fi
+  if [ ! -x "$HAM_BIN" ]; then
+    curl -L "https://github.com/kernkonzept/ham/releases/latest/download/ham" -o "$HAM_BIN"
+  fi
+  chmod +x "$HAM_BIN"
+fi
+
 # Sync manifests using ham
 (
   cd src &&
-  ../ham/ham init -u https://github.com/kernkonzept/manifest.git &&
-  ../ham/ham sync
+  "$HAM_BIN" init -u https://github.com/kernkonzept/manifest.git &&
+  "$HAM_BIN" sync
 )
 
 # Start from a clean state
