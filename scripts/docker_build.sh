@@ -17,7 +17,7 @@ if [ ! -x "$HAM_BIN" ]; then
     git clone https://github.com/kernkonzept/ham.git "$HAM_PATH"
   fi
   if [ ! -x "$HAM_BIN" ]; then
-    (cd "$HAM_PATH" && make >/dev/null 2>&1 || true)
+    (cd "$HAM_PATH" && gmake >/dev/null 2>&1 || true)
   fi
   if [ ! -x "$HAM_BIN" ]; then
     curl -L "https://github.com/kernkonzept/ham/releases/latest/download/ham" -o "$HAM_BIN"
