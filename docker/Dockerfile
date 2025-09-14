@@ -34,6 +34,10 @@ RUN apt-get update && \
     && cpanm --notest Git::Repository \
     && rm -rf /var/lib/apt/lists/*
 
+# Install ham build tool
+RUN curl -L https://raw.githubusercontent.com/kernkonzept/ham/master/ham -o /usr/local/bin/ham \
+    && chmod +x /usr/local/bin/ham
+
 ENV CROSS_COMPILE_ARM=arm-linux-gnueabihf-
 ENV CROSS_COMPILE_ARM64=aarch64-linux-gnu-
 
