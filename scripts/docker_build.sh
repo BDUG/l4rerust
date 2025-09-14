@@ -43,6 +43,13 @@ fi
 # Create a named container so we can copy build artifacts out afterwards.
 container="l4rerust-build-$$"
 
+# Ensure the container is cleaned up when the script exits.
+cleanup() {
+  docker logs --tail 50 "$container" || true
+  docker rm "$container" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 # Create container without bind mounts to enforce copy-out semantics.
 echo "Create build container ..."
 docker create --name "$container" -w /workspace "$IMAGE" "$@" >/dev/null
@@ -69,8 +76,4 @@ else
 fi
 
 echo "Build done ..."
-# Clean up the container regardless of success.
-#docker logs --tail 50 "$container" 
-#docker rm "$container" >/dev/null
-
 exit $build_status
