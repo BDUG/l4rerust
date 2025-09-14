@@ -43,21 +43,6 @@ $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*)):
 	$(MAKE) -C $(@D)
 
-obj/l4linux/amd64/vmlinux: obj/l4/amd64/l4defs.mk.inc
-	$(MAKE) -C src/l4linux O=$(abspath $(@D)) x86_64-mp_vPCI_defconfig
-	src/l4linux/scripts/config --file $(@D)/.config \
-	                           --set-str L4_OBJ_TREE $(abspath obj/l4/amd64)
-# temporary quick fix
-	src/l4linux/scripts/config --file $(@D)/.config -d IA32_EMULATION -d X86_X32 -e PCI -e L4_VPCI
-	$(MAKE) -C $(@D) olddefconfig
-	$(MAKE) -C $(@D)
-
-obj/l4linux/ux/vmlinux: obj/l4/x86/l4defs.mk.inc
-	$(MAKE) -C src/l4linux O=$(abspath $(@D)) x86_32-ux_defconfig
-	src/l4linux/scripts/config --file $(@D)/.config \
-	                           --set-str L4_OBJ_TREE $(abspath obj/l4/x86)
-	$(MAKE) -C $(@D)
-
 obj/l4linux/arm-mp/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
 	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
 	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
@@ -123,14 +108,6 @@ copy_prebuilt2:
 	@cd obj/l4;                                          \
 	for arch in *; do                                    \
 	  for i in $$arch/images/*; do \
-	    if [ "$$arch" = "amd64" -o "$$arch" = "x86" ]; then \
-	      mkdir -p ../../pre-built-images/$$arch; \
-	      if [ -d $$i ]; then \
-	        for f in $$i/*.elf; do \
-	          cp $$f ../../pre-built-images/$$arch; \
-	        done; \
-	      fi; \
-	    else \
 	      if [ -d $$i ]; then \
 		pt=$${i#$$arch/images/}; \
 		mkdir -p ../../pre-built-images/$$arch/$$pt; \
@@ -138,7 +115,6 @@ copy_prebuilt2:
 		  cp $$f ../../pre-built-images/$$arch/$$pt; \
 		done; \
 	      fi; \
-	    fi; \
 	  done; \
 	done
 
@@ -151,8 +127,7 @@ copy_prebuilt:
 	           $$arch/images/*.uimage; do                \
 	    [ -e $$i ] || continue;                          \
 	    if [ $$i != $$arch/images/bootstrap.elf -a       \
-	         $$i != $$arch/images/bootstrap.uimage -a    \
-	         $$i != amd64/images/bootstrap32.elf ]; then \
+	         $$i != $$arch/images/bootstrap.uimage ]; then \
 	      cp $$i ../../pre-built-images/$$arch;          \
 	    fi;                                              \
 	  done;                                              \
