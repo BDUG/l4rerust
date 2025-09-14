@@ -4,188 +4,24 @@ Starting point was the work of the project [rustl4re](https://github.com/humenda
 
 ## Containerized build
 
-If cross-compilers or required GNU utilities are not available on the host,
-the project can be built inside a Docker container. Ensure
-[Docker](https://www.docker.com/) is installed and run:
-
-```bash
-scripts/docker_build.sh --test
-```
-
-The script builds the image if needed and invokes `scripts/build.sh` inside the
-container. The `--test` flag performs a brief QEMU boot to verify the build.
-All toolchains and GNU utilities are provided by the container, so nothing
-else needs to be installed on the host.
+Instructions for building inside a Docker container are available in [docs/build.md](docs/build.md).
 
 ## Building for ARM
 
-Use `scripts/build.sh` to build the project. By default, previous build
-artifacts are removed before compilation. Passing `--no-clean` skips this
-cleanup.
-
-The script also accepts a `--test` flag which performs a brief QEMU boot using
-the generated image `obj/l4/arm64/images/bootstrap_hello_arm_virt.elf`. The
-script aborts if the QEMU run fails, providing a quick smoke test of the
-build.
-
-Built components and images are collected under the `out/` directory.
-
-The build process first compiles the `l4re-libc` crate to provide a static
-libc for the Rust components. The resulting library is made available through
-the `LIBRARY_PATH` environment variable so that subsequent Rust crates link
-against it automatically.
-
-To rebuild manually outside of the script:
-
-```
-cd src/l4rust
-cargo build -p l4re-libc --release
-export LIBRARY_PATH=$(pwd)/target/release:${LIBRARY_PATH}
-cd -
-make
-```
-
-Ensuring `LIBRARY_PATH` is set correctly allows the Rust crates to link against
-the freshly built static libc.
+Steps for building the project for ARM targets are documented in [docs/build.md](docs/build.md).
 
 ### Cross-compilation toolchains
 
-Both the `setup` script and `scripts/build.sh` look for compiler prefixes
-via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
-Typical prefixes for Linux-targeted toolchains are `arm-linux-gnueabihf-` and
-`aarch64-linux-gnu-`, while macOS now uses the `aarch64-elf-` prefix by default.
-If these cross-compilers are not already available, they can be installed via
-your distribution, Homebrew, or built with
-[crosstool-ng](https://crosstool-ng.github.io/).
-
-If `setup` or `scripts/build.sh` report a failure such as
-`Required tool aarch64-elf-gcc not found`, an AArch64 cross compiler is
-missing. Install one with your package manager, e.g.
-`brew install aarch64-elf-gcc` or, on Linux hosts, `sudo apt install
-gcc-aarch64-linux-gnu`, and export the appropriate prefix (`CROSS_COMPILE_ARM64=aarch64-elf-`
-or `aarch64-linux-gnu-`).
-
-After installing a toolchain, add its `bin` directory to your `PATH` and set
-the expected prefixes:
-
-```bash
-export PATH=/path/to/toolchain/bin:$PATH
-export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-elf-
-```
-
-Verify the compiler is on your `PATH` (e.g., `aarch64-elf-gcc --version`)
-before invoking `scripts/build.sh` or `setup`.
-
-When these variables are unset, the scripts attempt to choose sensible
-defaults based on `uname`.
-
-The build scripts rely on several GNU utilities such as `timeout`, `stat`, and
-`truncate`. Ensure GNU versions of these tools are available in your `PATH`;
-on macOS they are installed by the `coreutils` package with a `g` prefix.
+Guidance on required cross-compilers and environment setup is in [docs/toolchains.md](docs/toolchains.md).
 
 ### macOS (Apple Silicon)
 
-On Apple Silicon hosts, Homebrew provides the required build tools and cross
-compilers:
-
-```bash
-brew install qemu e2fsprogs coreutils meson ninja pkg-config
-brew install arm-linux-gnueabihf-gcc aarch64-elf-gcc
-```
-
-Ensure the Homebrew prefixes are in your `PATH` and define the compiler
-prefixes expected by the build scripts:
-
-```bash
-export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-elf-gcc)/bin:$PATH"
-export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-elf-
-```
-
-macOS does not ship GNU `timeout` or several other GNU utilities required by
-the build. The `coreutils` formula installs them with a `g` prefix (e.g.,
-`gtimeout`). Either invoke these `g`-prefixed tools directly or alias them to
-the expected names:
-
-```bash
-alias timeout=gtimeout
-```
-
-With the environment set up, a smoke test of the build can be run with:
-
-```bash
-CROSS_COMPILE_ARM=arm-linux-gnueabihf- \
-CROSS_COMPILE_ARM64=aarch64-elf- \
-scripts/build.sh --test
-```
-
-Some tools, such as `mke2fs` from `e2fsprogs`, live outside Homebrew's default
-`bin` prefix; the `PATH` example above includes these locations.
+macOS-specific toolchain setup is covered in [docs/toolchains.md](docs/toolchains.md).
 
 ## Driver packaging workflow
 
-The `tools/l4re-driver-wrap` helper bundles driver selection, build scaffolding
-generation, compilation of the virtio-enabled server, and L4Re packaging into a
-single command. It produces a package under `src/pkg/<driver>/` that can be
-consumed by the L4Re build system.
-
-### Basic usage
-
-```
-tools/l4re-driver-wrap --linux-src /path/to/linux
-```
-
-The script launches an interactive selector to choose a driver from the Linux
-source tree. After extraction, the driver is wrapped and a package directory is
-created.
-
-### Using a configuration file
-
-Re-running the workflow for a different driver can be automated via a simple
-configuration file:
-
-```
-cat >driver.conf <<EOF
-LINUX_SRC=/home/user/linux
-DRIVER=e1000
-EOF
-
-tools/l4re-driver-wrap --config driver.conf
-```
-
-The `DRIVER` variable controls the package name. If omitted, the name from the
-generated manifest is used.
-
-### Troubleshooting
-
-* Ensure the `driver_picker` tool builds successfully and that `LINUX_SRC`
-  points to a valid kernel tree.
-* If compilation fails, verify that cross-compilation toolchains referenced by
-  the `CROSS_COMPILE` environment variable are installed.
-* Packaging errors usually indicate the build step did not produce the expected
-  `target/release/driver_server` binary; rerun the build after fixing the
-  underlying issue.
+Details on packaging drivers for L4Re are provided in [docs/driver-packaging.md](docs/driver-packaging.md).
 
 ## Systemd integration
 
-The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `files/systemd` into the root filesystem. The same process can be invoked with `make systemd-image`.
-
-Unit files placed in `files/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
-
-Systemd units interact with L4Re via capabilities exported in `files/cfg/bash.cfg`. Units that need a capability reference it through environment variables named `L4_CAP_<NAME>`. The file server demonstrates this pattern:
-
-```
-Environment="L4_CAP_GLOBAL_FS=global_fs" \
-           "L4_CAP_LSB_ROOT=lsb_root" \
-           "L4_CAP_VIRTIO_BLK=virtio_blk" \
-           "L4_CAP_VIRTIO_BLK_IRQ=virtio_blk_irq" \
-           "L4_CAP_IOMEM=iomem" \
-           "L4_CAP_SCHED=scheduler"
-```
-
-These names correspond to capability handles defined in `files/cfg/bash.cfg`.
-
-To extend the system, drop additional unit files into `files/systemd`, declare any required capability mappings in their `Environment` sections, and enable them via symlink or `systemctl enable`.
-
-For debugging during boot, you can pass standard systemd options such as `systemd.log_level=debug` or `systemd.debug-shell` on the kernel command line (edit `files/cfg/bash.cfg` accordingly) and use the QEMU console launched by `scripts/runqemu.sh [IMAGE]` with tools like `journalctl` or `systemctl status`.
+Learn how to integrate systemd into the build in [docs/systemd.md](docs/systemd.md).
