@@ -76,59 +76,9 @@ In case of issues with the Docker build container, run:
 ```bash
 docker image rm l4rerust-builder
 ```
+## Further documents
 
-## Containerized build
-Instructions for building inside a Docker container are available in [docs/build.md](docs/build.md).
-
-### Mounted workspace
-
-To work with a persistent workspace inside the container, create a directory on
-the host and mount it at `/workspace`:
-
-```bash
-mkdir -p /path/to/host-workspace
-scripts/docker_run.sh --workspace /path/to/host-workspace
-```
-
-The script resolves the path to an absolute location and forwards any remaining
-arguments to `docker run`. The equivalent manual invocation is:
-
-```bash
-docker run --rm -it -v /path/to/host-workspace:/workspace l4rerust-builder
-```
-
-Inside the container the repository will appear under `/workspace`, which can be
-verified with:
-
-```bash
-ls /workspace
-```
-
-#### Automatic startup
-
-To launch the container automatically, define a shell alias:
-
-```bash
-alias l4re='~/l4rerust/scripts/docker_run.sh --workspace ~/l4re-workspace'
-```
-
-Or create a user systemd service:
-
-```ini
-# ~/.config/systemd/user/l4rerust.service
-[Unit]
-Description=L4ReRust development container
-
-[Service]
-ExecStart=/path/to/repo/scripts/docker_run.sh --workspace /path/to/host-workspace
-
-[Install]
-WantedBy=default.target
-```
-
-Enable it with `systemctl --user enable --now l4rerust.service`.
-
-## Building for ARM
+### Building for ARM
 Steps for building the project for ARM targets are documented in [docs/build.md](docs/build.md).
 
 ### Cross-compilation toolchains
@@ -137,8 +87,8 @@ Guidance on required cross-compilers and environment setup is in [docs/toolchain
 ### macOS (Apple Silicon)
 macOS-specific toolchain setup is covered in [docs/toolchains.md](docs/toolchains.md).
 
-## Driver packaging workflow
+### Driver packaging workflow
 Details on packaging drivers for L4Re are provided in [docs/driver-packaging.md](docs/driver-packaging.md).
 
-## Systemd integration
+### Systemd integration
 Learn how to integrate systemd into the build in [docs/systemd.md](docs/systemd.md).
