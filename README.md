@@ -14,7 +14,7 @@ Clone and build `ham` from source:
 
 ```bash
 git clone https://github.com/kernkonzept/ham.git ham
-(cd ham && make)
+(cd ham && gmake)
 ```
 
 Or download a prebuilt binary:
