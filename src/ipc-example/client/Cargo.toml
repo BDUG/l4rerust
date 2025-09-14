@@ -1,8 +1,0 @@
-[package]
-name = "example_client"
-version = "0.1.0"
-
-[[bin]]
-name = "example_client"
-path = "src/client.rs"
-
