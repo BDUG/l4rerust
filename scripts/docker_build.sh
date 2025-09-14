@@ -27,10 +27,12 @@ docker start -a "$container" || build_status=$?
 # Copy the generated artifacts back to the host.
 host_out="$REPO_ROOT/out"
 rm -rf "$host_out"
-if docker exec "$container" test -d /workspace/out; then
-  if ! docker cp "$container:/workspace/out" "$host_out" >/dev/null; then
-    echo "Failed to copy build artifacts."
-  fi
+# `docker cp` works even on stopped containers, so we can attempt to copy
+# artifacts directly without needing to exec into the container first. We
+# suppress `docker cp`'s own error output and use the exit status to detect
+# whether any artifacts were produced.
+if docker cp "$container:/workspace/out" "$host_out" >/dev/null 2>&1; then
+  :
 else
   echo "No build artifacts were generated."
 fi
