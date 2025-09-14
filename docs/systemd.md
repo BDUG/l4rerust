@@ -1,6 +1,6 @@
 # Systemd integration
 
-The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `files/systemd` into the root filesystem. The same process can be invoked with `make systemd-image`.
+The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `files/systemd` into the root filesystem. The same process can be invoked with `gmake systemd-image`.
 
 Unit files placed in `files/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 

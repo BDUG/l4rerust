@@ -18,7 +18,7 @@ performs both the configuration and setup phases in a single call:
 
 This generates the necessary configuration files and Makefiles using sensible
 defaults. The traditional interactive invocation (`./setup config` followed by
-`./setup setup` or `make setup`) remains available for manual configuration.
+`./setup setup` or `gmake setup`) remains available for manual configuration.
 
 ## Containerized build
 
@@ -68,7 +68,7 @@ cd src/l4rust
 cargo build -p l4re-libc --release
 export LIBRARY_PATH=$(pwd)/target/release:${LIBRARY_PATH}
 cd -
-make
+gmake
 ```
 
 Ensuring `LIBRARY_PATH` is set correctly allows the Rust crates to link against
