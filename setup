@@ -632,51 +632,51 @@ do_setup()
   [ "$CONF_DO_MIPS64R2" ] && fiasco_configs="$fiasco_configs mips-malta-64r2-mp"
   [ "$CONF_DO_MIPS64R6" ] && fiasco_configs="$fiasco_configs mips-malta-64r6-mp mips-boston-64r6-mp"
 
-  declare -A fiascodirs
-  fiascodirs[ia32-1]="ia32"
-  fiascodirs[ux-1]="ux"
-  fiascodirs[amd64-4]="amd64"
-  fiascodirs[arm64-virt-el2]="arm64-virt-el2"
-  fiascodirs[arm64-rcar3]="arm64-rcar3"
-  fiascodirs[arm64-rpi3]="arm64-rpi3"
-  fiascodirs[arm64-rpi4]="arm64-rpi4"
-  fiascodirs[arm64-s32]="arm64-s32"
-  fiascodirs[arm64-zynqmp]="arm64-zynqmp"
-  fiascodirs[arm-virt-pl2]="arm-virt-pl2"
-  fiascodirs[arm-rpiz]="arm-rpiz"
-  fiascodirs[arm-rpi3]="arm-rpi3"
-  fiascodirs[arm-rpi4]="arm-rpi4"
-  fiascodirs[arm-imx6ul]="arm-imx6ul-pl1"
-  fiascodirs[arm-imx6ul-pl2]="arm-imx6ul-pl2"
-  fiascodirs[mips-malta-mp]="mips32-malta"
-  fiascodirs[mips-baikal-mp]="mips32-baikal-mp"
-  fiascodirs[mips-malta-32r6-mp]="mips-malta-32r6-mp"
-  fiascodirs[mips-malta-64r2-mp]="mips64r2-malta"
-  fiascodirs[mips-boston-64r6-mp]="mips-boston-64r6-mp"
-  fiascodirs[mips-malta-64r6-mp]="mips-malta-64r6-mp"
+  get_fiasco_dir()
+  {
+    case "$1" in
+      ia32-1) echo "ia32" ;;
+      ux-1) echo "ux" ;;
+      amd64-4) echo "amd64" ;;
+      arm64-virt-el2) echo "arm64-virt-el2" ;;
+      arm64-rcar3) echo "arm64-rcar3" ;;
+      arm64-rpi3) echo "arm64-rpi3" ;;
+      arm64-rpi4) echo "arm64-rpi4" ;;
+      arm64-s32) echo "arm64-s32" ;;
+      arm64-zynqmp) echo "arm64-zynqmp" ;;
+      arm-virt-pl2) echo "arm-virt-pl2" ;;
+      arm-rpiz) echo "arm-rpiz" ;;
+      arm-rpi3) echo "arm-rpi3" ;;
+      arm-rpi4) echo "arm-rpi4" ;;
+      arm-imx6ul) echo "arm-imx6ul-pl1" ;;
+      arm-imx6ul-pl2) echo "arm-imx6ul-pl2" ;;
+      mips-malta-mp) echo "mips32-malta" ;;
+      mips-baikal-mp) echo "mips32-baikal-mp" ;;
+      mips-malta-32r6-mp) echo "mips-malta-32r6-mp" ;;
+      mips-malta-64r2-mp) echo "mips64r2-malta" ;;
+      mips-boston-64r6-mp) echo "mips-boston-64r6-mp" ;;
+      mips-malta-64r6-mp) echo "mips-malta-64r6-mp" ;;
+      *) return 1 ;;
+    esac
+  }
 
-  declare -A fiascocrosscomp
-  fiascocrosscomp[ia32-1]=$CROSS_COMPILE_X86_32
-  fiascocrosscomp[ux-1]=$CROSS_COMPILE_X86_32
-  fiascocrosscomp[amd64-4]=$CROSS_COMPILE_AMD64
-  fiascocrosscomp[arm64-virt-el2]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm64-rcar3]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm64-rpi3]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm64-rpi4]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm64-s32]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm64-zynqmp]=$CROSS_COMPILE_ARM64
-  fiascocrosscomp[arm-virt-pl2]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[arm-rpiz]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[arm-rpi3]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[arm-rpi4]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[arm-imx6ul]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[arm-imx6ul-pl2]=$CROSS_COMPILE_ARM
-  fiascocrosscomp[mips-malta-mp]=$CROSS_COMPILE_MIPS32R2
-  fiascocrosscomp[mips-baikal-mp]=$CROSS_COMPILE_MIPS32R2
-  fiascocrosscomp[mips-malta-32r6-mp]=$CROSS_COMPILE_MIPS32R6
-  fiascocrosscomp[mips-malta-64r2-mp]=$CROSS_COMPILE_MIPS64R2
-  fiascocrosscomp[mips-boston-64r6-mp]=$CROSS_COMPILE_MIPS64R6
-  fiascocrosscomp[mips-malta-64r6-mp]=$CROSS_COMPILE_MIPS64R6
+  get_cross_compile()
+  {
+    case "$1" in
+      ia32-1|ux-1) echo "$CROSS_COMPILE_X86_32" ;;
+      amd64-4) echo "$CROSS_COMPILE_AMD64" ;;
+      arm64-virt-el2|arm64-rcar3|arm64-rpi3|arm64-rpi4|arm64-s32|arm64-zynqmp)
+        echo "$CROSS_COMPILE_ARM64" ;;
+      arm-virt-pl2|arm-rpiz|arm-rpi3|arm-rpi4|arm-imx6ul|arm-imx6ul-pl2)
+        echo "$CROSS_COMPILE_ARM" ;;
+      mips-malta-mp|mips-baikal-mp) echo "$CROSS_COMPILE_MIPS32R2" ;;
+      mips-malta-32r6-mp) echo "$CROSS_COMPILE_MIPS32R6" ;;
+      mips-malta-64r2-mp) echo "$CROSS_COMPILE_MIPS64R2" ;;
+      mips-boston-64r6-mp|mips-malta-64r6-mp)
+        echo "$CROSS_COMPILE_MIPS64R6" ;;
+      *) return 1 ;;
+    esac
+  }
 
   echo "Creating build directories..."
 
@@ -688,17 +688,18 @@ do_setup()
 
   # Fiasco build dirs
   for b in $fiasco_configs; do
-    echo ${fiascodirs[$b]} "->" $b
-    if [ -z "${fiascodirs[$b]}" ]; then
+    fiasco_dir=$(get_fiasco_dir "$b") || {
       echo "Internal error: No directory given for config '$b'"
       exit 1
-    fi
-    if [ -z "${fiascocrosscomp[$b]}" -a ! "$b" = ia32-1 -a ! "$b" = ux-1 -a ! "$b" = amd64-4 ]; then
+    }
+    cross_compile=$(get_cross_compile "$b")
+    echo "$fiasco_dir" "->" "$b"
+    if [ -z "$cross_compile" -a ! "$b" = ia32-1 -a ! "$b" = ux-1 -a ! "$b" = amd64-4 ]; then
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
-    (cd src/fiasco && make B=../../obj/fiasco/${fiascodirs[$b]} T=$b)
-    echo CROSS_COMPILE=${fiascocrosscomp[$b]} >> obj/fiasco/${fiascodirs[$b]}/Makeconf.local
+    (cd src/fiasco && make B=../../obj/fiasco/"$fiasco_dir" T="$b")
+    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
   done
 
   # some config tweaking
