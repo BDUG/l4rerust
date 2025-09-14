@@ -3,13 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=common_build.sh
+source "$SCRIPT_DIR/common_build.sh"
 cd "$REPO_ROOT"
 
 # Ensure l4re-core is present and up to date
 "$SCRIPT_DIR/update_l4re_core.sh"
 
 # Ensure the ham build tool is available
-HAM_PATH="$(realpath "$SCRIPT_DIR/../ham")"
+HAM_PATH="$(resolve_path "$SCRIPT_DIR/../ham")"
 HAM_BIN="$HAM_PATH/ham"
 if [ ! -x "$HAM_BIN" ]; then
   echo "ham binary not found, fetching..."
