@@ -7,13 +7,19 @@ the project can be built inside a Docker container. Ensure
 [Docker](https://www.docker.com/) is installed and run:
 
 ```bash
-scripts/docker_build.sh --test
+scripts/docker_build.sh
 ```
 
 The script builds the image if needed and invokes `scripts/build.sh` inside the
-container. The `--test` flag performs a brief QEMU boot to verify the build.
-All toolchains and GNU utilities are provided by the container, so nothing
-else needs to be installed on the host.
+container. It performs cross-compilation only and places resulting artifacts
+under `out/`. All toolchains and GNU utilities are provided by the container,
+so nothing else needs to be installed on the host.
+
+To boot the built image on your host, run:
+
+```bash
+scripts/runqemu.sh
+```
 
 ## Building for ARM
 
@@ -21,12 +27,9 @@ Use `scripts/build.sh` to build the project. By default, previous build
 artifacts are removed before compilation. Passing `--no-clean` skips this
 cleanup.
 
-The script also accepts a `--test` flag which performs a brief QEMU boot using
-the generated image `obj/l4/arm64/images/bootstrap_hello_arm_virt.elf`. The
-script aborts if the QEMU run fails, providing a quick smoke test of the
-build.
-
-Built components and images are collected under the `out/` directory.
+Built components and images are collected under the `out/` directory. To boot
+an image on your host, run `scripts/runqemu.sh` and optionally pass the path to
+the desired image in `out/images/`.
 
 The build process first compiles the `l4re-libc` crate to provide a static
 libc for the Rust components. The resulting library is made available through

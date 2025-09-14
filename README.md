@@ -17,12 +17,21 @@ On a host with the necessary prerequisites installed, run:
 
 ```bash
 scripts/build.sh          # builds natively
-scripts/build.sh --test   # builds and runs a smoke-test boot in QEMU
 ```
 
-Build artifacts are placed under `out/`. If your host lacks required dependencies, see `scripts/docker_build.sh` for containerized builds.
+Build artifacts are placed under `out/`. To cross-compile inside a container, run:
 
-In case of issues with the Docker build contasiner call
+```bash
+scripts/docker_build.sh   # cross-compiles and places artifacts in out/
+```
+
+After building, boot the image on your host with:
+
+```bash
+scripts/runqemu.sh        # launches the default image from out/images/
+```
+
+In case of issues with the Docker build container, run:
 
 ```bash
 docker image rm l4rerust-builder
