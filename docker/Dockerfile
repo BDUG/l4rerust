@@ -14,6 +14,10 @@ RUN apt-get update && \
         curl \
         python3 \
         openssh-client \
+        perl \
+        cpanminus \
+        libgit-repository-perl \
+    && cpanm --notest Git::Repository \
     && rm -rf /var/lib/apt/lists/*
 
 ENV CROSS_COMPILE_ARM=arm-linux-gnueabihf-
