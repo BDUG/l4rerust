@@ -32,7 +32,6 @@ detect_cross_compilers
 validate_tools
 
 ARTIFACTS_DIR="out"
-mkdir -p "$ARTIFACTS_DIR"
 
 # Ensure the ham build tool is available
 HAM_PATH="$(realpath "$SCRIPT_DIR/../ham")"
@@ -60,13 +59,10 @@ fi
 
 # Start from a clean state
 if [ "$clean" = true ]; then
-  # Remove common build directories if they exist
-  for dir in obj "$ARTIFACTS_DIR"; do
-    if [ -d "$dir" ]; then
-      rm -rf "$dir"
-    fi
-  done
+  ./setup clean
 fi
+
+mkdir -p "$ARTIFACTS_DIR"
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
