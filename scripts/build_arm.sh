@@ -113,12 +113,12 @@ build_bash() {
   mkdir -p "$out_dir"
   (
     cd "$bash_src_dir"
-    make distclean >/dev/null 2>&1 || true
+    gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
       ./configure --host="$host" --without-bash-malloc
-    make clean
+    gmake clean
     CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
-      make STATIC_LDFLAGS=-static
+      gmake STATIC_LDFLAGS=-static
     cp bash "$repo_root/$out_dir/"
   )
 }
@@ -201,12 +201,12 @@ build_openssh() {
   mkdir -p "$out_dir"
   (
     cd "$openssh_src_dir"
-    make distclean >/dev/null 2>&1 || true
+    gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
       ./configure --host="$host" --with-privsep-path=/var/empty --disable-strip
-    make clean
+    gmake clean
     CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
-      make sshd
+      gmake sshd
     cp sshd "$repo_root/$out_dir/"
   )
 }
@@ -262,7 +262,7 @@ for arch in arm arm64; do
 done
 
 # Build the tree including libc, Leo, and Rust crates
-make
+gmake
 
 # Create a minimal LSB root filesystem image
 lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
