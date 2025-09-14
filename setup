@@ -80,8 +80,6 @@ do_clean()
 do_config()
 {
   if [ -n "$SETUP_CONFIG_ALL" ]; then
-    CONF_DO_X86_32=0
-    CONF_DO_AMD64=0
     CONF_DO_ARM=1
     CONF_DO_ARM64=1
 
@@ -117,15 +115,11 @@ do_config()
 	 "The list of choices represents a popular set of target platforms.  Many more are available." \
 	 5 60 \
       --and-widget --begin 9 10 \
-	--checklist "Select Targets to build:" 12 60 5 \
-	 x86-32    "ia32"                                      off \
-	 amd64     "amd64/x86_64 "                             off \
-	 arm       "ARM (platform selection follows)"          off \
-	 arm64     "ARM64 / AARCH64"                           off \
-	 mips      "MIPS"                                      off \
-	 2> $tmpfile
-
-	 #UX-32     "  add Fiasco-UX-32 (selects x86-32)"       off
+        --checklist "Select Targets to build:" 12 60 5 \
+         arm       "ARM (platform selection follows)"          off \
+         arm64     "ARM64 / AARCH64"                           off \
+         mips      "MIPS"                                      off \
+         2> $tmpfile
 
     result=$(cat $tmpfile)
 
@@ -239,16 +233,6 @@ do_config()
       done
     fi
 
-    # query cross compiler prefix
-    #if [ -n "$CONF_DO_X86_32" -o -n "$CONF_DO_AMD64" ]; then
-    #  dialog --no-mouse --visit-items \
-    #         --inputbox "X86 (cross) compiler prefix (CROSS_COMPILE)" 8 70 "" \
-    #      2> $tmpfile
-    #  CROSS_COMPILE_X86_32=$(cat $tmpfile)
-    #  CROSS_COMPILE_AMD64=$(cat $tmpfile)
-    #fi
-
-
     if [ -n "$CONF_DO_ARM" ]; then
       dialog --no-mouse --visit-items \
 	--inputbox "ARM cross compiler prefix (CROSS_COMPILE)" 8 70 "arm-linux-gnueabihf-" \
@@ -290,13 +274,9 @@ do_config()
     fi
 
   else
-
-    echo "'dialog' program not found,"
-    echo "press ENTER to continue and just build for x86-64"
-    echo "abort with Ctrl-C, install dialog and issue 'gmake setup' again."
-    read 
-
-    CONF_DO_AMD64=1
+    echo "'dialog' program not found, aborting."
+    echo "Install dialog and issue 'gmake setup' again."
+    exit 1
   fi
 
   write_config
@@ -331,11 +311,6 @@ redo_config()
   if [ -n "$CONF_FAILED_UX" ]; then
     unset CONF_DO_UX
     add_to_config "unset CONF_DO_UX"
-  fi
-
-  if [ -n "$CONF_FAILED_AMD64" ]; then
-    unset CONF_DO_AMD64
-    add_to_config "unset CONF_DO_AMD64"
   fi
 
   if [ -n "$CONF_FAILED_MIPS32R2" ]; then
@@ -519,13 +494,6 @@ check_tools()
     exit 1
   fi
 
-  if [ -n "$CONF_DO_AMD64" ]; then
-    if ! check_tool ${CC} -m64; then
-      echo "AMD64 build disabled as ${CC} does not support 64bit targets"
-      CONF_FAILED_AMD64=1
-    fi
-  fi
-
   check_cross_tools "ARM"      "$CONF_DO_ARM"      CONF_FAILED_ARM      "$CROSS_COMPILE_ARM"
   check_cross_tools "ARM64"    "$CONF_DO_ARM64"    CONF_FAILED_ARM64    "$CROSS_COMPILE_ARM64"
 
@@ -601,7 +569,7 @@ do_setup()
     }
     cross_compile=$(get_cross_compile "$b")
     echo "$fiasco_dir" "->" "$b"
-    if [ -z "$cross_compile" -a ! "$b" = ia32-1 -a ! "$b" = ux-1 -a ! "$b" = amd64-4 ]; then
+    if [ -z "$cross_compile" ]; then
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
@@ -618,12 +586,6 @@ do_setup()
 
 
   # L4Re build dirs with default configs
-  [ "$CONF_DO_X86_32" ] \
-    && gmake -C src/l4 DEFCONFIG=mk/defconfig/config.x86 B=../../obj/l4/x86
-
-  [ "$CONF_DO_AMD64" ] \
-    && gmake -C src/l4 DEFCONFIG=mk/defconfig/config.amd64 B=../../obj/l4/amd64
-
   if [ "$CONF_DO_ARM" ]; then
     gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
       DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
@@ -673,16 +635,7 @@ do_setup()
     echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
   fi
 
-
   # L4Linux build setup
-  if [ "$CONF_DO_X86_32" -a -n "$l4lx_avail" ]; then
-    mkdir -p obj/l4linux/ux
-  fi
-
-  if [ "$CONF_DO_AMD64" -a -n "$l4lx_avail" ]; then
-    mkdir -p obj/l4linux/amd64
-  fi
-
   [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
 
   if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
