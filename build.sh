@@ -1,4 +1,8 @@
-git clone https://github.com/kernkonzept/ham.git &&
+if [ -d "./ham" ]; then
+  echo "..."
+else
+  git clone https://github.com/kernkonzept/ham.git 
+fi
 cd ham &&
 make &&
 cd .. &&
