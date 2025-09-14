@@ -479,30 +479,30 @@ check_tool()
 #  exchange_kconfig_choice $1 CONFIG_CPU_ARM_ARMV5TE $3
 #}
 
-declare -A Makeconf_added_gen
-declare -A Makeconf_added_qemu_std
+Makeconf_added_gen=()
+Makeconf_added_qemu_std=()
 
 add_gen()
 {
-  if [ -z "${Makeconf_added_gen[$1]}" ]; then
-    if [ -z "$REMOTE" ]; then
-      echo "QEMU_OPTIONS += -vnc :4" >> $1
-    fi
-
-    echo 'QEMU_OPTIONS += $(QEMU_OPTIONS-$(PLATFORM_TYPE))' >> $1
-    echo 'MODULE_SEARCH_PATH += $(MODULE_SEARCH_PATH-$(PLATFORM_TYPE))' >> $1
-    Makeconf_added_gen[$1]=1
+  for f in "${Makeconf_added_gen[@]}"; do
+    [ "$f" = "$1" ] && return
+  done
+  if [ -z "$REMOTE" ]; then
+    echo "QEMU_OPTIONS += -vnc :4" >> "$1"
   fi
 
-
+  echo 'QEMU_OPTIONS += $(QEMU_OPTIONS-$(PLATFORM_TYPE))' >> "$1"
+  echo 'MODULE_SEARCH_PATH += $(MODULE_SEARCH_PATH-$(PLATFORM_TYPE))' >> "$1"
+  Makeconf_added_gen+=("$1")
 }
 
 add_std_qemu_options()
 {
-  if [ -z "${Makeconf_added_qemu_std[$1]}" ]; then
-    echo "QEMU_OPTIONS += -serial stdio" >> $1
-    Makeconf_added_qemu_std[$1]=1
-  fi
+  for f in "${Makeconf_added_qemu_std[@]}"; do
+    [ "$f" = "$1" ] && { add_gen "$1"; return; }
+  done
+  echo "QEMU_OPTIONS += -serial stdio" >> "$1"
+  Makeconf_added_qemu_std+=("$1")
 
   add_gen "$1"
 }
