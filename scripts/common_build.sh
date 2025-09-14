@@ -54,7 +54,7 @@ detect_cross_compilers() {
 validate_tools() {
   local required_tools=(
     git
-    make
+    "make|gmake"
     curl
     "${CROSS_COMPILE_ARM}gcc"
     "${CROSS_COMPILE_ARM64}gcc"
@@ -96,5 +96,28 @@ validate_tools() {
       fi
     fi
   done
+
+  local make_cmd
+  if command -v make >/dev/null 2>&1; then
+    make_cmd="make"
+  elif command -v gmake >/dev/null 2>&1; then
+    make_cmd="gmake"
+  else
+    echo "GNU Make not found" >&2
+    exit 1
+  fi
+
+  local make_version
+  make_version=$("$make_cmd" --version 2>/dev/null | head -n 1)
+  if [[ $make_version =~ ([0-9]+)\. ]]; then
+    local make_major=${BASH_REMATCH[1]}
+    if (( make_major < 4 )); then
+      echo "GNU Make >=4 is required. Found $make_version. Install a newer GNU Make (e.g., 'brew install make' on macOS)." >&2
+      exit 1
+    fi
+  else
+    echo "Unable to determine GNU Make version from '$make_version'" >&2
+    exit 1
+  fi
 }
 
