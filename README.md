@@ -75,6 +75,13 @@ the host and mount it at `/workspace`:
 
 ```bash
 mkdir -p /path/to/host-workspace
+scripts/docker_run.sh --workspace /path/to/host-workspace
+```
+
+The script resolves the path to an absolute location and forwards any remaining
+arguments to `docker run`. The equivalent manual invocation is:
+
+```bash
 docker run --rm -it -v /path/to/host-workspace:/workspace l4rerust-builder
 ```
 
@@ -85,8 +92,29 @@ verified with:
 ls /workspace
 ```
 
-The [`scripts/docker_run.sh`](scripts/docker_run.sh) helper wraps this command
-and accepts additional arguments to pass to `docker run`.
+#### Automatic startup
+
+To launch the container automatically, define a shell alias:
+
+```bash
+alias l4re='~/l4rerust/scripts/docker_run.sh --workspace ~/l4re-workspace'
+```
+
+Or create a user systemd service:
+
+```ini
+# ~/.config/systemd/user/l4rerust.service
+[Unit]
+Description=L4ReRust development container
+
+[Service]
+ExecStart=/path/to/repo/scripts/docker_run.sh --workspace /path/to/host-workspace
+
+[Install]
+WantedBy=default.target
+```
+
+Enable it with `systemctl --user enable --now l4rerust.service`.
 
 ## Building for ARM
 Steps for building the project for ARM targets are documented in [docs/build.md](docs/build.md).
