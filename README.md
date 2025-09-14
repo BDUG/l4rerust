@@ -11,6 +11,17 @@ a containerized build environment, and workflows for packaging and deployment.
 3. Package drivers using [docs/driver-packaging.md](docs/driver-packaging.md).
 4. Integrate systemd services as described in [docs/systemd.md](docs/systemd.md).
 
+## Standard Build
+
+On a host with the necessary prerequisites installed, run:
+
+```bash
+scripts/build.sh          # builds natively
+scripts/build.sh --test   # builds and runs a smoke-test boot in QEMU
+```
+
+Build artifacts are placed under `out/`. If your host lacks required dependencies, see `scripts/docker_build.sh` for containerized builds.
+
 ## Containerized build
 Instructions for building inside a Docker container are available in [docs/build.md](docs/build.md).
 
