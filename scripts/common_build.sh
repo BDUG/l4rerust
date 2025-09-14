@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Resolve a path using realpath if available, otherwise fall back to Python.
+resolve_path() {
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$1"
+  else
+    python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1"
+  fi
+}
+
 # Detect suitable cross-compilers for ARM and ARM64.
 detect_cross_compilers() {
   if [ -z "${CROSS_COMPILE_ARM:-}" ] || [ -z "${CROSS_COMPILE_ARM64:-}" ]; then

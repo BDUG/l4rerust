@@ -12,7 +12,7 @@ source "$SCRIPT_DIR/common_build.sh"
 "$SCRIPT_DIR/update_l4re_core.sh"
 
 # Ensure the ham build tool is available
-HAM_PATH="$(realpath "$SCRIPT_DIR/../ham")"
+HAM_PATH="$(resolve_path "$SCRIPT_DIR/../ham")"
 HAM_BIN="$HAM_PATH/ham"
 if [ ! -x "$HAM_BIN" ]; then
   echo "ham binary not found, fetching..."
