@@ -22,6 +22,12 @@ scripts/build.sh --test   # builds and runs a smoke-test boot in QEMU
 
 Build artifacts are placed under `out/`. If your host lacks required dependencies, see `scripts/docker_build.sh` for containerized builds.
 
+In case of issues with the Docker build contasiner call
+
+```bash
+docker image rm l4rerust-builder
+```
+
 ## Containerized build
 Instructions for building inside a Docker container are available in [docs/build.md](docs/build.md).
 
