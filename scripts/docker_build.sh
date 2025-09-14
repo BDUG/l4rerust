@@ -27,7 +27,11 @@ docker start -a "$container" || build_status=$?
 # Copy the generated artifacts back to the host.
 host_out="$REPO_ROOT/out"
 rm -rf "$host_out"
-docker cp "$container:/workspace/out" "$host_out" >/dev/null || true
+if docker exec "$container" test -d /workspace/out; then
+  docker cp "$container:/workspace/out" "$host_out" >/dev/null || true
+else
+  echo "No build artifacts were generated."
+fi
 
 # Clean up the container regardless of success.
 docker rm "$container" >/dev/null
