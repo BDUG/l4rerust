@@ -12,6 +12,25 @@ import os
 import subprocess
 import sys
 from typing import List
+import re
+
+
+def _sanitize(name: str) -> str:
+    """Sanitize dependency names for safe emission.
+
+    Replaces unsupported characters with underscores and ensures the result
+    does not begin with an underscore or other non-alphabetic character to
+    avoid conflicts with system macros.
+    """
+    # Replace unsupported characters like periods or dashes with underscores.
+    name = re.sub(r"[^0-9A-Za-z_]", "_", name)
+    # Strip leading underscores.
+    name = name.lstrip("_")
+    # Prefix with 'dep_' if the name would otherwise start with a
+    # non-alphabetic character.
+    if not name or not name[0].isalpha():
+        name = f"dep_{name}"
+    return name
 
 
 def _deps_from_readelf(path: str) -> List[str]:
@@ -27,7 +46,8 @@ def _deps_from_readelf(path: str) -> List[str]:
             start = line.find("[")
             end = line.find("]", start)
             if start != -1 and end != -1:
-                deps.append(line[start + 1 : end])
+                raw = line[start + 1 : end]
+                deps.append(_sanitize(raw))
     return deps
 
 
@@ -43,7 +63,7 @@ def _deps_from_otool(path: str) -> List[str]:
     for line in output.splitlines()[1:]:
         lib = line.strip().split(" ")[0]
         if lib.endswith(".dylib"):
-            deps.append(os.path.basename(lib))
+            deps.append(_sanitize(os.path.basename(lib)))
     return deps
 
 
