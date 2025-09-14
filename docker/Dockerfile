@@ -43,5 +43,7 @@ ENV CROSS_COMPILE_ARM64=aarch64-linux-gnu-
 
 WORKDIR /workspace
 COPY scripts/ /workspace/scripts/
+COPY scripts/l4re.config /workspace/.config
+RUN chown root:root /workspace/.config && chmod 644 /workspace/.config
 
 ENTRYPOINT ["/workspace/scripts/build.sh"]
