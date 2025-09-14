@@ -107,14 +107,6 @@ PYTHON
   fi
 }
 
-# Clone or update ham build tool
-if [ ! -d ham ]; then
-  git clone https://github.com/kernkonzept/ham.git
-else
-  (cd ham && git pull --ff-only)
-fi
-make -C ham
-
 # Sync manifests using ham
 (
   cd src &&
@@ -393,15 +385,6 @@ enable_service() {
 
 enable_service bash
 enable_service sshd
-
-# Collect build artifacts
-out_dir="out"
-rm -rf "$out_dir"
-mkdir -p "$out_dir"
-find obj -type f \( -name '*.rlib' -o -name '*.elf' -o -name '*.img' -o -name '*.image' -o -name bash -o -name systemd -o -name sshd \) -exec cp {} "$out_dir" \;
-cp "$lsb_img" "$out_dir/"
-
-echo "Artifacts placed in $out_dir"
 
 if [ "$run_test" = true ]; then
   boot_img="obj/l4/arm64/images/bootstrap_hello_arm_virt.elf"
