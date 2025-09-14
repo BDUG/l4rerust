@@ -35,6 +35,11 @@ container. It performs cross-compilation only and places resulting artifacts
 under `out/`. All toolchains and GNU utilities are provided by the container,
 so nothing else needs to be installed on the host.
 
+For non-interactive Docker builds, the scripts look for an existing L4Re
+configuration in `/workspace/.config` or `scripts/l4re.config`. If either file
+is present, it is copied to `obj/.config` before running `setup`, allowing
+developers to tailor the build by editing `scripts/l4re.config`.
+
 To boot the built image on your host, run:
 
 ```bash
