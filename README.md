@@ -41,7 +41,7 @@ On a host with the necessary prerequisites installed, run:
 scripts/build.sh          # builds natively
 ```
 
-**Mac:***
+**Mac:**
 ```bash
 CROSS_COMPILE=aarch64-elf- CROSS_COMPILE_ARM64=aarch64-elf- scripts/build.sh
 ```
