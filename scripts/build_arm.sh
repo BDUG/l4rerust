@@ -31,11 +31,6 @@ done
 # Ensure l4re-core is present and up to date
 "$SCRIPT_DIR/update_l4re_core.sh"
 
-detect_cross_compilers
-validate_tools
-
-ARTIFACTS_DIR="out"
-
 # Ensure the ham build tool is available
 HAM_PATH="$(realpath "$SCRIPT_DIR/../ham")"
 HAM_BIN="$HAM_PATH/ham"
@@ -53,12 +48,17 @@ if [ ! -x "$HAM_BIN" ]; then
   chmod +x "$HAM_BIN"
 fi
 
-# Sync manifests using ham
+# Use ham to keep the manifest consistent with the latest l4re-core
 (
   cd src &&
   "$HAM_BIN" init -u https://github.com/kernkonzept/manifest.git &&
-  "$HAM_BIN" sync
+  "$HAM_BIN" sync l4re-core
 )
+
+detect_cross_compilers
+validate_tools
+
+ARTIFACTS_DIR="out"
 
 # Start from a clean state
 if [ "$clean" = true ]; then
