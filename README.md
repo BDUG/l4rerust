@@ -6,10 +6,35 @@ a containerized build environment, and workflows for packaging and deployment.
 
 ## Quick Start
 1. Install toolchains and prerequisites: see [docs/toolchains.md](docs/toolchains.md).
-2. Build the project or container: follow [docs/build.md](docs/build.md).
+2. Obtain the `ham` build tool: see [Installing ham](#installing-ham).
+3. Build the project or container: follow [docs/build.md](docs/build.md).
    For ARM targets, use the ARM section in that document.
-3. Package drivers using [docs/driver-packaging.md](docs/driver-packaging.md).
-4. Integrate systemd services as described in [docs/systemd.md](docs/systemd.md).
+4. Package drivers using [docs/driver-packaging.md](docs/driver-packaging.md).
+5. Integrate systemd services as described in [docs/systemd.md](docs/systemd.md).
+
+## Installing ham
+
+The build scripts rely on the [`ham`](https://github.com/kernkonzept/ham)
+tool to synchronize L4Re manifests. The executable must reside at
+`ham/ham` relative to the repository root.
+
+Clone and build `ham` from source:
+
+```bash
+git clone https://github.com/kernkonzept/ham.git ham
+(cd ham && make)
+```
+
+Or download a prebuilt binary:
+
+```bash
+mkdir -p ham
+curl -L https://github.com/kernkonzept/ham/releases/latest/download/ham -o ham/ham
+chmod +x ham/ham
+```
+
+Ensure the binary is executable and available on your `PATH` if you wish to
+invoke it globally.
 
 ## Standard Build
 
