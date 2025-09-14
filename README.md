@@ -47,11 +47,19 @@ export PATH=ham/:$PATH
 
 On a host with the necessary prerequisites installed, run:
 
+**Linux:**
 ```bash
 scripts/build.sh          # builds natively
 ```
 
-Build artifacts are placed under `out/`. To cross-compile inside a container, run:
+**Mac:***
+```bash
+CROSS_COMPILE=aarch64-elf- CROSS_COMPILE_ARM64=aarch64-elf- scripts/build.sh
+```
+
+Build artifacts are placed under `out/`. 
+
+**Fallback**, to cross-compile inside a container, run:
 
 ```bash
 scripts/docker_build.sh   # cross-compiles and places artifacts in out/
