@@ -42,6 +42,12 @@ Typical prefixes for Linux-targeted toolchains are `arm-linux-gnueabihf-` and
 they can be installed via your distribution, Homebrew, or built with
 [crosstool-ng](https://crosstool-ng.github.io/).
 
+If `setup` or `scripts/build.sh` report a failure such as
+`Required tool aarch64-none-elf-gcc not found`, a Linux-targeted AArch64
+toolchain is missing. Install one with your package manager, e.g.
+`sudo apt install gcc-aarch64-linux-gnu` or `brew install aarch64-linux-gnu-gcc`,
+and export `CROSS_COMPILE_ARM64=aarch64-linux-gnu-`.
+
 After installing a toolchain, add its `bin` directory to your `PATH` and set
 the expected prefixes:
 
@@ -50,6 +56,9 @@ export PATH=/path/to/toolchain/bin:$PATH
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
 export CROSS_COMPILE_ARM64=aarch64-linux-gnu-
 ```
+
+Verify the compiler is on your `PATH` (e.g., `aarch64-linux-gnu-gcc --version`)
+before invoking `scripts/build.sh` or `setup`.
 
 When these variables are unset, the scripts attempt to choose sensible
 defaults based on `uname`.
