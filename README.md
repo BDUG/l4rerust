@@ -38,16 +38,17 @@ the freshly built static libc.
 Both the `setup` script and `scripts/build.sh` look for compiler prefixes
 via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
 Typical prefixes for Linux-targeted toolchains are `arm-linux-gnueabihf-` and
-`aarch64-linux-gnu-`.  If these cross-compilers are not already available,
-they can be installed via your distribution, Homebrew, or built with
+`aarch64-linux-gnu-`, while macOS now uses the `aarch64-elf-` prefix by default.
+If these cross-compilers are not already available, they can be installed via
+your distribution, Homebrew, or built with
 [crosstool-ng](https://crosstool-ng.github.io/).
 
 If `setup` or `scripts/build.sh` report a failure such as
 `Required tool aarch64-elf-gcc not found`, an AArch64 cross compiler is
 missing. Install one with your package manager, e.g.
-`brew install aarch64-elf-gcc` or `sudo apt install gcc-aarch64-linux-gnu`,
-and export the appropriate prefix (`CROSS_COMPILE_ARM64=aarch64-elf-` or
-`aarch64-linux-gnu-`).
+`brew install aarch64-elf-gcc` or, on Linux hosts, `sudo apt install
+gcc-aarch64-linux-gnu`, and export the appropriate prefix (`CROSS_COMPILE_ARM64=aarch64-elf-`
+or `aarch64-linux-gnu-`).
 
 After installing a toolchain, add its `bin` directory to your `PATH` and set
 the expected prefixes:
