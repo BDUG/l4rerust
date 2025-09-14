@@ -66,7 +66,8 @@ mkdir -p "$ARTIFACTS_DIR"
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
-SETUP_CONFIG_ALL=1 ./setup config
+# Run the full non-interactive setup to generate configuration and makefiles
+./setup --non-interactive
 
 # Build the Rust libc crate so other crates can link against it
 (

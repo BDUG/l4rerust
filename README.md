@@ -7,10 +7,13 @@ a containerized build environment, and workflows for packaging and deployment.
 ## Quick Start
 1. Install toolchains and prerequisites: see [docs/toolchains.md](docs/toolchains.md).
 2. Obtain the `ham` build tool: see [Installing ham](#installing-ham).
-3. Build the project or container: follow [docs/build.md](docs/build.md).
+3. Configure the snapshot: run `./setup --non-interactive` to generate
+   default configuration files. The script performs both the `config` and
+   `setup` phases without prompting.
+4. Build the project or container: follow [docs/build.md](docs/build.md).
    For ARM targets, use the ARM section in that document.
-4. Package drivers using [docs/driver-packaging.md](docs/driver-packaging.md).
-5. Integrate systemd services as described in [docs/systemd.md](docs/systemd.md).
+5. Package drivers using [docs/driver-packaging.md](docs/driver-packaging.md).
+6. Integrate systemd services as described in [docs/systemd.md](docs/systemd.md).
 
 ## Installing ham
 

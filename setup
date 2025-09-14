@@ -9,8 +9,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/common_build.sh
 source "$SCRIPT_DIR/scripts/common_build.sh"
 
+# Handle optional non-interactive mode which runs both config and setup in
+# one go. When invoked as `./setup --non-interactive` the script will skip
+# prompts and execute the combined steps automatically.
+cmd="$1"
+non_interactive=0
+if [ "$cmd" = "--non-interactive" ]; then
+  non_interactive=1
+  cmd="all"
+fi
+
 # check we're in the right directory when needed
-if [ "$1" != "clean" ] && [ ! -d src/l4 -o ! -d src/fiasco ]; then
+if [ "$cmd" != "clean" ] && [ ! -d src/l4 -o ! -d src/fiasco ]; then
   echo "Call setup as ./$(basename $0) in the right directory"
   exit 1
 fi
@@ -20,19 +30,19 @@ if [ -n "$SYSTEM" ]; then
   exit 1
 fi
 
-if [ "$1" != "clean" ]; then
+if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
   if [ -n "$CROSS_COMPILE" ]; then
     read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
     CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
   else
     read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
   fi
-  export CROSS_COMPILE
-
-  CC=${CC:-${CROSS_COMPILE}gcc}
-  CXX=${CXX:-${CROSS_COMPILE}g++}
-  LD=${LD:-${CROSS_COMPILE}ld}
 fi
+
+export CROSS_COMPILE=${CROSS_COMPILE:-}
+CC=${CC:-${CROSS_COMPILE}gcc}
+CXX=${CXX:-${CROSS_COMPILE}g++}
+LD=${LD:-${CROSS_COMPILE}ld}
 
 add_to_config()
 {
@@ -1003,11 +1013,19 @@ EOF
 }
 
 
-case "$1" in
+case "$cmd" in
   config)
      do_config
      ;;
   setup)
+     load_config
+     check_tools
+     redo_config
+     do_setup
+     ;;
+  all)
+     SETUP_CONFIG_ALL=${SETUP_CONFIG_ALL:-1}
+     do_config
      load_config
      check_tools
      redo_config
@@ -1018,7 +1036,7 @@ case "$1" in
      rm -rf out
      ;;
   *)
-     echo "Call $0 [config|setup|clean]"
+     echo "Call $0 [config|setup|clean|--non-interactive]"
      exit 1
      ;;
 esac

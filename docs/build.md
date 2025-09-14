@@ -6,6 +6,20 @@ the repository root before invoking any build commands. See the [Installing
 ham](../README.md#installing-ham) section in the repository root for setup
 instructions.
 
+## Repository setup
+
+Before running any of the build scripts, the L4Re snapshot must be configured.
+The setup script now provides a unified, non-interactive entry point which
+performs both the configuration and setup phases in a single call:
+
+```bash
+./setup --non-interactive
+```
+
+This generates the necessary configuration files and Makefiles using sensible
+defaults. The traditional interactive invocation (`./setup config` followed by
+`./setup setup` or `make setup`) remains available for manual configuration.
+
 ## Containerized build
 
 If cross-compilers or required GNU utilities are not available on the host,
