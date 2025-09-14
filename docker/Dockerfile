@@ -16,7 +16,6 @@ RUN apt-get update && \
         openssh-client \
         perl \
         cpanminus \
-        libgit-repository-perl \
     && cpanm --notest Git::Repository \
     && rm -rf /var/lib/apt/lists/*
 
