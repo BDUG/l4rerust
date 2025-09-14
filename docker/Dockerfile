@@ -2,42 +2,36 @@ FROM ubuntu:22.04
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        build-essential \
-        gcc-arm-linux-gnueabihf \
-        gcc-aarch64-linux-gnu \
-        qemu \
-        e2fsprogs \
-        meson \
-        ninja-build \
-        pkg-config \
-        git \
-        curl \
-        python3 \
-        openssh-client \
-        perl \
-        cpanminus \
-        git \ 
-        make \ 
-        binutils \
-        liburi-perl \
-        libgit-repository-perl \
-        libxml-parser-perl \
-        gcc \ 
-        g++ \
-        libc6-dev-i386 \
-        libncurses-dev \
-        qemu-system \
-        xorriso \
-        mtools \
-        flex \
         bison \
-        pkg-config \
-        gawk \
+        build-essential \
+        cpanminus \
+        curl \
         device-tree-compiler \
         dialog \
-        wget \
         doxygen \
+        e2fsprogs \
+        flex \
+        gawk \
+        gcc-aarch64-linux-gnu \
+        gcc-arm-linux-gnueabihf \
+        git \
         graphviz \
+        libc6-dev-i386 \
+        libgit-repository-perl \
+        libncurses-dev \
+        liburi-perl \
+        libxml-parser-perl \
+        meson \
+        mtools \
+        ninja-build \
+        openssh-client \
+        perl \
+        pkg-config \
+        python3 \
+        qemu \
+        qemu-system \
+        wget \
+        xorriso \
     && cpanm --notest Git::Repository \
     && rm -rf /var/lib/apt/lists/*
 
