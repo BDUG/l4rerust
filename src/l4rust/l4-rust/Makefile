@@ -3,6 +3,7 @@ L4DIR  ?= $(PKGDIR)/../../..
 
 TARGET  		= libl4-rust.rlib
 SRC_RS   		= lib.rs
+SRC_C                   = ipc/syscall.c
 
 DEPENDS_PKGS    = l4sys l4-sys-rust
 REQUIRES_LIBS   = l4sys libl4re-wrapper l4-sys-rust
