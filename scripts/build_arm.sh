@@ -32,6 +32,7 @@ detect_cross_compilers
 validate_tools
 
 ARTIFACTS_DIR="out"
+mkdir -p "$ARTIFACTS_DIR"
 
 # Sync manifests using ham
 (
