@@ -2,6 +2,21 @@ This project re-introduces Rust for the L4Re microkernel.
 
 Starting point was the work of the project [rustl4re](https://github.com/humenda/rustl4re).
 
+## Containerized build
+
+If cross-compilers or required GNU utilities are not available on the host,
+the project can be built inside a Docker container. Ensure
+[Docker](https://www.docker.com/) is installed and run:
+
+```bash
+scripts/docker_build.sh --test
+```
+
+The script builds the image if needed and invokes `scripts/build.sh` inside the
+container. The `--test` flag performs a brief QEMU boot to verify the build.
+All toolchains and GNU utilities are provided by the container, so nothing
+else needs to be installed on the host.
+
 ## Building for ARM
 
 Use `scripts/build.sh` to build the project. By default, previous build
