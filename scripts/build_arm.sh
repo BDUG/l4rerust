@@ -28,6 +28,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 
+# Ensure l4re-core is present and up to date
+"$SCRIPT_DIR/update_l4re_core.sh"
+
 detect_cross_compilers
 validate_tools
 
