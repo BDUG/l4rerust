@@ -1,0 +1,9 @@
+# Ignore build artifacts and temporary directories
+/target
+**/target/
+obj/
+**/obj/
+out/
+**/out/
+*.tar.gz
+
