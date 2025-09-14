@@ -91,7 +91,14 @@ export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
 
 # Build a statically linked Bash for ARM and ARM64
 build_bash() {
-  local arch="$1" cross="$2" host="$3"
+  local arch="$1" cross="$2"
+  local triple="$(${cross}gcc -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+    exit 1
+  fi
+  local host="$triple"
+  local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/bash/$arch"
   if [ -f "$out_dir/bash" ]; then
     echo "bash for $arch already built, skipping"
@@ -124,8 +131,8 @@ if [ "$need_bash" = true ]; then
   BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
   bash_src_dir=$(mktemp -d src/bash-XXXXXX)
   curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
-  build_bash arm "$CROSS_COMPILE_ARM" arm-linux-gnueabihf
-  build_bash arm64 "$CROSS_COMPILE_ARM64" aarch64-linux-gnu
+  build_bash arm "$CROSS_COMPILE_ARM"
+  build_bash arm64 "$CROSS_COMPILE_ARM64"
   rm -rf "$bash_src_dir"
 else
   echo "bash for arm and arm64 already built, skipping"
@@ -133,7 +140,14 @@ fi
 
 # Build systemd for ARM and ARM64
 build_systemd() {
-  local arch="$1" cross="$2" cpu="$3"
+  local arch="$1" cross="$2"
+  local triple="$(${cross}gcc -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+    exit 1
+  fi
+  local host="$triple"
+  local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
   if [ -f "$out_dir/systemd" ]; then
     echo "systemd for $arch already built, skipping"
@@ -152,8 +166,8 @@ strip = '${cross}strip'
 
 [host_machine]
 system = 'linux'
-cpu_family = '$cpu'
-cpu = '$cpu'
+cpu_family = '${cpu}'
+cpu = '${cpu}'
 endian = 'little'
 EOF
     meson setup "$builddir" --cross-file cross.txt --prefix=/usr
@@ -165,7 +179,14 @@ EOF
 
 # Build OpenSSH for ARM and ARM64
 build_openssh() {
-  local arch="$1" cross="$2" host="$3"
+  local arch="$1" cross="$2"
+  local triple="$(${cross}gcc -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+    exit 1
+  fi
+  local host="$triple"
+  local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/openssh/$arch"
   if [ -f "$out_dir/sshd" ]; then
     echo "openssh for $arch already built, skipping"
@@ -197,8 +218,8 @@ if [ "$need_systemd" = true ]; then
   SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
   systemd_src_dir=$(mktemp -d src/systemd-XXXXXX)
   curl -L "$SYSTEMD_URL" | tar -xz -C "$systemd_src_dir" --strip-components=1
-  build_systemd arm "$CROSS_COMPILE_ARM" arm
-  build_systemd arm64 "$CROSS_COMPILE_ARM64" aarch64
+  build_systemd arm "$CROSS_COMPILE_ARM"
+  build_systemd arm64 "$CROSS_COMPILE_ARM64"
   rm -rf "$systemd_src_dir"
 else
   echo "systemd for arm and arm64 already built, skipping"
@@ -218,8 +239,8 @@ if [ "$need_openssh" = true ]; then
   OPENSSH_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz"
   openssh_src_dir=$(mktemp -d src/openssh-XXXXXX)
   curl -L "$OPENSSH_URL" | tar -xz -C "$openssh_src_dir" --strip-components=1
-  build_openssh arm "$CROSS_COMPILE_ARM" arm-linux-gnueabihf
-  build_openssh arm64 "$CROSS_COMPILE_ARM64" aarch64-linux-gnu
+  build_openssh arm "$CROSS_COMPILE_ARM"
+  build_openssh arm64 "$CROSS_COMPILE_ARM64"
   rm -rf "$openssh_src_dir"
 else
   echo "openssh for arm and arm64 already built, skipping"
