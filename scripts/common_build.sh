@@ -64,6 +64,7 @@ validate_tools() {
     meson
     ninja
     pkg-config
+    ham
     "timeout|gtimeout|python3"
   )
   for tool in "${required_tools[@]}"; do
@@ -86,6 +87,8 @@ validate_tools() {
           echo "Required tool $tool not found (CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM})" >&2
         elif [[ "$tool" == "${CROSS_COMPILE_ARM64}gcc" ]]; then
           echo "Required tool $tool not found (CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64})" >&2
+        elif [[ "$tool" == ham ]]; then
+          echo "Required tool ham not found. Install ham and ensure it is in your PATH" >&2
         else
           echo "Required tool $tool not found" >&2
         fi
