@@ -55,41 +55,14 @@ write_config()
   mkdir -p obj
   echo '# snapshot build configuration' > obj/.config
 
-  for c in CONF_DO_X86_32 \
-           CONF_DO_UX \
-           CONF_DO_AMD64 \
-           CONF_DO_ARM \
+  for c in CONF_DO_ARM \
            CONF_DO_ARM_VIRT_PL2 \
-	   CONF_DO_ARM_RPIZ \
-           CONF_DO_ARM_RPI3 \
-           CONF_DO_ARM_RPI4 \
-           CONF_DO_ARM_IMX6UL_PL1 \
-           CONF_DO_ARM_IMX6UL_PL2 \
            CONF_DO_ARM64 \
            CONF_DO_ARM64_VIRT_EL2 \
-           CONF_DO_ARM64_RCAR3 \
-           CONF_DO_ARM64_RPI3 \
-           CONF_DO_ARM64_RPI4 \
-           CONF_DO_ARM64_S32 \
-           CONF_DO_ARM64_ZYNQMP \
-           CONF_DO_MIPS32R2 \
-           CONF_DO_MIPS32R6 \
-           CONF_DO_MIPS64R2 \
-           CONF_DO_MIPS64R6 \
            CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
-           CONF_FAILED_UX \
-           CONF_FAILED_AMD64 \
-           CONF_FAILED_MIPS32R2 \
-           CONF_FAILED_MIPS32R6 \
-           CONF_FAILED_MIPS64R2 \
-           CONF_FAILED_MIPS64R6 \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
-           CROSS_COMPILE_MIPS32R2 \
-           CROSS_COMPILE_MIPS32R6 \
-           CROSS_COMPILE_MIPS64R2 \
-           CROSS_COMPILE_MIPS64R6 \
   ; do
     local v=$(eval echo \$$c)
     [ -n "$v" ] && add_to_config $c="$v"
@@ -107,35 +80,25 @@ do_clean()
 do_config()
 {
   if [ -n "$SETUP_CONFIG_ALL" ]; then
-    CONF_DO_X86_32=1
-    CONF_DO_AMD64=1
-    #CONF_DO_MIPS=1
+    CONF_DO_X86_32=0
+    CONF_DO_AMD64=0
     CONF_DO_ARM=1
     CONF_DO_ARM64=1
 
     CONF_DO_ARM_VIRT_PL2=1
-    CONF_DO_ARM_RPIZ=1
-    CONF_DO_ARM_RPI3=1
-    CONF_DO_ARM_RPI4=1
-    CONF_DO_ARM_IMX6UL_PL1=1
-    CONF_DO_ARM_IMX6UL_PL2=1
-    CONF_DO_ARM64_VIRT_EL2=1
-    CONF_DO_ARM64_RCAR3=1
-    CONF_DO_ARM64_RPI3=1
-    CONF_DO_ARM64_RPI4=1
-    CONF_DO_ARM64_S32=1
-    CONF_DO_ARM64_ZYNQMP=1
-
-    #CONF_DO_MIPS32R2=1
-    #CONF_DO_MIPS32R6=1
-    #CONF_DO_MIPS64R2=1
-    #CONF_DO_MIPS64R6=1
+    CONF_DO_ARM_RPIZ=0
+    CONF_DO_ARM_RPI3=0
+    CONF_DO_ARM_RPI4=0
+    CONF_DO_ARM_IMX6UL_PL1=0
+    CONF_DO_ARM_IMX6UL_PL2=0
+    CONF_DO_ARM64_VIRT_EL2=0
+    CONF_DO_ARM64_RCAR3=0
+    CONF_DO_ARM64_RPI3=0
+    CONF_DO_ARM64_RPI4=0
+    CONF_DO_ARM64_S32=0
+    CONF_DO_ARM64_ZYNQMP=0
 
     detect_cross_compilers
-    CROSS_COMPILE_MIPS32R2=${CROSS_COMPILE_MIPS32R2:-mips-linux-}
-    CROSS_COMPILE_MIPS32R6=${CROSS_COMPILE_MIPS32R6:-mips-linux-}
-    CROSS_COMPILE_MIPS64R2=${CROSS_COMPILE_MIPS64R2:-mips-linux-}
-    CROSS_COMPILE_MIPS64R6=${CROSS_COMPILE_MIPS64R6:-mips-linux-}
 
     write_config
     return 0;
@@ -179,10 +142,6 @@ do_config()
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-	\"x86-32\") CONF_DO_X86_32=1 ;;
-	\"UX-32\") CONF_DO_UX=1; CONF_DO_X86_32=1 ;;
-	\"amd64\") CONF_DO_AMD64=1 ;;
-	\"mips\") CONF_DO_MIPS=1 ;;
 	\"arm\") CONF_DO_ARM=1 ;;
 	\"arm64\") CONF_DO_ARM64=1 ;;
       esac
@@ -569,10 +528,6 @@ check_tools()
 
   check_cross_tools "ARM"      "$CONF_DO_ARM"      CONF_FAILED_ARM      "$CROSS_COMPILE_ARM"
   check_cross_tools "ARM64"    "$CONF_DO_ARM64"    CONF_FAILED_ARM64    "$CROSS_COMPILE_ARM64"
-  check_cross_tools "MIPS32r2" "$CONF_DO_MIPS32R2" CONF_FAILED_MIPS32R2 "$CROSS_COMPILE_MIPS32R2"
-  check_cross_tools "MIPS32r6" "$CONF_DO_MIPS32R6" CONF_FAILED_MIPS32R6 "$CROSS_COMPILE_MIPS32R6"
-  check_cross_tools "MIPS64r2" "$CONF_DO_MIPS64R2" CONF_FAILED_MIPS64R2 "$CROSS_COMPILE_MIPS64R2"
-  check_cross_tools "MIPS64r6" "$CONF_DO_MIPS64R6" CONF_FAILED_MIPS64R6 "$CROSS_COMPILE_MIPS64R6"
 
   if [ -n "$CONF_DO_UX" ]; then
     echo "Checking some specific Fiasco-UX build thing on 64bit platforms"
@@ -608,54 +563,13 @@ check_tools()
 
 do_setup()
 {
-  [ "$CONF_DO_X86_32" ] && fiasco_configs="$fiasco_configs ia32-1"
-  [ "$CONF_DO_X86_32" -a "$CONF_DO_UX" ] && fiasco_configs="$fiasco_configs ux-1"
-
-  [ "$CONF_DO_AMD64" ] && fiasco_configs="$fiasco_configs amd64-4"
-
   [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
-  [ "$CONF_DO_ARM_RPIZ" ] && fiasco_configs="$fiasco_configs arm-rpiz"
-  [ "$CONF_DO_ARM_RPI3" ] && fiasco_configs="$fiasco_configs arm-rpi3"
-  [ "$CONF_DO_ARM_RPI4" ] && fiasco_configs="$fiasco_configs arm-rpi4"
-  [ "$CONF_DO_ARM_IMX6UL_PL1" ] && fiasco_configs="$fiasco_configs arm-imx6ul"
-  [ "$CONF_DO_ARM_IMX6UL_PL2" ] && fiasco_configs="$fiasco_configs arm-imx6ul-pl2"
-
-  [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
-  [ "$CONF_DO_ARM64_RCAR3" ] && fiasco_configs="$fiasco_configs arm64-rcar3"
-  [ "$CONF_DO_ARM64_RPI3" ] && fiasco_configs="$fiasco_configs arm64-rpi3"
-  [ "$CONF_DO_ARM64_RPI4" ] && fiasco_configs="$fiasco_configs arm64-rpi4"
-  [ "$CONF_DO_ARM64_S32" ] && fiasco_configs="$fiasco_configs arm64-s32"
-  [ "$CONF_DO_ARM64_ZYNQMP" ] && fiasco_configs="$fiasco_configs arm64-zynqmp"
-
-  [ "$CONF_DO_MIPS32R2" ] && fiasco_configs="$fiasco_configs mips-baikal-mp mips-malta-mp"
-  [ "$CONF_DO_MIPS32R6" ] && fiasco_configs="$fiasco_configs mips-malta-32r6-mp"
-  [ "$CONF_DO_MIPS64R2" ] && fiasco_configs="$fiasco_configs mips-malta-64r2-mp"
-  [ "$CONF_DO_MIPS64R6" ] && fiasco_configs="$fiasco_configs mips-malta-64r6-mp mips-boston-64r6-mp"
 
   get_fiasco_dir()
   {
     case "$1" in
-      ia32-1) echo "ia32" ;;
-      ux-1) echo "ux" ;;
-      amd64-4) echo "amd64" ;;
       arm64-virt-el2) echo "arm64-virt-el2" ;;
-      arm64-rcar3) echo "arm64-rcar3" ;;
-      arm64-rpi3) echo "arm64-rpi3" ;;
-      arm64-rpi4) echo "arm64-rpi4" ;;
-      arm64-s32) echo "arm64-s32" ;;
-      arm64-zynqmp) echo "arm64-zynqmp" ;;
       arm-virt-pl2) echo "arm-virt-pl2" ;;
-      arm-rpiz) echo "arm-rpiz" ;;
-      arm-rpi3) echo "arm-rpi3" ;;
-      arm-rpi4) echo "arm-rpi4" ;;
-      arm-imx6ul) echo "arm-imx6ul-pl1" ;;
-      arm-imx6ul-pl2) echo "arm-imx6ul-pl2" ;;
-      mips-malta-mp) echo "mips32-malta" ;;
-      mips-baikal-mp) echo "mips32-baikal-mp" ;;
-      mips-malta-32r6-mp) echo "mips-malta-32r6-mp" ;;
-      mips-malta-64r2-mp) echo "mips64r2-malta" ;;
-      mips-boston-64r6-mp) echo "mips-boston-64r6-mp" ;;
-      mips-malta-64r6-mp) echo "mips-malta-64r6-mp" ;;
       *) return 1 ;;
     esac
   }
@@ -663,17 +577,10 @@ do_setup()
   get_cross_compile()
   {
     case "$1" in
-      ia32-1|ux-1) echo "$CROSS_COMPILE_X86_32" ;;
-      amd64-4) echo "$CROSS_COMPILE_AMD64" ;;
       arm64-virt-el2|arm64-rcar3|arm64-rpi3|arm64-rpi4|arm64-s32|arm64-zynqmp)
         echo "$CROSS_COMPILE_ARM64" ;;
       arm-virt-pl2|arm-rpiz|arm-rpi3|arm-rpi4|arm-imx6ul|arm-imx6ul-pl2)
         echo "$CROSS_COMPILE_ARM" ;;
-      mips-malta-mp|mips-baikal-mp) echo "$CROSS_COMPILE_MIPS32R2" ;;
-      mips-malta-32r6-mp) echo "$CROSS_COMPILE_MIPS32R6" ;;
-      mips-malta-64r2-mp) echo "$CROSS_COMPILE_MIPS64R2" ;;
-      mips-boston-64r6-mp|mips-malta-64r6-mp)
-        echo "$CROSS_COMPILE_MIPS64R6" ;;
       *) return 1 ;;
     esac
   }
@@ -795,50 +702,6 @@ do_setup()
 
   common_paths=$(pwd)/files:$(pwd)/files/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
 
-
-  if [ "$CONF_DO_X86_32" ]; then
-    local odir=obj/l4/x86
-    local Mboot=$odir/conf/Makeconf.boot
-    mkdir -p $odir/conf
-
-    cat<<EOF >> obj/l4/x86/conf/Makeconf.boot
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/ia32:$(pwd)/obj/l4linux/ux:$common_paths
-EOF
-    add_std_qemu_options obj/l4/x86/conf/Makeconf.boot
-
-    echo "ENTRY=hello"               >> $odir/.imagebuilds
-    echo "ENTRY=bash"                >> $odir/.imagebuilds
-    echo "ENTRY=hello-shared"        >> $odir/.imagebuilds
-    echo "ENTRY=framebuffer-example" >> $odir/.imagebuilds
-    if [ -n "$l4lx_avail" ]; then
-      echo "ENTRY=L4Linux-basic"     >> $odir/.imagebuilds
-      echo "ENTRY=L4Linux-mag"       >> $odir/.imagebuilds
-    fi
-  fi
-
-  if [ "$CONF_DO_AMD64" ]; then
-    local odir=obj/l4/amd64
-    local Mboot=$odir/conf/Makeconf.boot
-    mkdir -p $odir/conf
-
-    cat<<EOF >> obj/l4/amd64/conf/Makeconf.boot
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/amd64:$(pwd)/obj/l4linux/amd64:$common_paths
-EOF
-    add_std_qemu_options obj/l4/amd64/conf/Makeconf.boot
-    echo "ENTRY=hello"               >> $odir/.imagebuilds
-    echo "ENTRY=bash"                >> $odir/.imagebuilds
-    echo "ENTRY=hello-shared"        >> $odir/.imagebuilds
-    echo "ENTRY=framebuffer-example" >> $odir/.imagebuilds
-    if [ -n "$l4lx_avail" ]; then
-      echo "ENTRY=L4Linux-basic"     >> $odir/.imagebuilds
-      echo "ENTRY=L4Linux-mag"       >> $odir/.imagebuilds
-    fi
-    #echo "ENTRY=vm-basic"            >> $odir/.imagebuilds
-  fi
-
-
-
-
   if [ "$CONF_DO_ARM" ]; then
     local odir=obj/l4/arm-v7
     local Mboot=$odir/conf/Makeconf.boot
@@ -854,45 +717,6 @@ EOF
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM_RPIZ" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpiz PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpiz" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM_RPI3" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi3" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM_RPI4" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm-rpi4" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM_IMX6UL_PL1" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl1 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl1" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM_IMX6UL_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=imx6ul-pl2 PT=imx6ul PATH_FIASCO=$(pwd)/obj/fiasco/arm-imx6ul-pl2" >> $odir/.imagebuilds
     fi
 
     add_std_qemu_options $Mboot
@@ -920,97 +744,12 @@ EOF
       echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
     fi
 
-    if [ "$CONF_DO_ARM64_RCAR3" ]; then
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rcar3 PT=rcar3 PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rcar3" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM64_RPI3" ]; then
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi3 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi3" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM64_RPI4" ]; then
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=rpi4 PT=rpi PATH_FIASCO=$(pwd)/obj/fiasco/arm64-rpi4" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM64_S32" ]; then
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=s32 PT=s32  PATH_FIASCO=$(pwd)/obj/fiasco/arm64-s32" >> $odir/.imagebuilds
-    fi
-
-    if [ "$CONF_DO_ARM64_ZYNQMP" ]; then
-      cat<<EOF >> $Mboot
-QEMU_OPTIONS-zynqmp   += -M xlnx-zcu102,virtualization=true -m 2048
-EOF
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=zynqmp PT=zynqmp PATH_FIASCO=$(pwd)/obj/fiasco/arm64-zynqmp" >> $odir/.imagebuilds
-    fi
 
     add_std_qemu_options $Mboot
     add_nonx86_qemu_options $Mboot
 
   fi # ARM64
 
-
-
-
-
-  if [ "$CONF_DO_MIPS32R2" ]; then
-    mkdir -p obj/l4/mips32r2/conf
-    cat<<EOF >> obj/l4/mips32r2/conf/Makeconf.boot
-#MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/mips32-baikal-mp:$common_paths
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/mips32-malta:$common_paths
-QEMU_OPTIONS += -M malta
-EOF
-    add_std_qemu_options obj/l4/mips32r2/conf/Makeconf.boot
-    add_nonx86_qemu_options obj/l4/mips32r2/conf/Makeconf.boot
-  fi
-
-  if [ "$CONF_DO_MIPS32R6" ]; then
-    mkdir -p obj/l4/mips32r6/conf
-    cat<<EOF >> obj/l4/mips32r6/conf/Makeconf.boot
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/mips32-...:$common_paths
-QEMU_OPTIONS += -M malta
-EOF
-    add_std_qemu_options obj/l4/mips32r6/conf/Makeconf.boot
-    add_nonx86_qemu_options obj/l4/mips32r2/conf/Makeconf.boot
-  fi
-
-  if [ "$CONF_DO_MIPS64R2" ]; then
-    mkdir -p obj/l4/mips64r2/conf
-    cat<<EOF >> obj/l4/mips64r2/conf/Makeconf.boot
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/mips-malta-64r2-mp:$common_paths
-QEMU_OPTIONS += -M malta
-EOF
-    add_std_qemu_options obj/l4/mips64r2/conf/Makeconf.boot
-    add_nonx86_qemu_options obj/l4/mips64r2/conf/Makeconf.boot
-  fi
-
-  if [ "$CONF_DO_MIPS64R6" ]; then
-    mkdir -p obj/l4/mips64r6/conf
-    cat<<EOF >> obj/l4/mips64r6/conf/Makeconf.boot
-MODULE_SEARCH_PATH=$(pwd)/obj/fiasco/mips-boston-64r6-mp:$common_paths
-QEMU_OPTIONS    += -M boston
-QEMU_KERNEL_TYPE = itb
-EOF
-    add_std_qemu_options obj/l4/mips64r6/conf/Makeconf.boot
-    add_nonx86_qemu_options obj/l4/mips64r6/conf/Makeconf.boot
-  fi
 }
 
 
