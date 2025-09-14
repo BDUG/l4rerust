@@ -77,14 +77,14 @@ fn copy_tree(src: &Path, dst: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
 }
 
 fn run_make_depend(linux_src: &Path, driver_dir: &Path) -> Result<Vec<PathBuf>> {
-    // Best-effort: invoke `make M=<dir> depend` to generate .cmd files
-    let status = std::process::Command::new("make")
+    // Best-effort: invoke `gmake M=<dir> depend` to generate .cmd files
+    let status = std::process::Command::new("gmake")
         .arg("-C")
         .arg(linux_src)
         .arg(format!("M={}", driver_dir.display()))
         .arg("depend")
         .status()
-        .context("running make depend")?;
+        .context("running gmake depend")?;
     if !status.success() {
         return Ok(vec![]); // ignore failure
     }
