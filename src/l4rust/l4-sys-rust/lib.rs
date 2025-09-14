@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(not(any(target_arch = "aarch64", target_arch = "aarch32")))]
+compile_error!("Only ARM architectures are supported.");
+
 #[macro_use]
 mod ipc_ext;
 mod c_api;
@@ -38,23 +41,12 @@ pub fn round_page(address: usize) -> l4_addr_t {
     ((address + L4_PAGESIZE as usize - 1usize) & (L4_PAGEMASK as usize)) as l4_addr_t
 }
 
-pub mod util {
-    #[cfg(target_arch = "x86_64")]
-    pub fn rdtscp() -> u64 {
-        unsafe {
-            let mut _val = 0;
-            core::arch::x86_64::__rdtscp(&mut _val)
-        }
-    }
-}
-
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 pub type L4Umword = u64;
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(target_arch = "aarch64")]
 pub type L4Mword = i64;
 
-#[cfg(any(target_arch = "x86", target_arch = "aarch32"))]
+#[cfg(target_arch = "aarch32")]
 pub type L4Umword = u32;
-#[cfg(any(target_arch = "x86", target_arch = "aarch32"))]
+#[cfg(target_arch = "aarch32")]
 pub type L4Mword = i32;
-
