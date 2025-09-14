@@ -20,5 +20,6 @@ ENV CROSS_COMPILE_ARM=arm-linux-gnueabihf-
 ENV CROSS_COMPILE_ARM64=aarch64-linux-gnu-
 
 WORKDIR /workspace
+COPY scripts/ /workspace/scripts/
 
-ENTRYPOINT ["scripts/build.sh"]
+ENTRYPOINT ["/workspace/scripts/build.sh"]
