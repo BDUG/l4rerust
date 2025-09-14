@@ -16,7 +16,6 @@ RUN apt-get update && \
         gcc-arm-linux-gnueabihf \
         git \
         graphviz \
-        libc6-dev-i386 \
         libgit-repository-perl \
         libncurses-dev \
         liburi-perl \
