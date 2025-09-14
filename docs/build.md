@@ -1,5 +1,11 @@
 # Build
 
+The build system relies on the [`ham`](https://github.com/kernkonzept/ham)
+tool to fetch L4Re manifests. The binary is expected at `ham/ham` relative to
+the repository root before invoking any build commands. See the [Installing
+ham](../README.md#installing-ham) section in the repository root for setup
+instructions.
+
 ## Containerized build
 
 If cross-compilers or required GNU utilities are not available on the host,
