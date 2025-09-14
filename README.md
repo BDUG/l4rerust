@@ -4,7 +4,7 @@ Starting point was the work of the project [rustl4re](https://github.com/humenda
 
 ## Building for ARM
 
-Use `scripts/build_arm.sh` to build the project. By default, previous build
+Use `scripts/build.sh` to build the project. By default, previous build
 artifacts are removed before compilation. Passing `--no-clean` skips this
 cleanup.
 
@@ -33,7 +33,7 @@ the freshly built static libc.
 
 ### Cross-compilation toolchains
 
-Both the `setup` script and `scripts/build_arm.sh` look for compiler prefixes
+Both the `setup` script and `scripts/build.sh` look for compiler prefixes
 via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
 Typical prefixes include `arm-linux-gnueabihf-` and `aarch64-linux-gnu-` on
 Linux hosts, or Homebrew's `arm-none-eabi-` and `aarch64-none-elf-` on macOS.
@@ -72,7 +72,7 @@ With the environment set up, a smoke test of the build can be run with:
 ```bash
 CROSS_COMPILE_ARM=arm-none-eabi- \
 CROSS_COMPILE_ARM64=aarch64-none-elf- \
-scripts/build_arm.sh --test
+scripts/build.sh --test
 ```
 
 Some tools, such as `mke2fs` from `e2fsprogs`, live outside Homebrew's default
@@ -124,7 +124,7 @@ generated manifest is used.
 
 ## Systemd integration
 
-The build scripts can produce a systemd-based image. `scripts/build_arm.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `files/systemd` into the root filesystem. The same process can be invoked with `make systemd-image`.
+The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `files/systemd` into the root filesystem. The same process can be invoked with `make systemd-image`.
 
 Unit files placed in `files/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
