@@ -11,4 +11,4 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   docker build -t "$IMAGE" docker/
 fi
 
-docker run --rm -v "$PWD:/workspace" -w /workspace "$IMAGE" scripts/build.sh "$@"
+docker run --rm -v "$PWD:/workspace" -w /workspace "$IMAGE" "$@"
