@@ -39,6 +39,10 @@ chmod +x ham/ham
 Ensure the binary is executable and available on your `PATH` if you wish to
 invoke it globally.
 
+```bash
+export PATH=ham/:$PATH
+```
+
 ## Standard Build
 
 On a host with the necessary prerequisites installed, run:
