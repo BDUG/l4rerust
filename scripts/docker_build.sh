@@ -28,7 +28,9 @@ docker start -a "$container" || build_status=$?
 host_out="$REPO_ROOT/out"
 rm -rf "$host_out"
 if docker exec "$container" test -d /workspace/out; then
-  docker cp "$container:/workspace/out" "$host_out" >/dev/null || true
+  if ! docker cp "$container:/workspace/out" "$host_out" >/dev/null; then
+    echo "Failed to copy build artifacts."
+  fi
 else
   echo "No build artifacts were generated."
 fi
