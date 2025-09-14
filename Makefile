@@ -2,7 +2,7 @@ all:
 	@if [ -d obj ]; then                                           \
 	  $(MAKE) build_all;                                           \
 	else                                                           \
-	  echo "Call 'make setup' once for initial setup." ;           \
+          echo "Call 'gmake setup' once for initial setup." ;           \
 	  exit 1;                                                      \
 	fi
 
@@ -11,7 +11,7 @@ clean:
 
 setup:
 	@if [ -d obj ]; then                                                            \
-	  echo "Snapshot has already been setup. Proceed with 'make setup' or 'make clean'.";    \
+          echo "Snapshot has already been setup. Proceed with 'gmake setup' or 'gmake clean'.";    \
 	else                                                                            \
 	  export PATH=$$(pwd)/bin:$$PATH;                                               \
 	  chmod +x ./setup;     							\
@@ -19,7 +19,7 @@ setup:
 	  ./setup setup || exit 1;                                                      \
 	  echo ====================================================================;    \
 	  echo ;                                                                        \
-	  echo Your L4Re tree is set up now. Type 'make' to build the tree. This;       \
+          echo Your L4Re tree is set up now. Type 'gmake' to build the tree. This;       \
 	  echo will take some time \(depending on the speed of your host system, of;    \
 	  echo course\).;                                                               \
 	  echo ;                                                                        \
