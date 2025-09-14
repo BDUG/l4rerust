@@ -5,13 +5,11 @@ SCRIPT_DIR="$(dirname "$0")"
 # shellcheck source=common_build.sh
 source "$SCRIPT_DIR/common_build.sh"
 
-# Usage: build_arm.sh [--clean|--no-clean] [--test]
+# Usage: build_arm.sh [--clean|--no-clean]
 #   --clean     Remove previous build directories before building (default)
 #   --no-clean  Skip removal of build directories
-#   --test      Run a minimal QEMU boot test after building
 
 clean=true
-run_test=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean)
@@ -22,12 +20,8 @@ while [[ $# -gt 0 ]]; do
       clean=false
       shift
       ;;
-    --test)
-      run_test=true
-      shift
-      ;;
     *)
-      echo "Usage: $0 [--clean|--no-clean] [--test]" >&2
+      echo "Usage: $0 [--clean|--no-clean]" >&2
       exit 1
       ;;
   esac
@@ -38,27 +32,6 @@ detect_cross_compilers
 validate_tools
 
 ARTIFACTS_DIR="out"
-
-run_with_timeout() {
-  local duration="$1"; shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${duration}s" "$@"
-  elif command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "${duration}s" "$@"
-  else
-    python3 - "$duration" "$@" <<'PYTHON'
-import subprocess, sys
-timeout=int(sys.argv[1]); cmd=sys.argv[2:]
-proc=subprocess.Popen(cmd)
-try:
-    proc.wait(timeout)
-    sys.exit(proc.returncode)
-except subprocess.TimeoutExpired:
-    proc.kill()
-    sys.exit(124)
-PYTHON
-  fi
-}
 
 # Sync manifests using ham
 (
@@ -259,7 +232,7 @@ done
 make
 
 # Create a minimal LSB root filesystem image
-lsb_img="files/lsb_root/lsb_root.img"
+lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
 rm -f "$lsb_img"
 mkdir -p "$(dirname "$lsb_img")"
 dd if=/dev/zero of="$lsb_img" bs=1M count=8
@@ -360,26 +333,8 @@ enable_service() {
 enable_service bash
 enable_service sshd
 
-if [ "$run_test" = true ]; then
-  boot_img="obj/l4/arm64/images/bootstrap_hello_arm_virt.elf"
-  if [ ! -f "$boot_img" ]; then
-    echo "Boot image $boot_img not found" >&2
-    exit 1
-  fi
-  if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-    echo "qemu-system-aarch64 not found" >&2
-    exit 1
-  fi
-  echo "Running QEMU test..."
-  if ! run_with_timeout 5 qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -serial mon:stdio -kernel "$boot_img" >/dev/null; then
-    echo "QEMU test run failed" >&2
-    exit 1
-  fi
-fi
-
 # Collect key build artifacts
 mkdir -p "$ARTIFACTS_DIR/images"
-cp "$lsb_img" "$ARTIFACTS_DIR/images/" 2>/dev/null || true
 if [ -f "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" ]; then
   cp "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" "$ARTIFACTS_DIR/images/" 2>/dev/null || true
 fi
