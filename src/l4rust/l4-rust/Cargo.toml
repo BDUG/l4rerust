@@ -3,6 +3,7 @@ name = "l4"
 version = "0.1.0"
 authors = ["Sebastian Humenda <shumenda @ gmx . de>"]
 edition = "2021"
+build = "build.rs"
 
 [lib]
 path = "lib.rs"
@@ -38,3 +39,6 @@ std = []
 scheduler = []
 autosar = ["scheduler"]
 linux_like = ["scheduler"]
+
+[build-dependencies]
+cc = "1.0"
