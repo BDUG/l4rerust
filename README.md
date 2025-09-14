@@ -1,8 +1,8 @@
 # L4ReRust
 
-L4ReRust brings the Rust programming language back to the L4 Runtime Environment (L4Re) microkernel.
-The project aims to let developers build drivers and system components in Rust with modern tooling,
-a containerized build environment, and workflows for packaging and deployment.
+L4ReRust brings the Rust programming language to the L4 Runtime Environment (L4Re) microkernel.
+
+The project aims to let developers system components in Rust with modern tooling, while taking over from Linux trunck the latest and greatest driver.
 
 ## Installing tool 'ham'
 
