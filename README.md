@@ -37,10 +37,26 @@ the freshly built static libc.
 
 Both the `setup` script and `scripts/build.sh` look for compiler prefixes
 via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
- Typical prefixes include `arm-linux-gnueabihf-` and `aarch64-linux-gnu-` on
- Linux hosts, or Homebrew's `arm-linux-gnueabihf-` and `aarch64-none-linux-gnu-` on macOS.
-When these variables are unset, the scripts attempt to choose sensible defaults
-based on `uname`.
+Typical prefixes for Linux-targeted toolchains are `arm-linux-gnueabihf-` and
+`aarch64-linux-gnu-`.  If these cross-compilers are not already available,
+they can be installed via your distribution, Homebrew, or built with
+[crosstool-ng](https://crosstool-ng.github.io/).
+
+After installing a toolchain, add its `bin` directory to your `PATH` and set
+the expected prefixes:
+
+```bash
+export PATH=/path/to/toolchain/bin:$PATH
+export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
+export CROSS_COMPILE_ARM64=aarch64-linux-gnu-
+```
+
+When these variables are unset, the scripts attempt to choose sensible
+defaults based on `uname`.
+
+The build scripts rely on several GNU utilities such as `timeout`, `stat`, and
+`truncate`. Ensure GNU versions of these tools are available in your `PATH`;
+on macOS they are installed by the `coreutils` package with a `g` prefix.
 
 ### macOS (Apple Silicon)
 
@@ -49,20 +65,22 @@ compilers:
 
 ```bash
 brew install qemu e2fsprogs coreutils meson ninja pkg-config
-brew install arm-linux-gnueabihf-gcc aarch64-none-linux-gnu-gcc
+brew install arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc
 ```
 
 Ensure the Homebrew prefixes are in your `PATH` and define the compiler
 prefixes expected by the build scripts:
 
 ```bash
-export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-none-linux-gnu-gcc)/bin:$PATH"
+export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-linux-gnu-gcc)/bin:$PATH"
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-none-linux-gnu-
+export CROSS_COMPILE_ARM64=aarch64-linux-gnu-
 ```
 
-macOS does not ship GNU `timeout`; the `coreutils` formula installs it as
-`gtimeout`. Either invoke `gtimeout` directly or alias it:
+macOS does not ship GNU `timeout` or several other GNU utilities required by
+the build. The `coreutils` formula installs them with a `g` prefix (e.g.,
+`gtimeout`). Either invoke these `g`-prefixed tools directly or alias them to
+the expected names:
 
 ```bash
 alias timeout=gtimeout
@@ -72,7 +90,7 @@ With the environment set up, a smoke test of the build can be run with:
 
 ```bash
 CROSS_COMPILE_ARM=arm-linux-gnueabihf- \
-CROSS_COMPILE_ARM64=aarch64-none-linux-gnu- \
+CROSS_COMPILE_ARM64=aarch64-linux-gnu- \
 scripts/build.sh --test
 ```
 
