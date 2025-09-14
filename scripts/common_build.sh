@@ -5,14 +5,37 @@ detect_cross_compilers() {
   if [ -z "${CROSS_COMPILE_ARM:-}" ] || [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
     case "$(uname -s)" in
     Darwin)
-      CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-none-eabi-}
+      local machine
+      machine=$(uname -m)
+
+      if [ -z "${CROSS_COMPILE_ARM:-}" ]; then
+        if command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
+          CROSS_COMPILE_ARM=arm-linux-gnueabihf-
+        else
+          CROSS_COMPILE_ARM=arm-none-eabi-
+        fi
+      fi
+
       if [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
-        if command -v aarch64-unknown-linux-gnu-gcc >/dev/null 2>&1; then
+        if command -v aarch64-none-linux-gnu-gcc >/dev/null 2>&1; then
+          CROSS_COMPILE_ARM64=aarch64-none-linux-gnu-
+        elif command -v aarch64-unknown-linux-gnu-gcc >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-unknown-linux-gnu-
         else
           CROSS_COMPILE_ARM64=aarch64-none-elf-
         fi
       fi
+
+      if [[ ${CROSS_COMPILE_ARM64} != *linux* ]]; then
+        echo "No Linux-targeted AArch64 cross compiler found (expected aarch64-none-linux-gnu- or aarch64-unknown-linux-gnu-)." >&2
+        exit 1
+      fi
+
+      if [[ ${machine} != "arm64" && ${CROSS_COMPILE_ARM} != *linux* ]]; then
+        echo "No Linux-targeted ARM cross compiler found (expected arm-linux-gnueabihf-)." >&2
+        exit 1
+      fi
+
       ;;
     *)
       CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-arm-linux-gnueabihf-}

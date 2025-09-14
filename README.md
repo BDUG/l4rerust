@@ -37,8 +37,8 @@ the freshly built static libc.
 
 Both the `setup` script and `scripts/build.sh` look for compiler prefixes
 via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
-Typical prefixes include `arm-linux-gnueabihf-` and `aarch64-linux-gnu-` on
-Linux hosts, or Homebrew's `arm-none-eabi-` and `aarch64-none-elf-` on macOS.
+ Typical prefixes include `arm-linux-gnueabihf-` and `aarch64-linux-gnu-` on
+ Linux hosts, or Homebrew's `arm-linux-gnueabihf-` and `aarch64-none-linux-gnu-` on macOS.
 When these variables are unset, the scripts attempt to choose sensible defaults
 based on `uname`.
 
@@ -49,17 +49,16 @@ compilers:
 
 ```bash
 brew install qemu e2fsprogs coreutils meson ninja pkg-config
-brew tap ArmMbed/homebrew-formulae
-brew install arm-none-eabi-gcc aarch64-none-elf-gcc
+brew install arm-linux-gnueabihf-gcc aarch64-none-linux-gnu-gcc
 ```
 
 Ensure the Homebrew prefixes are in your `PATH` and define the compiler
 prefixes expected by the build scripts:
 
 ```bash
-export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-none-eabi-gcc)/bin:$(brew --prefix aarch64-none-elf-gcc)/bin:$PATH"
-export CROSS_COMPILE_ARM=arm-none-eabi-
-export CROSS_COMPILE_ARM64=aarch64-none-elf-
+export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-none-linux-gnu-gcc)/bin:$PATH"
+export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
+export CROSS_COMPILE_ARM64=aarch64-none-linux-gnu-
 ```
 
 macOS does not ship GNU `timeout`; the `coreutils` formula installs it as
@@ -72,8 +71,8 @@ alias timeout=gtimeout
 With the environment set up, a smoke test of the build can be run with:
 
 ```bash
-CROSS_COMPILE_ARM=arm-none-eabi- \
-CROSS_COMPILE_ARM64=aarch64-none-elf- \
+CROSS_COMPILE_ARM=arm-linux-gnueabihf- \
+CROSS_COMPILE_ARM64=aarch64-none-linux-gnu- \
 scripts/build.sh --test
 ```
 
