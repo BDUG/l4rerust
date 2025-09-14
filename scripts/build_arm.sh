@@ -37,6 +37,8 @@ done
 detect_cross_compilers
 validate_tools
 
+ARTIFACTS_DIR="out"
+
 run_with_timeout() {
   local duration="$1"; shift
   if command -v timeout >/dev/null 2>&1; then
@@ -68,7 +70,7 @@ PYTHON
 # Start from a clean state
 if [ "$clean" = true ]; then
   # Remove common build directories if they exist
-  for dir in obj lib out; do
+  for dir in obj "$ARTIFACTS_DIR"; do
     if [ -d "$dir" ]; then
       rm -rf "$dir"
     fi
@@ -90,7 +92,7 @@ export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
 # Build a statically linked Bash for ARM and ARM64
 build_bash() {
   local arch="$1" cross="$2" host="$3"
-  local out_dir="obj/bash/$arch"
+  local out_dir="$ARTIFACTS_DIR/bash/$arch"
   if [ -f "$out_dir/bash" ]; then
     echo "bash for $arch already built, skipping"
     return
@@ -111,7 +113,7 @@ repo_root=$(pwd)
 
 need_bash=false
 for arch in arm arm64; do
-  if [ ! -f "obj/bash/$arch/bash" ]; then
+  if [ ! -f "$ARTIFACTS_DIR/bash/$arch/bash" ]; then
     need_bash=true
     break
   fi
@@ -132,7 +134,7 @@ fi
 # Build systemd for ARM and ARM64
 build_systemd() {
   local arch="$1" cross="$2" cpu="$3"
-  local out_dir="obj/systemd/$arch"
+  local out_dir="$ARTIFACTS_DIR/systemd/$arch"
   if [ -f "$out_dir/systemd" ]; then
     echo "systemd for $arch already built, skipping"
     return
@@ -164,7 +166,7 @@ EOF
 # Build OpenSSH for ARM and ARM64
 build_openssh() {
   local arch="$1" cross="$2" host="$3"
-  local out_dir="obj/openssh/$arch"
+  local out_dir="$ARTIFACTS_DIR/openssh/$arch"
   if [ -f "$out_dir/sshd" ]; then
     echo "openssh for $arch already built, skipping"
     return
@@ -184,7 +186,7 @@ build_openssh() {
 
 need_systemd=false
 for arch in arm arm64; do
-  if [ ! -f "obj/systemd/$arch/systemd" ]; then
+  if [ ! -f "$ARTIFACTS_DIR/systemd/$arch/systemd" ]; then
     need_systemd=true
     break
   fi
@@ -205,7 +207,7 @@ fi
 # Build OpenSSH for ARM and ARM64
 need_openssh=false
 for arch in arm arm64; do
-  if [ ! -f "obj/openssh/$arch/sshd" ]; then
+  if [ ! -f "$ARTIFACTS_DIR/openssh/$arch/sshd" ]; then
     need_openssh=true
     break
   fi
@@ -227,8 +229,8 @@ fi
 # L4Re build system can pick it up when creating images.
 mkdir -p src/pkg/openssh
 for arch in arm arm64; do
-  if [ -f "obj/openssh/$arch/sshd" ]; then
-    ln -sf ../../obj/openssh/$arch/sshd src/pkg/openssh/sshd
+  if [ -f "$ARTIFACTS_DIR/openssh/$arch/sshd" ]; then
+    ln -sf "../../$ARTIFACTS_DIR/openssh/$arch/sshd" src/pkg/openssh/sshd
   fi
 done
 
@@ -252,9 +254,9 @@ DISTRIB_DESCRIPTION="L4Re root image"
 EOF
 debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
 rm "$tmpfile"
-debugfs -w -R "write obj/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
-debugfs -w -R "write obj/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
 # Set up SSH configuration and host keys
@@ -275,7 +277,7 @@ debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key.pub" "$lsb_img" >/dev/null
 rm "$hostkey_tmp" "$hostkey_tmp.pub"
 
 # Install systemd into the root filesystem image and staging area
-sys_root="obj/systemd/arm64/root"
+sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
 if [ -d "$sys_root" ]; then
   mkdir -p files/lsb_root/usr/lib/systemd
   mkdir -p files/lsb_root/lib/systemd
@@ -352,4 +354,11 @@ if [ "$run_test" = true ]; then
     echo "QEMU test run failed" >&2
     exit 1
   fi
+fi
+
+# Collect key build artifacts
+mkdir -p "$ARTIFACTS_DIR/images"
+cp "$lsb_img" "$ARTIFACTS_DIR/images/" 2>/dev/null || true
+if [ -f "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" ]; then
+  cp "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" "$ARTIFACTS_DIR/images/" 2>/dev/null || true
 fi

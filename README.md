@@ -13,6 +13,8 @@ the generated image `obj/l4/arm64/images/bootstrap_hello_arm_virt.elf`. The
 script aborts if the QEMU run fails, providing a quick smoke test of the
 build.
 
+Built components and images are collected under the `out/` directory.
+
 The build process first compiles the `l4re-libc` crate to provide a static
 libc for the Rust components. The resulting library is made available through
 the `LIBRARY_PATH` environment variable so that subsequent Rust crates link
