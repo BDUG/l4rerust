@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
+# Ensure l4re-core is present and up to date
+"$SCRIPT_DIR/update_l4re_core.sh"
+
 IMAGE="l4rerust-builder"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
