@@ -2,20 +2,36 @@
 
 ## Cross-compilation toolchains
 
-Both the `setup` script and `scripts/build.sh` look for compiler prefixes
-via the `CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` environment variables.
-Typical prefixes for Linux-targeted toolchains are `arm-linux-gnueabihf-` and
-`aarch64-linux-gnu-`, while macOS now uses the `aarch64-elf-` prefix by default.
-If these cross-compilers are not already available, they can be installed via
-your distribution, Homebrew, or built with
+Both the `setup` script and `scripts/build.sh` look for compiler prefixes via
+the `CROSS_COMPILE_ARM`, `CROSS_COMPILE_ARM64`, and
+`CROSS_COMPILE_AMD64` environment variables. Typical prefixes for
+Linux-targeted toolchains are `arm-linux-gnueabihf-`, `aarch64-linux-gnu-`, and
+`x86_64-linux-gnu-`, while macOS now uses the `aarch64-elf-` prefix by
+default. If these cross-compilers are not already available, they can be
+installed via your distribution, Homebrew, or built with
 [crosstool-ng](https://crosstool-ng.github.io/).
 
-If `setup` or `scripts/build.sh` report a failure such as
-`Required tool aarch64-elf-gcc not found`, an AArch64 cross compiler is
-missing. Install one with your package manager, e.g.
-`brew install aarch64-elf-gcc` or, on Linux hosts, `sudo apt install
-gcc-aarch64-linux-gnu`, and export the appropriate prefix (`CROSS_COMPILE_ARM64=aarch64-elf-`
-or `aarch64-linux-gnu-`).
+### Installing compilers on Debian/Ubuntu
+
+1. Update the package index:
+
+   ```bash
+   sudo apt update
+   ```
+
+2. Install the cross-compilers:
+
+   ```bash
+   sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu
+   ```
+
+3. Verify the installation:
+
+   ```bash
+   arm-linux-gnueabihf-gcc --version
+   aarch64-linux-gnu-gcc --version
+   x86_64-linux-gnu-gcc --version
+   ```
 
 After installing a toolchain, add its `bin` directory to your `PATH` and set
 the expected prefixes:
@@ -23,11 +39,12 @@ the expected prefixes:
 ```bash
 export PATH=/path/to/toolchain/bin:$PATH
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-elf-
+export CROSS_COMPILE_ARM64=aarch64-linux-gnu-
+export CROSS_COMPILE_AMD64=x86_64-linux-gnu-
 ```
 
-Verify the compiler is on your `PATH` (e.g., `aarch64-elf-gcc --version`)
-before invoking `scripts/build.sh` or `setup`.
+Verify each compiler is on your `PATH` before invoking `scripts/build.sh` or
+`setup`.
 
 When these variables are unset, the scripts attempt to choose sensible
 defaults based on `uname`.
@@ -35,6 +52,15 @@ defaults based on `uname`.
 The build scripts rely on several GNU utilities such as `timeout`, `stat`, and
 `truncate`. Ensure GNU versions of these tools are available in your `PATH`;
 on macOS they are installed by the `coreutils` package with a `g` prefix.
+
+### Troubleshooting
+
+- `Required tool arm-linux-gnueabihf-gcc not found` indicates the ARM compiler
+  is missing or not on your `PATH`. Install `gcc-arm-linux-gnueabihf` and
+  ensure `CROSS_COMPILE_ARM=arm-linux-gnueabihf-` is exported.
+- `unrecognized command-line option '-m64'` appears when an x86_64 compiler is
+  unavailable. Install `gcc-x86-64-linux-gnu` and set
+  `CROSS_COMPILE_AMD64=x86_64-linux-gnu-`.
 
 ## macOS (Apple Silicon)
 
