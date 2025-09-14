@@ -65,6 +65,26 @@ docker image rm l4rerust-builder
 ## Containerized build
 Instructions for building inside a Docker container are available in [docs/build.md](docs/build.md).
 
+### Mounted workspace
+
+To work with a persistent workspace inside the container, create a directory on
+the host and mount it at `/workspace`:
+
+```bash
+mkdir -p /path/to/host-workspace
+docker run --rm -it -v /path/to/host-workspace:/workspace l4rerust-builder
+```
+
+Inside the container the repository will appear under `/workspace`, which can be
+verified with:
+
+```bash
+ls /workspace
+```
+
+The [`scripts/docker_run.sh`](scripts/docker_run.sh) helper wraps this command
+and accepts additional arguments to pass to `docker run`.
+
 ## Building for ARM
 Steps for building the project for ARM targets are documented in [docs/build.md](docs/build.md).
 
