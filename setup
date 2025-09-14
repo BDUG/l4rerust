@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/common_build.sh
 source "$SCRIPT_DIR/scripts/common_build.sh"
 
-# check we're in the right directory
-if [ ! -d src/l4 -o ! -d src/fiasco ]; then
+# check we're in the right directory when needed
+if [ "$1" != "clean" ] && [ ! -d src/l4 -o ! -d src/fiasco ]; then
   echo "Call setup as ./$(basename $0) in the right directory"
   exit 1
 fi
@@ -20,17 +20,19 @@ if [ -n "$SYSTEM" ]; then
   exit 1
 fi
 
-if [ -n "$CROSS_COMPILE" ]; then
-  read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
-  CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
-else
-  read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
-fi
-export CROSS_COMPILE
+if [ "$1" != "clean" ]; then
+  if [ -n "$CROSS_COMPILE" ]; then
+    read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
+    CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
+  else
+    read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+  fi
+  export CROSS_COMPILE
 
-CC=${CC:-${CROSS_COMPILE}gcc}
-CXX=${CXX:-${CROSS_COMPILE}g++}
-LD=${LD:-${CROSS_COMPILE}ld}
+  CC=${CC:-${CROSS_COMPILE}gcc}
+  CXX=${CXX:-${CROSS_COMPILE}g++}
+  LD=${LD:-${CROSS_COMPILE}ld}
+fi
 
 add_to_config()
 {
@@ -1011,8 +1013,12 @@ case "$1" in
      redo_config
      do_setup
      ;;
+  clean)
+     do_clean
+     rm -rf out
+     ;;
   *)
-     echo "Call $0 [config|setup]"
+     echo "Call $0 [config|setup|clean]"
      exit 1
      ;;
 esac

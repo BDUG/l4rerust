@@ -7,7 +7,7 @@ all:
 	fi
 
 clean:
-	@$(RM) -r obj
+	@./setup clean
 
 setup:
 	@if [ -d obj ]; then                                                            \
