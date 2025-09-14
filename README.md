@@ -32,6 +32,15 @@ invoke it globally.
 export PATH=ham/:$PATH
 ```
 
+## Updating l4re-core
+
+L4ReRust depends on a checkout of the upstream `l4re-core` repository. Run
+`scripts/update_l4re_core.sh` to clone or refresh this source tree. The script
+requires `git` and network access to fetch updates.
+
+The build scripts invoke this step automatically, but you can call it manually
+when developing locally to ensure `l4re-core` is up to date.
+
 ## Standard Build
 
 On a host with the necessary prerequisites installed, run:
