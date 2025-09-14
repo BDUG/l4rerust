@@ -2,12 +2,8 @@
 use crate::c_api::*;
 
 /// An alias for the corresponding platform enum
-#[cfg(target_arch = "x86_64")]
-pub use crate::c_api::L4_utcb_consts_amd64 as UtcbConsts;
 #[cfg(target_arch = "aarch64")]
 pub use crate::c_api::L4_utcb_consts_arm64 as UtcbConsts;
-#[cfg(target_arch = "x86")]
-pub use L4_utcb_consts_x86 as UtcbConsts;
 
 // redefined constants and enums with (wrongly) generated type
 pub const UTCB_GENERIC_DATA_SIZE: usize = UtcbConsts::L4_UTCB_GENERIC_DATA_SIZE as usize;
