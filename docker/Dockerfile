@@ -16,6 +16,28 @@ RUN apt-get update && \
         openssh-client \
         perl \
         cpanminus \
+        git \ 
+        make \ 
+        binutils \
+        liburi-perl \
+        libgit-repository-perl \
+        libxml-parser-perl \
+        gcc \ 
+        g++ \
+        libc6-dev-i386 \
+        libncurses-dev \
+        qemu-system \
+        xorriso \
+        mtools \
+        flex \
+        bison \
+        pkg-config \
+        gawk \
+        device-tree-compiler \
+        dialog \
+        wget \
+        doxygen \
+        graphviz \
     && cpanm --notest Git::Repository \
     && rm -rf /var/lib/apt/lists/*
 
