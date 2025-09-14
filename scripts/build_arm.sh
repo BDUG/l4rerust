@@ -69,9 +69,22 @@ mkdir -p "$ARTIFACTS_DIR"
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
-# Run the full non-interactive setup to generate configuration and makefiles
-#./setup config 
-./setup setup 
+# Run the setup tool. If a pre-generated configuration is available, reuse it
+# to avoid the interactive `config` step.
+if [ -f /workspace/.config ]; then
+  echo "Using configuration from /workspace/.config"
+  mkdir -p obj
+  cp /workspace/.config obj/.config
+  ./setup setup
+elif [ -f scripts/l4re.config ]; then
+  echo "Using configuration from scripts/l4re.config"
+  mkdir -p obj
+  cp scripts/l4re.config obj/.config
+  ./setup setup
+else
+  ./setup config
+  ./setup setup
+fi
 ./setup --non-interactive
 
 # Build the Rust libc crate so other crates can link against it
