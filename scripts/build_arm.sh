@@ -75,15 +75,12 @@ if [ -f /workspace/.config ]; then
   echo "Using configuration from /workspace/.config"
   mkdir -p obj
   cp /workspace/.config obj/.config
-  ./setup setup
 elif [ -f scripts/l4re.config ]; then
   echo "Using configuration from scripts/l4re.config"
   mkdir -p obj
   cp scripts/l4re.config obj/.config
-  ./setup setup
 else
   ./setup config
-  ./setup setup
 fi
 ./setup --non-interactive
 
