@@ -6,5 +6,8 @@ edition = "2021"
 [dependencies]
 l4re = { path = "../l4rust/l4re-rust" }
 l4re-libc = { path = "../l4rust/l4re-libc" }
+l4 = { path = "../l4rust/l4-rust" }
 fatfs = "0.3"
 libc = "0.2"
+
+[workspace]
