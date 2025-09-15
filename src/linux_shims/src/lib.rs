@@ -1,18 +1,17 @@
 #![cfg_attr(not(test), no_std)]
-#![feature(c_variadic)]
 
-use core::ffi::{c_char, VaListImpl};
+use core::ffi::{c_char, c_void};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 extern "C" {
-    fn vprintf(fmt: *const c_char, args: VaListImpl) -> i32;
+    fn vprintf(fmt: *const c_char, args: *mut c_void) -> i32;
 }
 
 static INIT_DONE: AtomicBool = AtomicBool::new(false);
 static mut EXIT_HANDLER: Option<extern "C" fn()> = None;
 
 #[no_mangle]
-pub unsafe extern "C" fn printk(fmt: *const c_char, args: ...) {
+pub unsafe extern "C" fn printk(fmt: *const c_char, args: *mut c_void) {
     vprintf(fmt, args);
 }
 
