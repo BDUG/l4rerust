@@ -6,7 +6,8 @@ This utility inspects a binary for shared library dependencies.
 It uses platform-specific tools:
 
 - On Linux, `readelf -d` is invoked and `NEEDED` entries are parsed.
-- On macOS (Darwin), `otool -L` is used and `.dylib` entries are collected.
+- On macOS (Darwin), `otool -L` is used and `.dylib` and framework entries are
+  collected.
 """
 import os
 import subprocess
@@ -56,7 +57,9 @@ def _deps_from_otool(path: str) -> List[str]:
 
     `otool -L` lists libraries the binary depends on. Lines after the first
     contain library paths followed by version info. We keep entries that end
-    with `.dylib` to match shared libraries on macOS.
+    with `.dylib` or reference frameworks (paths containing
+    `.framework/Versions/`). Framework names are extracted similarly to
+    `.dylib` basenames.
     """
     output = subprocess.check_output(["otool", "-L", path], text=True)
     deps: List[str] = []
@@ -64,6 +67,9 @@ def _deps_from_otool(path: str) -> List[str]:
         lib = line.strip().split(" ")[0]
         if lib.endswith(".dylib"):
             deps.append(_sanitize(os.path.basename(lib)))
+        elif ".framework/Versions/" in lib:
+            framework = lib.split(".framework/")[0]
+            deps.append(_sanitize(os.path.basename(framework)))
     return deps
 
 
