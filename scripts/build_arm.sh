@@ -79,9 +79,9 @@ export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
 # Build a statically linked Bash for ARM and ARM64
 build_bash() {
   local arch="$1" cross="$2"
-  local triple="$(${cross}gcc -dumpmachine)"
+  local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
+    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
@@ -95,10 +95,10 @@ build_bash() {
   (
     cd "$bash_src_dir"
     gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
       ./configure --host="$host" --without-bash-malloc
     gmake clean
-    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
       gmake STATIC_LDFLAGS=-static
     cp bash "$repo_root/$out_dir/"
   )
@@ -128,9 +128,9 @@ fi
 # Build systemd for ARM and ARM64
 build_systemd() {
   local arch="$1" cross="$2"
-  local triple="$(${cross}gcc -dumpmachine)"
+  local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
+    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
@@ -147,7 +147,7 @@ build_systemd() {
     rm -rf "$builddir"
     cat > cross.txt <<EOF
 [binaries]
-c = '${cross}gcc'
+c = '${cross}g++'
 ar = '${cross}ar'
 strip = '${cross}strip'
 
@@ -167,9 +167,9 @@ EOF
 # Build OpenSSH for ARM and ARM64
 build_openssh() {
   local arch="$1" cross="$2"
-  local triple="$(${cross}gcc -dumpmachine)"
+  local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
+    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
@@ -183,10 +183,10 @@ build_openssh() {
   (
     cd "$openssh_src_dir"
     gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
+    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
       ./configure --host="$host" --with-privsep-path=/var/empty --disable-strip
     gmake clean
-    CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
+    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
       gmake sshd
     cp sshd "$repo_root/$out_dir/"
   )
