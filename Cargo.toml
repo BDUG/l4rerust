@@ -1,2 +1,8 @@
 [workspace]
 members = ["driver_picker", "src/linux_shims", "src/driver", "src/virtio_frontend", "src/l4rust/l4re-libc"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
