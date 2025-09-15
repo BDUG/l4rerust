@@ -99,8 +99,8 @@ export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
 build_bash() {
   local arch="$1" cross="$2"
   local triple="$(${cross}gcc -dumpmachine)"
-  if [[ "$triple" != *-linux-* ]]; then
-    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
+    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
@@ -148,8 +148,8 @@ fi
 build_systemd() {
   local arch="$1" cross="$2"
   local triple="$(${cross}gcc -dumpmachine)"
-  if [[ "$triple" != *-linux-* ]]; then
-    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
+    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
@@ -187,8 +187,8 @@ EOF
 build_openssh() {
   local arch="$1" cross="$2"
   local triple="$(${cross}gcc -dumpmachine)"
-  if [[ "$triple" != *-linux-* ]]; then
-    echo "${cross}gcc targets '$triple', which is not a Linux target" >&2
+  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
+    echo "${cross}gcc targets '$triple', which is neither a Linux nor ELF target" >&2
     exit 1
   fi
   local host="$triple"
