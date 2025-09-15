@@ -8,6 +8,9 @@ fn main() {
         .flag("-fno-builtin")
         .flag("-nostdlib");
 
+    // Ensure the top-level driver.c is compiled
+    build.file("driver.c");
+
     for entry in WalkDir::new("src") {
         let entry = entry.unwrap();
         if entry.file_type().is_file() {
