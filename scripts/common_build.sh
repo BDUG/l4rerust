@@ -74,6 +74,8 @@ validate_tools() {
     ninja
     pkg-config
     ham
+    "stat|gstat"
+    "truncate|gtruncate"
     "timeout|gtimeout|python3"
   )
   for tool in "${required_tools[@]}"; do
