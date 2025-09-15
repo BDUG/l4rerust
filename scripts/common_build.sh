@@ -21,7 +21,9 @@ detect_cross_compilers() {
         if command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
           CROSS_COMPILE_ARM=arm-linux-gnueabihf-
         else
-          CROSS_COMPILE_ARM=arm-none-eabi-
+          echo "No Linux-targeted ARM cross compiler found (expected arm-linux-gnueabihf-gcc)." \
+            "Install it on macOS via Homebrew: 'brew install arm-linux-gnueabihf-gcc'." >&2
+          exit 1
         fi
       fi
 
