@@ -52,7 +52,7 @@ scripts/build.sh          # builds natively
 
 **Mac:**
 ```bash
-CROSS_COMPILE=aarch64-elf- CROSS_COMPILE_ARM64=aarch64-elf- scripts/build.sh
+CROSS_COMPILE=aarch64-elf- scripts/build.sh  # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
 Build artifacts are placed under `out/`. 
