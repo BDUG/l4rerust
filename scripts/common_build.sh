@@ -17,7 +17,7 @@ setup_macos_paths() {
   fi
 
   local formula prefix
-  for formula in arm-linux-gnueabihf-gcc aarch64-elf-gcc e2fsprogs; do
+  for formula in arm-linux-gnueabihf-g++ aarch64-elf-g++ e2fsprogs; do
     prefix=$(brew --prefix "$formula" 2>/dev/null) || continue
     PATH="$prefix/bin:$PATH"
   done
@@ -34,26 +34,26 @@ detect_cross_compilers() {
       setup_macos_paths
 
       if [ -z "${CROSS_COMPILE_ARM:-}" ]; then
-        if command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
+        if command -v arm-linux-gnueabihf-g++ >/dev/null 2>&1; then
           CROSS_COMPILE_ARM=arm-linux-gnueabihf-
         else
-          echo "No Linux-targeted ARM cross compiler found (expected arm-linux-gnueabihf-gcc)." \
-            "Install it on macOS via Homebrew: 'brew install arm-linux-gnueabihf-gcc'." >&2
+          echo "No Linux-targeted ARM cross compiler found (expected arm-linux-gnueabihf-g++)." \
+            "Install it on macOS via Homebrew: 'brew install arm-linux-gnueabihf-g++'." >&2
           exit 1
         fi
       fi
 
       if [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
-        if command -v aarch64-elf-gcc >/dev/null 2>&1; then
+        if command -v aarch64-elf-g++ >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-elf-
-        elif command -v aarch64-none-elf-gcc >/dev/null 2>&1; then
+        elif command -v aarch64-none-elf-g++ >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-none-elf-
-        elif command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+        elif command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-linux-gnu-
-        elif command -v aarch64-unknown-linux-gnu-gcc >/dev/null 2>&1; then
+        elif command -v aarch64-unknown-linux-gnu-g++ >/dev/null 2>&1; then
           CROSS_COMPILE_ARM64=aarch64-unknown-linux-gnu-
         else
-          echo "No AArch64 cross compiler found. Please install aarch64-elf-gcc (preferred; Linux hosts may use aarch64-linux-gnu-gcc or aarch64-unknown-linux-gnu-gcc)." >&2
+          echo "No AArch64 cross compiler found. Please install aarch64-elf-g++ (preferred; Linux hosts may use aarch64-linux-gnu-g++ or aarch64-unknown-linux-gnu-g++)." >&2
           exit 1
         fi
       fi
@@ -83,8 +83,8 @@ validate_tools() {
     git
     gmake
     curl
-    "${CROSS_COMPILE_ARM}gcc"
-    "${CROSS_COMPILE_ARM64}gcc"
+    "${CROSS_COMPILE_ARM}g++"
+    "${CROSS_COMPILE_ARM64}g++"
     mke2fs
     debugfs
     ssh-keygen
@@ -112,9 +112,9 @@ validate_tools() {
       fi
     else
       if ! command -v "$tool" >/dev/null 2>&1; then
-        if [[ "$tool" == "${CROSS_COMPILE_ARM}gcc" ]]; then
+        if [[ "$tool" == "${CROSS_COMPILE_ARM}g++" ]]; then
           echo "Required tool $tool not found (CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM})" >&2
-        elif [[ "$tool" == "${CROSS_COMPILE_ARM64}gcc" ]]; then
+        elif [[ "$tool" == "${CROSS_COMPILE_ARM64}g++" ]]; then
           echo "Required tool $tool not found (CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64})" >&2
         elif [[ "$tool" == ham ]]; then
           echo "Required tool ham not found. Install ham and ensure it is in your PATH" >&2

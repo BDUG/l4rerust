@@ -40,7 +40,7 @@ if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
 fi
 
 export CROSS_COMPILE=${CROSS_COMPILE:-}
-CC=${CC:-${CROSS_COMPILE}gcc}
+CC=${CC:-${CROSS_COMPILE}g++}
 CXX=${CXX:-${CROSS_COMPILE}g++}
 LD=${LD:-${CROSS_COMPILE}ld}
 
@@ -346,11 +346,11 @@ check_cc()
   return 1
 }
 
-check_eabi_gcc()
+check_eabi_gxx()
 {
   # probably half-hearted approach but well
   [ -z "$1" ] && return 1
-  $1 -E -dD -x c /dev/null | grep -qw __ARM_EABI__
+  $1 -E -dD -x c++ /dev/null | grep -qw __ARM_EABI__
 }
 
 check_tool()
@@ -455,7 +455,7 @@ check_cross_tools()
 
   if [ -n "$confvar" ]; then
     echo "Checking for needed cross programs and tools for $name"
-    tools_needed="${cross_compile}gcc ${cross_compile}cpp ${cross_compile}nm ${cross_compile}g++ ${cross_compile}ld"
+    tools_needed="${cross_compile}g++ ${cross_compile}cpp ${cross_compile}nm ${cross_compile}ld"
     unset failed
     for t in $tools_needed; do
       result="ok"
@@ -646,7 +646,7 @@ do_setup()
       mkdir -p obj/l4linux/arm-mp
     fi
 
-    if ! check_eabi_gcc ${CROSS_COMPILE_ARM}gcc; then
+    if ! check_eabi_gxx ${CROSS_COMPILE_ARM}g++; then
       echo "WARNING: L4Linux has been disabled due to a detected old OABI compiler"
       echo "WARNING: Please update your compiler to an EABI version"
       add_to_config SKIP_L4LINUX_ARM_BUILD=1
