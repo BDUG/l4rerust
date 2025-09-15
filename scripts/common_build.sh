@@ -9,6 +9,21 @@ resolve_path() {
   fi
 }
 
+# Discover Homebrew tool prefixes on macOS and prepend their bin directories to
+# PATH.
+setup_macos_paths() {
+  if ! command -v brew >/dev/null 2>&1; then
+    return
+  fi
+
+  local formula prefix
+  for formula in arm-linux-gnueabihf-gcc aarch64-elf-gcc e2fsprogs; do
+    prefix=$(brew --prefix "$formula" 2>/dev/null) || continue
+    PATH="$prefix/bin:$PATH"
+  done
+  export PATH
+}
+
 # Detect suitable cross-compilers for ARM and ARM64.
 detect_cross_compilers() {
   if [ -z "${CROSS_COMPILE_ARM:-}" ] || [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
@@ -16,6 +31,7 @@ detect_cross_compilers() {
     Darwin)
       local machine
       machine=$(uname -m)
+      setup_macos_paths
 
       if [ -z "${CROSS_COMPILE_ARM:-}" ]; then
         if command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
