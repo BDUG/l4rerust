@@ -21,14 +21,14 @@ installed via your distribution, Homebrew, or built with
 2. Install the cross-compilers:
 
    ```bash
-   sudo apt install gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+   sudo apt install g++-arm-linux-gnueabihf g++-aarch64-linux-gnu
    ```
 
 3. Verify the installation:
 
    ```bash
-   arm-linux-gnueabihf-gcc --version
-   aarch64-linux-gnu-gcc --version
+   arm-linux-gnueabihf-g++ --version
+   aarch64-linux-gnu-g++ --version
    ```
 
 After installing a toolchain, add its `bin` directory to your `PATH` and set
@@ -54,8 +54,8 @@ build scripts automatically expose these tools under their expected names.
 
 ### Troubleshooting
 
-- `Required tool arm-linux-gnueabihf-gcc not found` indicates the ARM compiler
-  is missing or not on your `PATH`. Install `gcc-arm-linux-gnueabihf` and
+- `Required tool arm-linux-gnueabihf-g++ not found` indicates the ARM compiler
+  is missing or not on your `PATH`. Install `g++-arm-linux-gnueabihf` and
   ensure `CROSS_COMPILE_ARM=arm-linux-gnueabihf-` is exported.
 
 ## macOS (Apple Silicon)
@@ -65,11 +65,11 @@ compilers:
 
 ```bash
 brew install qemu e2fsprogs coreutils meson ninja pkg-config
-brew install arm-linux-gnueabihf-gcc aarch64-elf-gcc
+brew install arm-linux-gnueabihf-g++ aarch64-elf-g++
 ```
 
-The build scripts automatically run `brew --prefix` for `arm-linux-gnueabihf-gcc`,
-`aarch64-elf-gcc`, and `e2fsprogs` and prepend their `bin` directories to
+The build scripts automatically run `brew --prefix` for `arm-linux-gnueabihf-g++`,
+`aarch64-elf-g++`, and `e2fsprogs` and prepend their `bin` directories to
 `PATH`. Define the compiler prefixes expected by the build scripts:
 
 ```bash
