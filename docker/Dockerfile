@@ -12,8 +12,8 @@ RUN apt-get update && \
         e2fsprogs \
         flex \
         gawk \
-        gcc-aarch64-linux-gnu \
-        gcc-arm-linux-gnueabihf \
+        g++-aarch64-linux-gnu \
+        g++-arm-linux-gnueabihf \
         git \
         graphviz \
         libgit-repository-perl \
