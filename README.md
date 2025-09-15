@@ -38,6 +38,17 @@ L4ReRust depends on a checkout of the upstream `l4re-core` repository. Run
 `scripts/update_l4re_core.sh` to clone or refresh this source tree. The script
 requires `git` and network access to fetch updates.
 
+To pin `l4re-core` to a specific revision, pass the desired branch or commit as
+an argument or via the `L4RE_CORE_REV` environment variable. If no revision is
+specified, `origin/master` is used.
+
+Examples:
+
+```bash
+scripts/update_l4re_core.sh my-feature-branch   # checkout a branch
+L4RE_CORE_REV=abc123 scripts/update_l4re_core.sh  # checkout a commit
+```
+
 The build scripts invoke this step automatically, but you can call it manually
 when developing locally to ensure `l4re-core` is up to date.
 
