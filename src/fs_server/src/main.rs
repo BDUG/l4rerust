@@ -7,6 +7,7 @@
 use fatfs::{FileSystem, FsOptions};
 use l4re::sys::{l4re_env, l4re_env_get_cap};
 use l4_sys::{l4_ipc_error, l4_msgtag, l4_utcb, l4_utcb_br};
+use slab::Slab;
 use std::cmp::min;
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -91,7 +92,7 @@ unsafe fn run() {
     let fs = FileSystem::new(disk, FsOptions::new()).expect("failed to mount FAT32 volume");
     // Leak filesystem to obtain 'static references for open file handles.
     let fs: &'static FileSystem<VirtioDisk> = Box::leak(Box::new(fs));
-    let mut handles: Vec<Option<fatfs::File<'static, VirtioDisk>>> = Vec::new();
+    let mut handles: Slab<fatfs::File<'static, VirtioDisk>> = Slab::new();
 
     // Ready to serve requests.
     println!("filesystem server ready");
@@ -120,11 +121,7 @@ unsafe fn run() {
                 if let Some(p) = path.and_then(|p| resolve_path(&p)) {
                     match fs.root_dir().create_file(&p) {
                         Ok(f) => {
-                            let fd = handles.iter().position(|h| h.is_none()).unwrap_or_else(|| {
-                                handles.push(None);
-                                handles.len() - 1
-                            });
-                            handles[fd] = Some(f);
+                            let fd = handles.insert(f);
                             mr[0] = fd as u64;
                         }
                         Err(e) => {
@@ -139,7 +136,8 @@ unsafe fn run() {
             2 => {
                 let fd = mr[1] as usize;
                 let len = mr[2] as usize;
-                if let Some(Some(file)) = handles.get_mut(fd) {
+                if handles.contains(fd) {
+                    let file = &mut handles[fd];
                     let mut buf = vec![0u8; min(len, BR_DATA_MAX)];
                     match file.read(&mut buf) {
                         Ok(n) => {
@@ -157,7 +155,8 @@ unsafe fn run() {
             // 3: write to descriptor. MR1=fd, data in BRs.
             3 => {
                 let fd = mr[1] as usize;
-                if let Some(Some(file)) = handles.get_mut(fd) {
+                if handles.contains(fd) {
+                    let file = &mut handles[fd];
                     let data = unsafe { br_read_bytes() };
                     match file.write(&data) {
                         Ok(n) => mr[0] = n as u64,
@@ -170,12 +169,9 @@ unsafe fn run() {
             // 4: close descriptor. MR1=fd.
             4 => {
                 let fd = mr[1] as usize;
-                if let Some(slot) = handles.get_mut(fd) {
-                    if slot.take().is_some() {
-                        mr[0] = 0;
-                    } else {
-                        mr[0] = (-(EBADF as i64)) as u64;
-                    }
+                if handles.contains(fd) {
+                    handles.remove(fd);
+                    mr[0] = 0;
                 } else {
                     mr[0] = (-(EBADF as i64)) as u64;
                 }
