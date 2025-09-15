@@ -67,11 +67,11 @@ brew install qemu e2fsprogs coreutils meson ninja pkg-config
 brew install arm-linux-gnueabihf-gcc aarch64-elf-gcc
 ```
 
-Ensure the Homebrew prefixes are in your `PATH` and define the compiler
-prefixes expected by the build scripts:
+The build scripts automatically run `brew --prefix` for `arm-linux-gnueabihf-gcc`,
+`aarch64-elf-gcc`, and `e2fsprogs` and prepend their `bin` directories to
+`PATH`. Define the compiler prefixes expected by the build scripts:
 
 ```bash
-export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-elf-gcc)/bin:$PATH"
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
 # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
@@ -93,5 +93,5 @@ scripts/build.sh --test  # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
 Some tools, such as `mke2fs` from `e2fsprogs`, live outside Homebrew's default
-`bin` prefix; the `PATH` example above includes these locations.
+`bin` prefix, but the build scripts add these directories automatically.
 
