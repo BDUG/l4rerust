@@ -37,14 +37,15 @@ the expected prefixes:
 ```bash
 export PATH=/path/to/toolchain/bin:$PATH
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-linux-gnu-
+export CROSS_COMPILE_ARM64=aarch64-elf-
 ```
 
 Verify each compiler is on your `PATH` before invoking `scripts/build.sh` or
 `setup`.
 
 When these variables are unset, the scripts attempt to choose sensible
-defaults based on `uname`.
+defaults based on `uname`; `CROSS_COMPILE_ARM64` falls back to the
+`aarch64-elf-` prefix.
 
 The build scripts rely on several GNU utilities such as `timeout`, `stat`, and
 `truncate`. Ensure GNU versions of these tools are available in your `PATH`;
@@ -72,7 +73,7 @@ prefixes expected by the build scripts:
 ```bash
 export PATH="$(brew --prefix e2fsprogs)/bin:$(brew --prefix arm-linux-gnueabihf-gcc)/bin:$(brew --prefix aarch64-elf-gcc)/bin:$PATH"
 export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
-export CROSS_COMPILE_ARM64=aarch64-elf-
+# CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
 macOS does not ship GNU `timeout` or several other GNU utilities required by
@@ -88,8 +89,7 @@ With the environment set up, a smoke test of the build can be run with:
 
 ```bash
 CROSS_COMPILE_ARM=arm-linux-gnueabihf- \
-CROSS_COMPILE_ARM64=aarch64-elf- \
-scripts/build.sh --test
+scripts/build.sh --test  # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
 Some tools, such as `mke2fs` from `e2fsprogs`, live outside Homebrew's default
