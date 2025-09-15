@@ -47,9 +47,10 @@ When these variables are unset, the scripts attempt to choose sensible
 defaults based on `uname`; `CROSS_COMPILE_ARM64` falls back to the
 `aarch64-elf-` prefix.
 
-The build scripts rely on several GNU utilities such as `timeout`, `stat`, and
+The build scripts rely on GNU utilities such as `timeout`, `stat`, and
 `truncate`. Ensure GNU versions of these tools are available in your `PATH`;
-on macOS they are installed by the `coreutils` package with a `g` prefix.
+on macOS they are installed by the `coreutils` package with a `g` prefix. The
+build scripts automatically expose these tools under their expected names.
 
 ### Troubleshooting
 
@@ -76,14 +77,10 @@ export CROSS_COMPILE_ARM=arm-linux-gnueabihf-
 # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
-macOS does not ship GNU `timeout` or several other GNU utilities required by
-the build. The `coreutils` formula installs them with a `g` prefix (e.g.,
-`gtimeout`). Either invoke these `g`-prefixed tools directly or alias them to
-the expected names:
-
-```bash
-alias timeout=gtimeout
-```
+macOS does not ship GNU `timeout` or several other utilities required by the
+build. The `coreutils` formula installs them with a `g` prefix (e.g.,
+`gtimeout`). The build scripts automatically create aliases so these tools are
+available as `timeout`, `stat`, and `truncate`.
 
 With the environment set up, a smoke test of the build can be run with:
 

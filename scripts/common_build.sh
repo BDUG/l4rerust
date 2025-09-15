@@ -140,5 +140,26 @@ validate_tools() {
     echo "Unable to determine gmake version from '$make_version'" >&2
     exit 1
   fi
+
+  setup_macos_coreutils
+}
+
+# Create temporary aliases for GNU coreutils on macOS.
+setup_macos_coreutils() {
+  if [[ $(uname -s) != "Darwin" || -n "${GNU_COREUTILS_SETUP_DONE:-}" ]]; then
+    return
+  fi
+  GNU_COREUTILS_SETUP_DONE=1
+
+  local alias_dir
+  alias_dir=$(mktemp -d)
+  for util in stat truncate timeout; do
+    local gutil="g${util}"
+    if command -v "$gutil" >/dev/null 2>&1; then
+      ln -sf "$(command -v "$gutil")" "$alias_dir/$util"
+    fi
+  done
+  PATH="$alias_dir:$PATH"
+  export PATH
 }
 
