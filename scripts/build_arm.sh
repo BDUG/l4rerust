@@ -265,15 +265,15 @@ debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/
 debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
 # Set up SSH configuration and host keys
-mkdir -p files/lsb_root/etc/ssh
+mkdir -p config/lsb_root/etc/ssh
 debugfs -w -R "mkdir /etc/ssh" "$lsb_img" >/dev/null
-chmod 0644 files/lsb_root/etc/ssh/sshd_config
+chmod 0644 config/lsb_root/etc/ssh/sshd_config
 hostkey_tmp=$(mktemp)
 ssh-keygen -t rsa -N '' -f "$hostkey_tmp" >/dev/null
-cp "$hostkey_tmp" files/lsb_root/etc/ssh/ssh_host_rsa_key
-cp "$hostkey_tmp.pub" files/lsb_root/etc/ssh/ssh_host_rsa_key.pub
-chmod 600 files/lsb_root/etc/ssh/ssh_host_rsa_key files/lsb_root/etc/ssh/ssh_host_rsa_key.pub
-debugfs -w -R "write files/lsb_root/etc/ssh/sshd_config /etc/ssh/sshd_config" "$lsb_img" >/dev/null
+cp "$hostkey_tmp" config/lsb_root/etc/ssh/ssh_host_rsa_key
+cp "$hostkey_tmp.pub" config/lsb_root/etc/ssh/ssh_host_rsa_key.pub
+chmod 600 config/lsb_root/etc/ssh/ssh_host_rsa_key config/lsb_root/etc/ssh/ssh_host_rsa_key.pub
+debugfs -w -R "write config/lsb_root/etc/ssh/sshd_config /etc/ssh/sshd_config" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0644 /etc/ssh/sshd_config" "$lsb_img" >/dev/null
 debugfs -w -R "write $hostkey_tmp /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
@@ -284,14 +284,14 @@ rm "$hostkey_tmp" "$hostkey_tmp.pub"
 # Install systemd into the root filesystem image and staging area
 sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
 if [ -d "$sys_root" ]; then
-  mkdir -p files/lsb_root/usr/lib/systemd
-  mkdir -p files/lsb_root/lib/systemd
+  mkdir -p config/lsb_root/usr/lib/systemd
+  mkdir -p config/lsb_root/lib/systemd
   if [ -d "$sys_root/usr/lib/systemd" ]; then
-    cp -r "$sys_root/usr/lib/systemd/"* files/lsb_root/usr/lib/systemd/ 2>/dev/null || true
+    cp -r "$sys_root/usr/lib/systemd/"* config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
   fi
   if [ -f "$sys_root/lib/systemd/systemd" ]; then
-    cp "$sys_root/lib/systemd/systemd" files/lsb_root/lib/systemd/systemd
-    cp "$sys_root/lib/systemd/systemd" files/lsb_root/usr/lib/systemd/systemd
+    cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
+    cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
     debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
     debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
     debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
@@ -313,14 +313,14 @@ if [ -d "$sys_root" ]; then
 fi
 
 # Install systemd unit files into the image
-units_dir="files/systemd"
+units_dir="config/systemd"
 if [ -d "$units_dir" ]; then
-  mkdir -p files/lsb_root/lib/systemd/system
+  mkdir -p config/lsb_root/lib/systemd/system
   debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
   for unit in "$units_dir"/*.service; do
     [ -f "$unit" ] || continue
     base="$(basename "$unit")"
-    cp "$unit" files/lsb_root/lib/systemd/system/
+    cp "$unit" config/lsb_root/lib/systemd/system/
     debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
     debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
   done
@@ -329,11 +329,11 @@ fi
 # Enable services
 enable_service() {
   local name="$1"
-  local unit="files/systemd/${name}.service"
+  local unit="config/systemd/${name}.service"
   if [ -f "$unit" ]; then
-    mkdir -p files/lsb_root/etc/systemd/system/multi-user.target.wants
+    mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
     ln -sf ../../../../lib/systemd/system/${name}.service \
-      files/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
+      config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
     debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
     debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
     debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
