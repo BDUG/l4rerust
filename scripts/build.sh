@@ -39,7 +39,7 @@ HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
 (
   cd "$REPO_ROOT/src" &&
   "$HAM_BIN" init -u https://github.com/kernkonzept/manifest.git &&
-  "$HAM_BIN" sync l4re-core
+  "$HAM_BIN" sync l4re-core fiasco
 )
 
 detect_cross_compilers

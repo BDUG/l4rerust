@@ -36,7 +36,7 @@ if [ "$cmd" != "clean" ]; then
   (
     cd "$SCRIPT_DIR/../src" &&
     ham init -u https://github.com/kernkonzept/manifest.git &&
-    ham sync l4re-core
+    ham sync l4re-core fiasco
   )
 fi
 
