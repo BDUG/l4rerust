@@ -64,10 +64,8 @@ against it automatically.
 To rebuild manually outside of the script:
 
 ```
-cd src/l4rust
 cargo build -p l4re-libc --release
 export LIBRARY_PATH=$(pwd)/target/release:${LIBRARY_PATH}
-cd -
 gmake
 ```
 

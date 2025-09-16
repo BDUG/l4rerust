@@ -1,5 +1,17 @@
 [workspace]
-members = ["tools/driver_picker", "src/linux_shims", "src/driver", "src/virtio_frontend", "src/l4rust/l4re-libc"]
+members = [
+    "tools/driver_picker",
+    "src/linux_shims",
+    "src/driver",
+    "src/virtio_frontend",
+    "crates/core-ffi-helpers",
+    "crates/l4-sys",
+    "crates/l4",
+    "crates/l4_derive",
+    "crates/l4re",
+    "crates/l4re-libc",
+    "crates/net-client",
+]
 
 [profile.dev]
 panic = "abort"

@@ -16,7 +16,7 @@ version = "1.0"
 default-features = false
 
 [dependencies.l4_sys]
-path = "../l4-sys-rust"
+path = "../l4-sys"
 
 [dependencies.num]
 version = "0.4"

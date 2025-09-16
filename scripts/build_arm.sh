@@ -69,12 +69,9 @@ fi
 scripts/setup.sh --non-interactive
 
 # Build the Rust libc crate so other crates can link against it
-(
-  cd src/l4rust
-  cargo build -p l4re-libc --release
-)
+cargo build -p l4re-libc --release
 # Ensure Rust crates pick up the freshly built static libc
-export LIBRARY_PATH="$(pwd)/src/l4rust/target/release:${LIBRARY_PATH:-}"
+export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 
 # Build a statically linked Bash for ARM and ARM64
 build_bash() {

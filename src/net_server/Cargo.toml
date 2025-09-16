@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-l4 = { path = "../l4rust/l4-rust" }
-l4re = { path = "../l4rust/l4re-rust" }
-l4re-libc = { path = "../l4rust/l4re-libc" }
+l4 = { path = "../../crates/l4" }
+l4re = { path = "../../crates/l4re" }
+l4re-libc = { path = "../../crates/l4re-libc" }
 smoltcp = { version = "0.12.0", default-features = false, features = ["std", "proto-ipv4", "socket-udp", "socket-tcp", "medium-ethernet"] }
 
 [workspace]

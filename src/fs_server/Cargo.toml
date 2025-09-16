@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-l4re = { path = "../l4rust/l4re-rust" }
-l4re-libc = { path = "../l4rust/l4re-libc" }
+l4re = { path = "../../crates/l4re" }
+l4re-libc = { path = "../../crates/l4re-libc" }
 fatfs = "0.3"
 libc = "0.2"
 slab = "0.4"

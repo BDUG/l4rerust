@@ -1,10 +1,20 @@
 PKGDIR	= .
 L4DIR	?= $(PKGDIR)/../..
 
-TARGET = l4re-rust l4-rust l4-sys-rust libl4re-wrapper net-client
+TARGET = libl4re-wrapper
 
-l4-sys-rust: libl4re-wrapper
-l4-rust: l4-sys-rust
-l4re-rust: l4-rust l4_derive-rust
+CRATE_DIRS = \
+	../../crates/l4-sys \
+	../../crates/l4 \
+	../../crates/l4re \
+	../../crates/l4_derive \
+	../../crates/net-client
+
+.PHONY: $(CRATE_DIRS)
+
+all: $(CRATE_DIRS)
+
+$(CRATE_DIRS): libl4re-wrapper
+	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 include $(L4DIR)/mk/subdir.mk

@@ -7,5 +7,5 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-l4re = { path = "../l4re-rust" }
-l4 = { path = "../l4-rust" }
+l4re = { path = "../l4re" }
+l4 = { path = "../l4" }
