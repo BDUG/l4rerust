@@ -19,6 +19,27 @@ if [ "$cmd" = "--non-interactive" ]; then
   cmd="all"
 fi
 
+if [ "$cmd" != "clean" ]; then
+  "$SCRIPT_DIR/scripts/setup_l4re_env.sh"
+
+  if ! command -v ham >/dev/null 2>&1; then
+    HAM_BIN="$(resolve_path "$SCRIPT_DIR/ham/ham")"
+    if [ -x "$HAM_BIN" ]; then
+      PATH="$(dirname "$HAM_BIN"):$PATH"
+      export PATH
+    else
+      echo "ham binary missing after setup" >&2
+      exit 1
+    fi
+  fi
+
+  (
+    cd "$SCRIPT_DIR/src" &&
+    ham init -u https://github.com/kernkonzept/manifest.git &&
+    ham sync l4re-core
+  )
+fi
+
 # check we're in the right directory when needed
 if [ "$cmd" != "clean" ] && [ ! -d src/l4 -o ! -d src/fiasco ]; then
   echo "Call setup as ./$(basename $0) in the right directory"
