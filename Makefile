@@ -7,16 +7,16 @@ all:
 	fi
 
 clean:
-	@./setup clean
+	@scripts/setup.sh clean
 
 setup:
 	@if [ -d obj ]; then                                                            \
           echo "Snapshot has already been setup. Proceed with 'gmake setup' or 'gmake clean'.";    \
 	else                                                                            \
 	  export PATH=$$(pwd)/bin:$$PATH;                                               \
-	  chmod +x ./setup;     							\
-	  ./setup config || exit 1;                                           		\
-	  ./setup setup || exit 1;                                                      \
+	  chmod +x scripts/setup.sh;     							\
+	  scripts/setup.sh config || exit 1;                                           		\
+	  scripts/setup.sh setup || exit 1;                                                      \
 	  echo ====================================================================;    \
 	  echo ;                                                                        \
           echo Your L4Re tree is set up now. Type 'gmake' to build the tree. This;       \

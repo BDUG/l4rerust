@@ -46,7 +46,7 @@ ARTIFACTS_DIR="out"
 
 # Start from a clean state
 if [ "$clean" = true ]; then
-  ./setup clean
+  scripts/setup.sh clean
 fi
 
 mkdir -p "$ARTIFACTS_DIR"
@@ -64,9 +64,9 @@ elif [ -f scripts/l4re.config ]; then
   mkdir -p obj
   cp scripts/l4re.config obj/.config
 else
-  ./setup config
+  scripts/setup.sh config
 fi
-./setup --non-interactive
+scripts/setup.sh --non-interactive
 
 # Build the Rust libc crate so other crates can link against it
 (
