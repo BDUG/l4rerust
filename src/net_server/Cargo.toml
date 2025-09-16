@@ -8,3 +8,5 @@ l4 = { path = "../l4rust/l4-rust" }
 l4re = { path = "../l4rust/l4re-rust" }
 l4re-libc = { path = "../l4rust/l4re-libc" }
 smoltcp = { version = "0.12.0", default-features = false, features = ["std", "proto-ipv4", "socket-udp", "socket-tcp", "medium-ethernet"] }
+
+[workspace]

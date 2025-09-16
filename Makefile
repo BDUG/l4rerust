@@ -90,10 +90,10 @@ obj/systemd/%/systemd:
 	@scripts/build.sh --no-clean
 
 EXAMPLE_CRATES := \
-src/ipc-example/client \
-src/ipc-example/server \
 src/fs_server \
-src/net_server
+src/net_server \
+src/driver_server \
+src/examples/driver_client
 
 examples:
 	@for crate in $(EXAMPLE_CRATES); do \
