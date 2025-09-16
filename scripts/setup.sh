@@ -7,7 +7,7 @@ set -e
 # Source shared build helpers.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/common_build.sh
-source "$SCRIPT_DIR/scripts/common_build.sh"
+source "$SCRIPT_DIR/common_build.sh"
 
 # Handle optional non-interactive mode which runs both config and setup in
 # one go. When invoked as `scripts/setup.sh --non-interactive` the script will skip
@@ -20,7 +20,7 @@ if [ "$cmd" = "--non-interactive" ]; then
 fi
 
 if [ "$cmd" != "clean" ]; then
-  "$SCRIPT_DIR/scripts/setup_l4re_env.sh"
+  "$SCRIPT_DIR/setup_l4re_env.sh"
 
   if ! command -v ham >/dev/null 2>&1; then
     HAM_BIN="$(resolve_path "$SCRIPT_DIR/ham/ham")"
@@ -34,7 +34,7 @@ if [ "$cmd" != "clean" ]; then
   fi
 
   (
-    cd "$SCRIPT_DIR/src" &&
+    cd "$SCRIPT_DIR/../src" &&
     ham init -u https://github.com/kernkonzept/manifest.git &&
     ham sync l4re-core
   )
