@@ -26,6 +26,17 @@ unsafe fn br_read_bytes() -> Vec<u8> {
     slice.to_vec()
 }
 
+/// Read a byte slice from buffer registers into the provided buffer.
+unsafe fn br_read_bytes_into(buf: &mut Vec<u8>) -> usize {
+    let br = &(*l4_utcb_br()).br;
+    let len = min(br[0] as usize, BR_DATA_MAX);
+    let ptr = br.as_ptr().add(1) as *const u8;
+    let slice = std::slice::from_raw_parts(ptr, len);
+    buf.clear();
+    buf.extend_from_slice(slice);
+    len
+}
+
 /// Read a UTF-8 path string from buffer registers.
 unsafe fn br_read_path() -> Option<String> {
     let data = br_read_bytes();
@@ -100,6 +111,8 @@ unsafe fn run() {
     // IPC loop handling filesystem calls.
     let mut label = 0u64;
     let mut tag = l4::l4_ipc_wait(l4_utcb(), &mut label, l4::l4_timeout_t { raw: 0 });
+    let mut read_buf: Vec<u8> = Vec::with_capacity(BR_DATA_MAX);
+    let mut write_buf: Vec<u8> = Vec::with_capacity(BR_DATA_MAX);
     loop {
         if l4_ipc_error(tag, l4_utcb()) != 0 {
             tag = l4::l4_ipc_wait(l4_utcb(), &mut label, l4::l4_timeout_t { raw: 0 });
@@ -138,16 +151,21 @@ unsafe fn run() {
                 let len = mr[2] as usize;
                 if handles.contains(fd) {
                     let file = &mut handles[fd];
-                    let mut buf = vec![0u8; min(len, BR_DATA_MAX)];
-                    match file.read(&mut buf) {
+                    let read_len = min(len, BR_DATA_MAX);
+                    if read_buf.len() < read_len {
+                        read_buf.resize(read_len, 0);
+                    }
+                    let result = file.read(&mut read_buf[..read_len]);
+                    match result {
                         Ok(n) => {
-                            unsafe { br_write_bytes(&buf[..n]); }
+                            unsafe { br_write_bytes(&read_buf[..n]); }
                             mr[0] = n as u64;
                         }
                         Err(e) => {
                             mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64;
                         }
                     }
+                    read_buf.clear();
                 } else {
                     mr[0] = (-(EBADF as i64)) as u64;
                 }
@@ -157,8 +175,10 @@ unsafe fn run() {
                 let fd = mr[1] as usize;
                 if handles.contains(fd) {
                     let file = &mut handles[fd];
-                    let data = unsafe { br_read_bytes() };
-                    match file.write(&data) {
+                    let data_len = unsafe { br_read_bytes_into(&mut write_buf) };
+                    let result = file.write(&write_buf[..data_len]);
+                    write_buf.clear();
+                    match result {
                         Ok(n) => mr[0] = n as u64,
                         Err(e) => mr[0] = (-(io_to_errno(e.kind()) as i64)) as u64,
                     }
