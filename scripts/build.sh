@@ -95,10 +95,10 @@ build_bash() {
   (
     cd "$bash_src_dir"
     gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
       ./configure --host="$host" --without-bash-malloc
     gmake clean
-    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
       gmake STATIC_LDFLAGS=-static
     cp bash "$REPO_ROOT/$out_dir/"
   )
