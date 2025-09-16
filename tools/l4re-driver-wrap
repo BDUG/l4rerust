@@ -59,7 +59,7 @@ if [[ -z "${LINUX_SRC:-}" ]]; then
 fi
 
 # Step 1: run driver_picker selection/extraction tool
-picker_output=$(cargo run --manifest-path driver_picker/Cargo.toml -- --linux-src "$LINUX_SRC")
+picker_output=$(cargo run --manifest-path tools/driver_picker/Cargo.toml -- --linux-src "$LINUX_SRC")
 echo "$picker_output"
 workspace=$(echo "$picker_output" | sed -n 's/^Workspace: //p' | tail -n1)
 manifest="$workspace/driver.yaml"

@@ -34,7 +34,7 @@ generated manifest is used.
 
 ## Troubleshooting
 
-* Ensure the `driver_picker` tool builds successfully and that `LINUX_SRC`
+* Ensure the `tools/driver_picker` tool builds successfully and that `LINUX_SRC`
   points to a valid kernel tree.
 * If compilation fails, verify that cross-compilation toolchains referenced by
   the `CROSS_COMPILE` environment variable are installed.
