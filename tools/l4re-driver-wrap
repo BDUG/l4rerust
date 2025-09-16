@@ -86,7 +86,7 @@ echo "Scaffolding generated under $src_dir"
 cargo build --manifest-path src/driver_server/Cargo.toml --release
 
 # Step 4: create L4Re package
-pkg_dir="src/pkg/$DRIVER"
+pkg_dir="pkg/$DRIVER"
 mkdir -p "$pkg_dir"
 cat > "$pkg_dir/Makefile" <<PKG
 PKGDIR ?= .

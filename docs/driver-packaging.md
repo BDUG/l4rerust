@@ -2,7 +2,7 @@
 
 The `tools/l4re-driver-wrap` helper bundles driver selection, build scaffolding
 generation, compilation of the virtio-enabled server, and L4Re packaging into a
-single command. It produces a package under `src/pkg/<driver>/` that can be
+single command. It produces a package under `pkg/<driver>/` that can be
 consumed by the L4Re build system.
 
 ## Basic usage
