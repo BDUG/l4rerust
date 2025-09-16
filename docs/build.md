@@ -9,16 +9,16 @@ instructions.
 ## Repository setup
 
 Before running any of the build scripts, the L4Re snapshot must be configured.
-The setup script now provides a unified, non-interactive entry point which
+The `scripts/setup.sh` helper now provides a unified, non-interactive entry point which
 performs both the configuration and setup phases in a single call:
 
 ```bash
-./setup --non-interactive
+scripts/setup.sh --non-interactive
 ```
 
 This generates the necessary configuration files and Makefiles using sensible
-defaults. The traditional interactive invocation (`./setup config` followed by
-`./setup setup` or `gmake setup`) remains available for manual configuration.
+defaults. The traditional interactive invocation (`scripts/setup.sh config` followed by
+`scripts/setup.sh setup` or `gmake setup`) remains available for manual configuration.
 
 ## Containerized build
 
@@ -37,8 +37,8 @@ so nothing else needs to be installed on the host.
 
 For non-interactive Docker builds, the scripts look for an existing L4Re
 configuration in `/workspace/.config` or `scripts/l4re.config`. If either file
-is present, it is copied to `obj/.config` before running `setup`, allowing
-developers to tailor the build by editing `scripts/l4re.config`.
+is present, it is copied to `obj/.config` before running `scripts/setup.sh`,
+allowing developers to tailor the build by editing `scripts/l4re.config`.
 
 To boot the built image on your host, run:
 

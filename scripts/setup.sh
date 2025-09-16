@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/scripts/common_build.sh"
 
 # Handle optional non-interactive mode which runs both config and setup in
-# one go. When invoked as `./setup --non-interactive` the script will skip
+# one go. When invoked as `scripts/setup.sh --non-interactive` the script will skip
 # prompts and execute the combined steps automatically.
 cmd="$1"
 non_interactive=0
