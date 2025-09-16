@@ -66,7 +66,9 @@ scripts/build.sh          # builds natively
 CROSS_COMPILE=aarch64-elf- scripts/build.sh  # CROSS_COMPILE_ARM64 defaults to aarch64-elf-
 ```
 
-Build artifacts are placed under `out/`. 
+Pass `--clean` (the default) to force removal of previous build directories or
+`--no-clean` to reuse them for incremental builds. Build artifacts are placed
+under `out/`.
 
 **Fallback**, to cross-compile inside a container, run:
 

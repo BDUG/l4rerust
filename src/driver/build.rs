@@ -23,7 +23,7 @@ fn main() {
         }
     }
 
-    // Mirror CROSS_COMPILE setup from scripts/build.sh
+    // Mirror the unified scripts/build.sh handling of the CROSS_COMPILE prefix
     if let Ok(prefix) = env::var("CROSS_COMPILE") {
         build.compiler(format!("{}g++", prefix));
         build.archiver(format!("{}ar", prefix));

@@ -48,9 +48,9 @@ scripts/runqemu.sh
 
 ## Building for ARM
 
-Use `scripts/build.sh` to build the project. By default, previous build
-artifacts are removed before compilation. Passing `--no-clean` skips this
-cleanup.
+Use `scripts/build.sh` to build the project. The script removes previous build
+artifacts before compilation (the same effect as passing `--clean`). Provide
+`--no-clean` to skip this cleanup when iterating.
 
 Built components and images are collected under the `out/` directory. To boot
 an image on your host, run `scripts/runqemu.sh` and optionally pass the path to
