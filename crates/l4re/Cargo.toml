@@ -11,9 +11,9 @@ path = "lib.rs"
 bindgen = "0.68"
 
 [dependencies.l4]
-path = "../l4-rust"
+path = "../l4"
 # ToDo: make this conditional
 default-features = false
 
 [dependencies.l4_derive]
-path = "../l4_derive-rust"
+path = "../l4_derive"
