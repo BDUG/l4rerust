@@ -1,6 +1,8 @@
 FROM ubuntu:22.04
 
-RUN apt-get update && \
+RUN dpkg --add-architecture armhf \
+    && dpkg --add-architecture arm64 \
+    && apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         bison \
         build-essential \
@@ -16,6 +18,8 @@ RUN apt-get update && \
         g++-arm-linux-gnueabihf \
         git \
         graphviz \
+        libcap-dev:arm64 \
+        libcap-dev:armhf \
         libgit-repository-perl \
         libncurses-dev \
         liburi-perl \
