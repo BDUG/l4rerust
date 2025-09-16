@@ -41,7 +41,7 @@ if [ "$cmd" != "clean" ]; then
 fi
 
 # check we're in the right directory when needed
-if [ "$cmd" != "clean" ] && [ ! -d src/l4 -o ]; then
+if [ "$cmd" != "clean" ] && [ ! -d src/l4 ]; then
   echo "Call setup as ./$(basename $0) in the right directory"
   exit 1
 fi
