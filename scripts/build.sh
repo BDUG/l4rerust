@@ -156,7 +156,8 @@ build_systemd() {
     rm -rf "$builddir"
     cat > cross.txt <<EOF
 [binaries]
-c = '${cross}g++'
+c = '${cross}gcc'
+cpp = '${cross}g++'
 ar = '${cross}ar'
 strip = '${cross}strip'
 
