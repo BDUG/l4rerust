@@ -117,6 +117,16 @@ if [ "$need_bash" = true ]; then
   BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
   bash_src_dir=$(mktemp -d src/bash-XXXXXX)
   curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
+  bash_patch_dir="$SCRIPT_DIR/patches/bash"
+  if [ -d "$bash_patch_dir" ]; then
+    (
+      cd "$bash_src_dir"
+      for patch_file in "$bash_patch_dir"/*.patch; do
+        [ -e "$patch_file" ] || continue
+        patch -p1 -N < "$patch_file"
+      done
+    )
+  fi
   build_bash arm "$CROSS_COMPILE_ARM"
   build_bash arm64 "$CROSS_COMPILE_ARM64"
   rm -rf "$bash_src_dir"
