@@ -9,3 +9,5 @@ l4re-libc = { path = "../l4rust/l4re-libc" }
 fatfs = "0.3"
 libc = "0.2"
 slab = "0.4"
+
+[workspace]
