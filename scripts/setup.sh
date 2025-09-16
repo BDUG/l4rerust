@@ -674,7 +674,7 @@ do_setup()
     fi
   fi
 
-  common_paths=$(pwd)/files:$(pwd)/files/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
+  common_paths=$(pwd)/config:$(pwd)/config/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
 
   if [ "$CONF_DO_ARM" ]; then
     local odir=obj/l4/arm-v7
