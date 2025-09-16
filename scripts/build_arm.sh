@@ -235,10 +235,10 @@ fi
 
 # Link the OpenSSH server binary into the package directory so the
 # L4Re build system can pick it up when creating images.
-mkdir -p src/pkg/openssh
+mkdir -p pkg/openssh
 for arch in arm arm64; do
   if [ -f "$ARTIFACTS_DIR/openssh/$arch/sshd" ]; then
-    ln -sf "../../$ARTIFACTS_DIR/openssh/$arch/sshd" src/pkg/openssh/sshd
+    ln -sf "../../$ARTIFACTS_DIR/openssh/$arch/sshd" pkg/openssh/sshd
   fi
 done
 
