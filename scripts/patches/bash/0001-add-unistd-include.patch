@@ -1,17 +1,14 @@
 diff --git a/lib/termcap/tparam.c b/lib/termcap/tparam.c
-index 7ef112b3..b6df1f8d 100644
+index c4bff088e73c5e382935398a23c3fcaf568e81c2..88bcb3056aa4b8f0843b0c7c87fa7ccbdd8e26da 100644
 --- a/lib/termcap/tparam.c
 +++ b/lib/termcap/tparam.c
-@@ -22,9 +22,9 @@ extern char *malloc ();
- extern char *realloc ();
+@@ -30,6 +30,10 @@ extern char *realloc ();
  #endif
  
--#ifdef HAVE_UNISTD_H
--#include <unistd.h>
--#endif
 +#if defined (HAVE_UNISTD_H) || defined (__linux__)
 +#  include <unistd.h>
 +#endif
- 
++
  #if defined (HAVE_STRING_H)
  #include <string.h>
+ #endif
