@@ -1,0 +1,4 @@
+Package: libcap
+Section: libs
+Architecture: any
+Description: Linux capabilities library staged from out/libcap/<arch>

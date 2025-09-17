@@ -26,6 +26,14 @@ dependency once the image boots. The auxiliary utilities produced by libcap
 (`capsh`, `getcap`, `setcap`, etc.) are not shipped by default, but you can
 copy them into the image manually if you need them for debugging.
 
+The libcap artifacts can also be published for other components via the new
+`pkg/libcap` package. After `scripts/build.sh` stages the headers, static/shared
+libraries, and pkg-config metadata under `out/libcap/<arch>`, run
+`gmake -C pkg/libcap install L4ARCH=<arch> INSTDIR=<path>` to mirror the runtime
+layout under `$(INSTDIR)`. This reproduces the SONAME symlinks created by
+`scripts/build.sh` so dependent packages see the same directory structure they
+would at runtime.
+
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
 Systemd units interact with L4Re via capabilities exported in `config/cfg/bash.cfg`. Units that need a capability reference it through environment variables named `L4_CAP_<NAME>`. The file server demonstrates this pattern:
