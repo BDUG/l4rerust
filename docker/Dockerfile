@@ -6,6 +6,7 @@ RUN dpkg --add-architecture armhf \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         bison \
         build-essential \
+        cmake \
         cpanminus \
         curl \
         device-tree-compiler \
@@ -20,6 +21,8 @@ RUN dpkg --add-architecture armhf \
         graphviz \
         libcap-dev:arm64 \
         libcap-dev:armhf \
+        libxcrypt-dev:arm64 \
+        libxcrypt-dev:armhf \
         libgit-repository-perl \
         libncurses-dev \
         liburi-perl \
