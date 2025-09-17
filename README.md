@@ -124,6 +124,44 @@ After configuration, build the selected targets as usual:
 cmake --build build
 ```
 
+## Installing and consuming `libl4re-wrapper`
+
+Run the standard install step to stage the static archive, CMake package files,
+and headers into a prefix of your choice:
+
+```bash
+cmake --install build --prefix /opt/l4rerust
+```
+
+The archive and its optional import library are written to the prefix's
+`lib/` directory, headers install under `include/l4/l4rust/`, and
+`lib/pkgconfig/libl4re-wrapper.pc` advertises the same dependencies as the
+original gmake build.
+
+Rust build scripts can continue exporting `L4_INCLUDE_DIRS` by reusing the
+pkg-config metadata:
+
+```bash
+export PKG_CONFIG_PATH=/opt/l4rerust/lib/pkgconfig:${PKG_CONFIG_PATH}
+export L4_INCLUDE_DIRS="$(pkg-config --cflags-only-I libl4re-wrapper)"
+```
+
+Crates that use the [`pkg-config`](https://crates.io/crates/pkg-config)
+helper can skip the environment variable entirely and simply query for the
+wrapper library:
+
+```rust
+pkg_config::Config::new().probe("libl4re-wrapper")?;
+```
+
+Consumers that prefer CMake can locate the installed archive with the provided
+package configuration:
+
+```cmake
+find_package(libl4re-wrapper CONFIG REQUIRED)
+target_link_libraries(my-target PRIVATE l4rust::libl4re-wrapper)
+```
+
 ### Staged capability and crypt libraries
 
 `scripts/build.sh` cross-compiles libcap and libcrypt (via libxcrypt) for each
