@@ -47,6 +47,106 @@ validate_tools
 
 ARTIFACTS_DIR="out"
 
+# Convert a component or architecture name into the suffix used by the
+# environment variables that override staging prefixes.
+to_env_suffix() {
+  local value="$1"
+  value="${value//-/_}"
+  printf '%s' "${value^^}"
+}
+
+# Return the override environment variable name for the given component and
+# architecture if one is set.
+component_override_env_var_name() {
+  local component="$1" arch="$2"
+  local component_suffix
+  component_suffix=$(to_env_suffix "$component")
+  local arch_suffix
+  arch_suffix=$(to_env_suffix "$arch")
+
+  local base_var="SYSTEMD_${component_suffix}_PREFIX"
+  local arch_var="${base_var}_${arch_suffix}"
+
+  if [ -n "${!arch_var-}" ]; then
+    printf '%s' "$arch_var"
+    return 0
+  fi
+
+  if [ -n "${!base_var-}" ]; then
+    printf '%s' "$base_var"
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_and_validate_component_override_prefix() {
+  local component="$1" arch="$2" prefix="$3" env_var="$4"
+
+  if [ ! -d "$prefix" ]; then
+    echo "Environment variable $env_var (for $component $arch) points to '$prefix', which does not exist" >&2
+    exit 1
+  fi
+
+  prefix="$(resolve_path "$prefix")"
+
+  local missing=()
+  local subdir
+  for subdir in include lib lib/pkgconfig; do
+    if [ ! -d "$prefix/$subdir" ]; then
+      missing+=("$prefix/$subdir")
+    fi
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "Environment variable $env_var (for $component $arch) points to '$prefix', but the following required directories are missing:" >&2
+    local path
+    for path in "${missing[@]}"; do
+      echo "  - $path" >&2
+    done
+    exit 1
+  fi
+
+  printf '%s' "$prefix"
+}
+
+declare -A SYSTEMD_COMPONENT_PREFIXES=()
+declare -A SYSTEMD_COMPONENT_OVERRIDE_USED=()
+
+component_prefix_path() {
+  local component="$1" arch="$2"
+  printf '%s' "${SYSTEMD_COMPONENT_PREFIXES["$component:$arch"]}"
+}
+
+component_override_used() {
+  local component="$1" arch="$2"
+  [[ "${SYSTEMD_COMPONENT_OVERRIDE_USED["$component:$arch"]:-0}" == 1 ]]
+}
+
+initialize_component_prefixes() {
+  local component arch key env_var prefix
+  for component in libcap libcrypt; do
+    for arch in arm arm64; do
+      key="$component:$arch"
+      if env_var=$(component_override_env_var_name "$component" "$arch"); then
+        prefix="${!env_var}"
+        if [ -z "$prefix" ]; then
+          echo "Environment variable $env_var is set but empty" >&2
+          exit 1
+        fi
+        prefix="$(resolve_and_validate_component_override_prefix "$component" "$arch" "$prefix" "$env_var")"
+        SYSTEMD_COMPONENT_PREFIXES["$key"]="$prefix"
+        SYSTEMD_COMPONENT_OVERRIDE_USED["$key"]=1
+        echo "Using prebuilt $component for $arch from $prefix ($env_var)"
+      else
+        prefix="$REPO_ROOT/$ARTIFACTS_DIR/$component/$arch"
+        SYSTEMD_COMPONENT_PREFIXES["$key"]="$prefix"
+        SYSTEMD_COMPONENT_OVERRIDE_USED["$key"]=0
+      fi
+    done
+  done
+}
+
 # Check whether a component artifact is present and matches the expected
 # version recorded in the VERSION marker file.
 component_is_current() {
@@ -78,6 +178,8 @@ if [ "$clean" = true ]; then
 fi
 
 mkdir -p "$ARTIFACTS_DIR"
+
+initialize_component_prefixes
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
@@ -145,12 +247,16 @@ build_libcap() {
     echo "${cross}g++ targets '$triple', but libcap requires a Linux or L4Re ELF toolchain" >&2
     exit 1
   fi
-  local out_dir="$ARTIFACTS_DIR/libcap/$arch"
+  if component_override_used "libcap" "$arch"; then
+    echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
+    return
+  fi
+  local install_prefix
+  install_prefix="$(component_prefix_path "libcap" "$arch")"
   if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$expected_version"; then
     echo "libcap for $arch already current, skipping"
     return
   fi
-  local install_prefix="$REPO_ROOT/$out_dir"
   rm -rf "$install_prefix"
   mkdir -p "$install_prefix"
   local -a make_args=(
@@ -218,13 +324,17 @@ build_libcrypt() {
     exit 1
   fi
 
-  local out_dir="$ARTIFACTS_DIR/libcrypt/$arch"
+  if component_override_used "libcrypt" "$arch"; then
+    echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
+    return
+  fi
+
+  local install_prefix
+  install_prefix="$(component_prefix_path "libcrypt" "$arch")"
   if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$expected_version"; then
     echo "libcrypt for $arch already current, skipping"
     return
   fi
-
-  local install_prefix="$REPO_ROOT/$out_dir"
   rm -rf "$install_prefix"
   mkdir -p "$install_prefix"
 
@@ -302,6 +412,9 @@ fi
 
 need_libcap=false
 for arch in arm arm64; do
+  if component_override_used "libcap" "$arch"; then
+    continue
+  fi
   if ! component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
     need_libcap=true
     break
@@ -315,12 +428,19 @@ if [ "$need_libcap" = true ]; then
   build_libcap arm64 "$CROSS_COMPILE_ARM64" "$LIBCAP_VERSION"
   rm -rf "$libcap_src_dir"
 else
-  echo "libcap for arm and arm64 already current, skipping"
+  if component_override_used "libcap" arm || component_override_used "libcap" arm64; then
+    echo "libcap builds provided by environment overrides"
+  else
+    echo "libcap for arm and arm64 already current, skipping"
+  fi
 fi
 
 # Build libcrypt (libxcrypt) for ARM and ARM64
 need_libcrypt=false
 for arch in arm arm64; do
+  if component_override_used "libcrypt" "$arch"; then
+    continue
+  fi
   if ! component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
     need_libcrypt=true
     break
@@ -334,7 +454,11 @@ if [ "$need_libcrypt" = true ]; then
   build_libcrypt arm64 "$CROSS_COMPILE_ARM64" "$LIBXCRYPT_VERSION"
   rm -rf "$libxcrypt_src_dir"
 else
-  echo "libcrypt for arm and arm64 already current, skipping"
+  if component_override_used "libcrypt" arm || component_override_used "libcrypt" arm64; then
+    echo "libcrypt builds provided by environment overrides"
+  else
+    echo "libcrypt for arm and arm64 already current, skipping"
+  fi
 fi
 
 # Build systemd for ARM and ARM64
@@ -349,8 +473,10 @@ build_systemd() {
   local host="$triple"
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
-  local libcap_prefix="$REPO_ROOT/$ARTIFACTS_DIR/libcap/$arch"
-  local libcrypt_prefix="$REPO_ROOT/$ARTIFACTS_DIR/libcrypt/$arch"
+  local libcap_prefix
+  libcap_prefix="$(component_prefix_path "libcap" "$arch")"
+  local libcrypt_prefix
+  libcrypt_prefix="$(component_prefix_path "libcrypt" "$arch")"
   if component_is_current "systemd" "$arch" "systemd" "$expected_version"; then
     echo "systemd for $arch already current, skipping"
     return
@@ -671,7 +797,8 @@ if [ -d "$sys_root" ]; then
 fi
 
 # Stage libcap runtime libraries in the root filesystem image
-libcap_stage_dir="$ARTIFACTS_DIR/libcap/arm64/lib"
+libcap_runtime_prefix="$(component_prefix_path "libcap" "arm64")"
+libcap_stage_dir="$libcap_runtime_prefix/lib"
 if [ -d "$libcap_stage_dir" ]; then
   echo "Staging libcap shared libraries for arm64"
   mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
@@ -701,7 +828,8 @@ if [ -d "$libcap_stage_dir" ]; then
 fi
 
 # Stage libcrypt runtime libraries in the root filesystem image
-libcrypt_stage_dir="$ARTIFACTS_DIR/libcrypt/arm64/lib"
+libcrypt_runtime_prefix="$(component_prefix_path "libcrypt" "arm64")"
+libcrypt_stage_dir="$libcrypt_runtime_prefix/lib"
 if [ -d "$libcrypt_stage_dir" ]; then
   echo "Staging libcrypt shared libraries for arm64"
   mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
