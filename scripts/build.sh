@@ -152,7 +152,7 @@ build_libcap() {
     cd "$libcap_src_dir"
     gmake -C libcap distclean >/dev/null 2>&1 || true
     gmake -C libcap clean >/dev/null 2>&1 || true
-    BUILD_CC=gcc CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \\
+    BUILD_CC=gcc CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \
       prefix="$install_prefix" lib=lib gmake -C libcap install
   )
   if [ ! -f "$install_prefix/lib/pkgconfig/libcap.pc" ]; then
