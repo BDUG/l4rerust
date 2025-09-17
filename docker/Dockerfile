@@ -18,9 +18,8 @@ RUN dpkg --add-architecture armhf \
         g++-aarch64-linux-gnu \
         g++-arm-linux-gnueabihf \
         git \
+        gperf \
         graphviz \
-        libxcrypt-dev:arm64 \
-        libxcrypt-dev:armhf \
         libgit-repository-perl \
         libncurses-dev \
         liburi-perl \
