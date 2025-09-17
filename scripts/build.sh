@@ -512,10 +512,12 @@ build_systemd() {
     local idx
     for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
       local prefix="${systemd_stage_prefixes[$idx]}"
-      local pc_dir="$prefix/lib/pkgconfig"
-      if [ -d "$pc_dir" ]; then
-        staged_pkgconfig_dirs+=("$pc_dir")
-      fi
+      local pc_dir
+      for pc_dir in "$prefix/lib/pkgconfig" "$prefix/lib64/pkgconfig"; do
+        if [ -d "$pc_dir" ]; then
+          staged_pkgconfig_dirs+=("$pc_dir")
+        fi
+      done
     done
 
     if [ ${#staged_pkgconfig_dirs[@]} -gt 0 ]; then
@@ -623,10 +625,11 @@ build_systemd() {
     local lib_dir
     for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
       local prefix="${systemd_stage_prefixes[$idx]}"
-      lib_dir="$prefix/lib"
-      if [ -d "$lib_dir" ]; then
-        staged_lib_dirs+=("$lib_dir")
-      fi
+      for lib_dir in "$prefix/lib" "$prefix/lib64"; do
+        if [ -d "$lib_dir" ]; then
+          staged_lib_dirs+=("$lib_dir")
+        fi
+      done
     done
 
     if [ ${#staged_lib_dirs[@]} -gt 0 ]; then
@@ -853,21 +856,30 @@ stage_component_runtime_libraries() {
 
   local runtime_prefix
   runtime_prefix="$(component_prefix_path "$component" "$arch")"
-  local stage_dir="$runtime_prefix/lib"
-  if [ ! -d "$stage_dir" ]; then
+  local -a stage_dirs=()
+  local candidate
+  for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
+    if [ -d "$candidate" ]; then
+      stage_dirs+=("$candidate")
+    fi
+  done
+
+  if [ ${#stage_dirs[@]} -eq 0 ]; then
     return
   fi
 
   declare -A staged_files=()
   declare -A staged_links=()
-  local pattern
-  for pattern in "${patterns[@]}"; do
-    while IFS= read -r -d '' sofile; do
-      staged_files["$sofile"]=1
-    done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
-    while IFS= read -r -d '' solink; do
-      staged_links["$solink"]=1
-    done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
+  local pattern stage_dir
+  for stage_dir in "${stage_dirs[@]}"; do
+    for pattern in "${patterns[@]}"; do
+      while IFS= read -r -d '' sofile; do
+        staged_files["$sofile"]=1
+      done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
+      while IFS= read -r -d '' solink; do
+        staged_links["$solink"]=1
+      done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
+    done
   done
 
   if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
