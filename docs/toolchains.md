@@ -32,7 +32,7 @@ your distribution, Homebrew, or built with
    aarch64-linux-gnu-g++ --version
    ```
 
-4. Install target headers and libraries that are not built in-tree:
+4. (Optional) Install target headers and libraries that are not built in-tree:
 
    ```bash
    sudo dpkg --add-architecture armhf
@@ -41,12 +41,14 @@ your distribution, Homebrew, or built with
    sudo apt install libxcrypt-dev:armhf libxcrypt-dev:arm64
    ```
 
-   `scripts/build.sh` downloads and stages libcap locally, so only the
-   `libxcrypt-dev` packages are required to provide `libcrypt` within each
-   cross sysroot. The matching `libxcrypt-dev` packages provide `libcrypt`
-   within the cross sysroots. Without them the systemd build fails while
-   linking. After installing the missing packages re-run
-   `scripts/build.sh --no-clean` to retry without discarding prior work.
+   `scripts/build.sh` downloads and stages libcap and libcrypt (via libxcrypt)
+   locally under `out/libcap/<arch>` and `out/libcrypt/<arch>`, so the cross
+   sysroots no longer need to supply `libcrypt` by default. Install the
+   distribution packages only if you prefer to consume `libcrypt` from the
+   system-provided sysroots, then rerun `scripts/build.sh --no-clean` to retry
+   without discarding prior work. The staged artifacts can also be installed
+   into other prefixes with `gmake -C pkg/libcap install ...` and
+   `gmake -C pkg/libcrypt install ...`.
 
 After installing a toolchain, add its `bin` directory to your `PATH` and set
 the expected prefixes:

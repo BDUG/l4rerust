@@ -87,6 +87,15 @@ In case of issues with the Docker build container, run:
 ```bash
 docker image rm l4rerust-builder
 ```
+
+### Staged capability and crypt libraries
+
+`scripts/build.sh` cross-compiles libcap and libcrypt (via libxcrypt) for each
+supported architecture. The staged headers, libraries, and pkg-config files are
+written to `out/libcap/<arch>` and `out/libcrypt/<arch>` and can be installed
+into other prefixes with `gmake -C pkg/libcap install ...` or
+`gmake -C pkg/libcrypt install ...`.
+
 ## Further documents
 
 ### Building for ARM
