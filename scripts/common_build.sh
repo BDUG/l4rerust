@@ -109,6 +109,7 @@ validate_tools() {
     mke2fs
     debugfs
     ssh-keygen
+    cmake
     meson
     ninja
     pkg-config
