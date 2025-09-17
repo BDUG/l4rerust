@@ -31,6 +31,20 @@ installed via your distribution, Homebrew, or built with
    aarch64-linux-gnu-g++ --version
    ```
 
+4. Install target headers required for cross-building systemd:
+
+   ```bash
+   sudo dpkg --add-architecture armhf
+   sudo dpkg --add-architecture arm64
+   sudo apt update
+   sudo apt install libcap-dev:armhf libcap-dev:arm64
+   ```
+
+   The systemd build expects libcap headers for each target architecture. The
+   provided Docker image will include these packages once the container fix
+   lands; manual installation is only necessary when building directly on your
+   host machine.
+
 After installing a toolchain, add its `bin` directory to your `PATH` and set
 the expected prefixes:
 
