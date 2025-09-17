@@ -243,9 +243,83 @@ build_systemd() {
   (
     cd "$systemd_src_dir"
     local libcap_pc_dir="$libcap_prefix/lib/pkgconfig"
+    # Meson relies on pkg-config for dependency discovery. Ensure the staged
+    # libcap pkg-config metadata is visible without hiding the rest of the
+    # cross sysroot. Capture the original pkg-config search variables so we can
+    # extend them for the duration of this subshell.
+    local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
+    local old_pkg_config_libdir="${PKG_CONFIG_LIBDIR:-}"
+    local old_pkg_config_sysroot="${PKG_CONFIG_SYSROOT_DIR:-}"
+
+    local sysroot
+    sysroot="$(${cross}gcc --print-sysroot 2>/dev/null || true)"
+    local multiarch
+    multiarch="$(${cross}gcc -print-multiarch 2>/dev/null || true)"
+
+    local new_pkg_config_path="$old_pkg_config_path"
+    local -a pkgconfig_dirs=()
     if [ -d "$libcap_pc_dir" ]; then
-      export PKG_CONFIG_PATH="$libcap_pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-      export PKG_CONFIG_LIBDIR="$libcap_pc_dir${PKG_CONFIG_LIBDIR:+:$PKG_CONFIG_LIBDIR}"
+      pkgconfig_dirs+=("$libcap_pc_dir")
+      if [ -n "$new_pkg_config_path" ]; then
+        new_pkg_config_path="$libcap_pc_dir:$new_pkg_config_path"
+      else
+        new_pkg_config_path="$libcap_pc_dir"
+      fi
+    fi
+
+    if [ -n "$sysroot" ]; then
+      local -a sysroot_pkgconfig_dirs=(
+        "$sysroot/usr/lib/pkgconfig"
+        "$sysroot/usr/share/pkgconfig"
+        "$sysroot/lib/pkgconfig"
+      )
+      if [ -n "$multiarch" ]; then
+        sysroot_pkgconfig_dirs+=(
+          "$sysroot/usr/lib/$multiarch/pkgconfig"
+          "$sysroot/lib/$multiarch/pkgconfig"
+        )
+      fi
+      local dir
+      for dir in "${sysroot_pkgconfig_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+          pkgconfig_dirs+=("$dir")
+        fi
+      done
+    fi
+
+    if [ -n "$old_pkg_config_libdir" ]; then
+      local IFS=':'
+      local old_pkgconfig_dirs=()
+      read -r -a old_pkgconfig_dirs <<<"$old_pkg_config_libdir"
+      pkgconfig_dirs+=("${old_pkgconfig_dirs[@]}")
+    fi
+
+    local new_pkg_config_libdir=""
+    if [ ${#pkgconfig_dirs[@]} -gt 0 ]; then
+      local IFS=':'
+      new_pkg_config_libdir="${pkgconfig_dirs[*]}"
+    fi
+
+    if [ -n "$new_pkg_config_path" ]; then
+      export PKG_CONFIG_PATH="$new_pkg_config_path"
+    else
+      unset PKG_CONFIG_PATH
+    fi
+
+    if [ -n "$new_pkg_config_libdir" ]; then
+      export PKG_CONFIG_LIBDIR="$new_pkg_config_libdir"
+    elif [ -n "$old_pkg_config_libdir" ]; then
+      export PKG_CONFIG_LIBDIR="$old_pkg_config_libdir"
+    else
+      unset PKG_CONFIG_LIBDIR
+    fi
+
+    if [ -n "$sysroot" ]; then
+      export PKG_CONFIG_SYSROOT_DIR="$sysroot"
+    elif [ -n "$old_pkg_config_sysroot" ]; then
+      export PKG_CONFIG_SYSROOT_DIR="$old_pkg_config_sysroot"
+    else
+      unset PKG_CONFIG_SYSROOT_DIR
     fi
     builddir="build-$arch"
     rm -rf "$builddir"
