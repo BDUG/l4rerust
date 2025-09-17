@@ -47,6 +47,31 @@ validate_tools
 
 ARTIFACTS_DIR="out"
 
+# Check whether a component artifact is present and matches the expected
+# version recorded in the VERSION marker file.
+component_is_current() {
+  local component="$1" arch="$2" artifact="$3" expected_version="$4"
+  local component_dir="$ARTIFACTS_DIR/$component/$arch"
+  local artifact_path="$component_dir/$artifact"
+  local version_file="$component_dir/VERSION"
+
+  if [ ! -f "$artifact_path" ]; then
+    return 1
+  fi
+
+  if [ ! -f "$version_file" ]; then
+    return 1
+  fi
+
+  local recorded_version
+  recorded_version=$(<"$version_file") || return 1
+  if [ "$recorded_version" != "$expected_version" ]; then
+    return 1
+  fi
+
+  return 0
+}
+
 # Start from a clean state if requested
 if [ "$clean" = true ]; then
   "$SCRIPT_DIR/setup.sh" clean
@@ -78,7 +103,7 @@ export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 
 # Build a statically linked Bash for ARM and ARM64
 build_bash() {
-  local arch="$1" cross="$2"
+  local arch="$1" cross="$2" expected_version="$3"
   local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
     echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
@@ -87,8 +112,8 @@ build_bash() {
   local host="$triple"
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/bash/$arch"
-  if [ -f "$out_dir/bash" ]; then
-    echo "bash for $arch already built, skipping"
+  if component_is_current "bash" "$arch" "bash" "$expected_version"; then
+    echo "bash for $arch already current, skipping"
     return
   fi
   mkdir -p "$out_dir"
@@ -102,19 +127,21 @@ build_bash() {
       gmake STATIC_LDFLAGS=-static
     cp bash "$REPO_ROOT/$out_dir/"
   )
+  echo "$expected_version" > "$out_dir/VERSION"
 }
+
+BASH_VERSION=5.2.21
+BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 
 need_bash=false
 for arch in arm arm64; do
-  if [ ! -f "$ARTIFACTS_DIR/bash/$arch/bash" ]; then
+  if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
     need_bash=true
     break
   fi
 done
 
 if [ "$need_bash" = true ]; then
-  BASH_VERSION=5.2.21
-  BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
   bash_src_dir=$(mktemp -d src/bash-XXXXXX)
   curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
   bash_patch_dir="$SCRIPT_DIR/patches/bash"
@@ -127,16 +154,16 @@ if [ "$need_bash" = true ]; then
       done
     )
   fi
-  build_bash arm "$CROSS_COMPILE_ARM"
-  build_bash arm64 "$CROSS_COMPILE_ARM64"
+  build_bash arm "$CROSS_COMPILE_ARM" "$BASH_VERSION"
+  build_bash arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION"
   rm -rf "$bash_src_dir"
 else
-  echo "bash for arm and arm64 already built, skipping"
+  echo "bash for arm and arm64 already current, skipping"
 fi
 
 # Build systemd for ARM and ARM64
 build_systemd() {
-  local arch="$1" cross="$2"
+  local arch="$1" cross="$2" expected_version="$3"
   local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* ]]; then
     echo "${cross}g++ targets '$triple', but systemd requires a Linux-targeted toolchain" >&2
@@ -146,8 +173,8 @@ build_systemd() {
   local host="$triple"
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
-  if [ -f "$out_dir/systemd" ]; then
-    echo "systemd for $arch already built, skipping"
+  if component_is_current "systemd" "$arch" "systemd" "$expected_version"; then
+    echo "systemd for $arch already current, skipping"
     return
   fi
   mkdir -p "$out_dir"
@@ -186,11 +213,12 @@ EOF
     DESTDIR="$REPO_ROOT/$out_dir/root" meson install -C "$builddir"
     cp "$REPO_ROOT/$out_dir/root/lib/systemd/systemd" "$REPO_ROOT/$out_dir/"
   )
+  echo "$expected_version" > "$out_dir/VERSION"
 }
 
 # Build OpenSSH for ARM and ARM64
 build_openssh() {
-  local arch="$1" cross="$2"
+  local arch="$1" cross="$2" expected_version="$3"
   local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
     echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
@@ -198,8 +226,8 @@ build_openssh() {
   fi
   local host="$triple"
   local out_dir="$ARTIFACTS_DIR/openssh/$arch"
-  if [ -f "$out_dir/sshd" ]; then
-    echo "openssh for $arch already built, skipping"
+  if component_is_current "openssh" "$arch" "sshd" "$expected_version"; then
+    echo "openssh for $arch already current, skipping"
     return
   fi
   mkdir -p "$out_dir"
@@ -213,47 +241,50 @@ build_openssh() {
       gmake sshd
     cp sshd "$REPO_ROOT/$out_dir/"
   )
+  echo "$expected_version" > "$out_dir/VERSION"
 }
+
+SYSTEMD_VERSION=255.4
+SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
 
 need_systemd=false
 for arch in arm arm64; do
-  if [ ! -f "$ARTIFACTS_DIR/systemd/$arch/systemd" ]; then
+  if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
     need_systemd=true
     break
   fi
 done
 
 if [ "$need_systemd" = true ]; then
-  SYSTEMD_VERSION=255.4
-  SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
   systemd_src_dir=$(mktemp -d src/systemd-XXXXXX)
   curl -L "$SYSTEMD_URL" | tar -xz -C "$systemd_src_dir" --strip-components=1
-  build_systemd arm "$CROSS_COMPILE_ARM"
-  build_systemd arm64 "$CROSS_COMPILE_ARM64"
+  build_systemd arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION"
+  build_systemd arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION"
   rm -rf "$systemd_src_dir"
 else
-  echo "systemd for arm and arm64 already built, skipping"
+  echo "systemd for arm and arm64 already current, skipping"
 fi
 
 # Build OpenSSH for ARM and ARM64
+OPENSSH_VERSION=9.6p1
+OPENSSH_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz"
+
 need_openssh=false
 for arch in arm arm64; do
-  if [ ! -f "$ARTIFACTS_DIR/openssh/$arch/sshd" ]; then
+  if ! component_is_current "openssh" "$arch" "sshd" "$OPENSSH_VERSION"; then
     need_openssh=true
     break
   fi
 done
 
 if [ "$need_openssh" = true ]; then
-  OPENSSH_VERSION=9.6p1
-  OPENSSH_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz"
   openssh_src_dir=$(mktemp -d src/openssh-XXXXXX)
   curl -L "$OPENSSH_URL" | tar -xz -C "$openssh_src_dir" --strip-components=1
-  build_openssh arm "$CROSS_COMPILE_ARM"
-  build_openssh arm64 "$CROSS_COMPILE_ARM64"
+  build_openssh arm "$CROSS_COMPILE_ARM" "$OPENSSH_VERSION"
+  build_openssh arm64 "$CROSS_COMPILE_ARM64" "$OPENSSH_VERSION"
   rm -rf "$openssh_src_dir"
 else
-  echo "openssh for arm and arm64 already built, skipping"
+  echo "openssh for arm and arm64 already current, skipping"
 fi
 
 # Link the OpenSSH server binary into the package directory so the
