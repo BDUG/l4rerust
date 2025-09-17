@@ -1,0 +1,30 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1125,9 +1125,6 @@
+         conf.set10('BPF_FRAMEWORK', deps_found)
+ endif
+ 
+-libmount = dependency('mount',
+-                      version : fuzzer_build ? '>= 0' : '>= 2.30')
+-
+ libfdisk = dependency('fdisk',
+                       version : '>= 2.32',
+                       disabler : true,
+@@ -1959,7 +1956,6 @@
+                         libdl,
+                         libgcrypt,
+                         liblz4,
+-                        libmount,
+                         libopenssl,
+                         librt,
+                         libxz,
+@@ -1998,8 +1994,7 @@
+         install_tag: 'libudev',
+         install_dir : libdir,
+         link_depends : libudev_sym,
+-        dependencies : [libmount,
+-                        libshared_deps,
++        dependencies : [libshared_deps,
+                         userspace],
+         c_args : static_libudev_pic ? [] : ['-fno-PIC'],
+         pic : static_libudev_pic)
