@@ -13,10 +13,14 @@ architecture. By default `scripts/build.sh` downloads both libcap and
 libxcrypt, cross-compiles them with the configured toolchains, and stages the
 headers, libraries, and pkg-config files under `out/libcap/<arch>` and
 `out/libcrypt/<arch>`. Meson picks up these self-contained artifacts when
-building systemd, so external `libxcrypt-dev` packages are no longer required
-in the cross sysroots. You may still install the distribution-provided packages
-if you prefer to rely on them, then rerun `scripts/build.sh --no-clean` to
-retry the systemd build without discarding prior work.
+ building systemd, so external `libxcrypt-dev` packages are no longer required
+ in the cross sysroots. The systemd build also injects `out/libcap/<arch>/lib`
+ (and `out/libcrypt/<arch>/lib`) into `LIBRARY_PATH`/`LD_LIBRARY_PATH` inside
+ the build subshell before Meson/Ninja run, ensuring `${cross}gcc` searches the
+ staged directories even when pkg-config resolves to bare `-lcap` or `-lcrypt`
+ arguments. You may still install the distribution-provided packages if you
+ prefer to rely on them, then rerun `scripts/build.sh --no-clean` to retry the
+ systemd build without discarding prior work.
 
 If you already maintain custom libcap or libxcrypt builds, set the
 `SYSTEMD_LIBCAP_PREFIX` and/or `SYSTEMD_LIBCRYPT_PREFIX` environment variables
