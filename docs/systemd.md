@@ -2,6 +2,13 @@
 
 The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `config/systemd` into the root filesystem. The same process can be invoked with `gmake systemd-image`.
 
+Cross-compiling systemd requires libcap headers for each target architecture. On
+Debian/Ubuntu hosts enable the `armhf` and `arm64` architectures and install
+`libcap-dev:armhf` and `libcap-dev:arm64` (see the detailed commands in
+[`docs/toolchains.md`](./toolchains.md)). The project Docker image will bundle
+these packages once the container fix lands; manual installation is only needed
+when building on your own host.
+
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
 Systemd units interact with L4Re via capabilities exported in `config/cfg/bash.cfg`. Units that need a capability reference it through environment variables named `L4_CAP_<NAME>`. The file server demonstrates this pattern:
