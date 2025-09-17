@@ -1,0 +1,18 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1017,7 +1017,6 @@
+         # fallback to use find_library() if libcrypt is provided by glibc, e.g. for LibreELEC.
+         libcrypt = cc.find_library('crypt')
+ endif
+-libcap = dependency('libcap')
+ 
+ # On some architectures, libatomic is required. But on some installations,
+ # it is found, but actual linking fails. So let's try to use it opportunistically.
+@@ -1953,7 +1952,6 @@
+         install_dir : libdir,
+         pic : static_libsystemd_pic,
+         dependencies : [libblkid,
+-                        libcap,
+                         libdl,
+                         libgcrypt,
+                         liblz4,
