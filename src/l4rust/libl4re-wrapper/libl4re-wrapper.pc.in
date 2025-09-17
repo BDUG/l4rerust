@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@LIBL4RE_WRAPPER_FULL_INCLUDEDIR@
+
+Name: libl4re-wrapper
+Description: C wrappers around L4Re interfaces for Rust bindings
+Version: @LIBL4RE_WRAPPER_VERSION@
+Libs: -L${libdir} -ll4re-wrapper
+Cflags: -I${includedir}
+Requires.private: @LIBL4RE_WRAPPER_PKGCONFIG_REQUIRES@
