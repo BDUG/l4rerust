@@ -9,30 +9,33 @@ build. The stripped-down `aarch64-elf-` toolchain is insufficient because it
 omits `libcrypt` and other glibc libraries required by systemd.
 
 Systemd also depends on libcap headers and `libcrypt` for each target
-architecture. `scripts/build.sh` now downloads libcap, cross-compiles it with
-the configured toolchains, and stages the headers, libraries, and pkg-config
-files under `out/libcap/<arch>`. Meson picks up these self-contained artifacts
-when building systemd. If the toolchains do not ship `libcrypt`, install the
-matching `libxcrypt-dev:armhf` and `libxcrypt-dev:arm64` packages (see the
-commands in [`docs/toolchains.md`](./toolchains.md)) and rerun
-`scripts/build.sh --no-clean` to reuse the existing build directory.
+architecture. `scripts/build.sh` now downloads both libcap and libxcrypt,
+cross-compiles them with the configured toolchains, and stages the headers,
+libraries, and pkg-config files under `out/libcap/<arch>` and
+`out/libcrypt/<arch>`. Meson picks up these self-contained artifacts when
+building systemd, so external `libxcrypt-dev` packages are no longer required
+in the cross sysroots. You may still install the distribution-provided packages
+if you prefer to rely on them, then rerun `scripts/build.sh --no-clean` to
+retry the systemd build without discarding prior work.
 
-The generated systemd binary expects to resolve `libcap.so.2` (and the
-accompanying `libpsx.so` helper) at runtime. The packaging step therefore copies
-the freshly built libcap shared objects from `out/libcap/arm64/lib` into
-`/lib` within the root filesystem image and records matching symlinks under
-`/usr/lib`. This ensures the dynamic loader can satisfy systemd's capability
-dependency once the image boots. The auxiliary utilities produced by libcap
-(`capsh`, `getcap`, `setcap`, etc.) are not shipped by default, but you can
-copy them into the image manually if you need them for debugging.
+The generated systemd binary expects to resolve `libcap.so.2`, its
+`libpsx.so` helper, and `libcrypt.so.1` at runtime. The packaging step copies
+the freshly built shared objects from `out/libcap/arm64/lib` and
+`out/libcrypt/arm64/lib` into `/lib` within the root filesystem image and
+records matching symlinks under `/usr/lib`. This ensures the dynamic loader can
+satisfy the capability and crypt dependencies once the image boots. The
+auxiliary utilities produced by libcap (`capsh`, `getcap`, `setcap`, etc.) are
+not shipped by default, but you can copy them into the image manually if you
+need them for debugging.
 
-The libcap artifacts can also be published for other components via the new
-`pkg/libcap` package. After `scripts/build.sh` stages the headers, static/shared
-libraries, and pkg-config metadata under `out/libcap/<arch>`, run
-`gmake -C pkg/libcap install L4ARCH=<arch> INSTDIR=<path>` to mirror the runtime
-layout under `$(INSTDIR)`. This reproduces the SONAME symlinks created by
-`scripts/build.sh` so dependent packages see the same directory structure they
-would at runtime.
+The libcap and libcrypt artifacts can also be published for other components
+via the `pkg/libcap` and `pkg/libcrypt` packages. After `scripts/build.sh`
+stages the headers, static/shared libraries, and pkg-config metadata under
+`out/libcap/<arch>` and `out/libcrypt/<arch>`, run `gmake -C pkg/libcap install
+L4ARCH=<arch> INSTDIR=<path>` and `gmake -C pkg/libcrypt install
+L4ARCH=<arch> INSTDIR=<path>` to mirror the runtime layout under `$(INSTDIR)`.
+This reproduces the SONAME symlinks created by `scripts/build.sh` so dependent
+packages see the same directory structure they would at runtime.
 
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
