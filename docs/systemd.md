@@ -62,6 +62,35 @@ L4ARCH=<arch> INSTDIR=<path>` to mirror the runtime layout under `$(INSTDIR)`.
 This reproduces the SONAME symlinks created by `scripts/build.sh` so dependent
 packages see the same directory structure they would at runtime.
 
+## Disabled systemd features
+
+To minimise dependencies and footprint, `scripts/build.sh` configures Meson
+with an explicit set of `-D<option>` overrides before building systemd. The
+resulting binaries omit a large collection of optional daemons, utilities, and
+libraries:
+
+* Core infrastructure: `homed`, `firstboot`, `tests`, `machined`, `networkd`,
+  `portabled`, `resolve`, `timesyncd`, `timedated`, `logind`, `hostnamed`,
+  `localed`, `userdb`, `sysext`, and `tmpfiles` are all turned off so the image
+  boots without extra user-management, networking, or configuration daemons.
+* Hardware and boot helpers: `backlight`, `binfmt`, `coredump`, `hibernate`,
+  `hwdb`, `pstore`, `quotacheck`, `randomseed`, `rfkill`, `vconsole`, `udev`
+  (including the udev rule and hwdb assets), and `removable` (which skips the
+  `systemd-remount-fs` helper) are disabled, so hardware-triggered services and
+  early remount logic are left to L4Re components instead of systemd.
+* Name-service modules: each `nss-*` plugin (`nss-myhostname`,
+  `nss-mymachines`, `nss-resolve`, and `nss-systemd`) is suppressed to avoid
+  extra shared objects in `/usr/lib/`.
+* Optional libraries and features: support for `audit`, `bzip2`, `elfutils`,
+  `gnutls`, `idn`, `libiptc`, `lz4`, `openssl`, `pcre2`, `polkit`,
+  `pwquality`, `seccomp`, `selinux`, `tpm`, `tpm2`, `xz`, and `zlib` is
+  switched off so the build never looks for the matching development headers or
+  shared objects.
+
+If you need any of these capabilities, drop the corresponding flag from the
+`meson setup` invocation inside `build_systemd()` before rebuilding, and ensure
+the target root filesystem contains the required dependencies.
+
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
 Systemd units interact with L4Re via capabilities exported in `config/cfg/bash.cfg`. Units that need a capability reference it through environment variables named `L4_CAP_<NAME>`. The file server demonstrates this pattern:
