@@ -196,19 +196,8 @@ cpu_family = '${cpu}'
 cpu = '${cpu}'
 endian = 'little'
 EOF
-    if ! "${cross}gcc" -x c -o "$builddir/crypt-test" - -lcrypt <<'EOF'; then
-#include <crypt.h>
-int main(void) {
-  const char salt[] = "aa";
-  return crypt("x", salt) == 0;
-}
-EOF
-      echo "${cross}gcc could not build a test program against -lcrypt for target '$triple'." >&2
-      echo "Install the cross libxcrypt development package for your toolchain and re-run the build." >&2
-      exit 1
-    fi
-    rm -f "$builddir/crypt-test"
-    meson setup "$builddir" --cross-file cross.txt --prefix=/usr
+    meson setup "$builddir" --cross-file cross.txt --prefix=/usr \
+      -Dhomed=false -Dfirstboot=false -Dtests=false
     ninja -C "$builddir" systemd || ninja -C "$builddir"
     DESTDIR="$REPO_ROOT/$out_dir/root" meson install -C "$builddir"
     cp "$REPO_ROOT/$out_dir/root/lib/systemd/systemd" "$REPO_ROOT/$out_dir/"
@@ -258,6 +247,16 @@ done
 if [ "$need_systemd" = true ]; then
   systemd_src_dir=$(mktemp -d src/systemd-XXXXXX)
   curl -L "$SYSTEMD_URL" | tar -xz -C "$systemd_src_dir" --strip-components=1
+  systemd_patch_dir="$SCRIPT_DIR/patches/systemd"
+  if [ -d "$systemd_patch_dir" ]; then
+    (
+      cd "$systemd_src_dir"
+      for patch_file in "$systemd_patch_dir"/*.patch; do
+        [ -e "$patch_file" ] || continue
+        patch -p1 -N < "$patch_file"
+      done
+    )
+  fi
   build_systemd arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION"
   build_systemd arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION"
   rm -rf "$systemd_src_dir"
