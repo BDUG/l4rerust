@@ -17,6 +17,15 @@ matching `libxcrypt-dev:armhf` and `libxcrypt-dev:arm64` packages (see the
 commands in [`docs/toolchains.md`](./toolchains.md)) and rerun
 `scripts/build.sh --no-clean` to reuse the existing build directory.
 
+The generated systemd binary expects to resolve `libcap.so.2` (and the
+accompanying `libpsx.so` helper) at runtime. The packaging step therefore copies
+the freshly built libcap shared objects from `out/libcap/arm64/lib` into
+`/lib` within the root filesystem image and records matching symlinks under
+`/usr/lib`. This ensures the dynamic loader can satisfy systemd's capability
+dependency once the image boots. The auxiliary utilities produced by libcap
+(`capsh`, `getcap`, `setcap`, etc.) are not shipped by default, but you can
+copy them into the image manually if you need them for debugging.
+
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
 Systemd units interact with L4Re via capabilities exported in `config/cfg/bash.cfg`. Units that need a capability reference it through environment variables named `L4_CAP_<NAME>`. The file server demonstrates this pattern:
