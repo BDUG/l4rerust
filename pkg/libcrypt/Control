@@ -1,0 +1,4 @@
+Package: libcrypt
+Section: libs
+Architecture: any
+Description: Crypt library staged from out/libcrypt/<arch>
