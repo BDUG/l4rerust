@@ -133,6 +133,49 @@ build_bash() {
 BASH_VERSION=5.2.21
 BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 
+build_libcap() {
+  local arch="$1" cross="$2" expected_version="$3"
+  local triple="$(${cross}g++ -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}g++ targets '$triple', but libcap requires a Linux-targeted toolchain" >&2
+    exit 1
+  fi
+  local out_dir="$ARTIFACTS_DIR/libcap/$arch"
+  if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$expected_version"; then
+    echo "libcap for $arch already current, skipping"
+    return
+  fi
+  local install_prefix="$REPO_ROOT/$out_dir"
+  rm -rf "$install_prefix"
+  mkdir -p "$install_prefix"
+  (
+    cd "$libcap_src_dir"
+    gmake -C libcap distclean >/dev/null 2>&1 || true
+    gmake -C libcap clean >/dev/null 2>&1 || true
+    BUILD_CC=gcc CC="${cross}gcc" AR="${cross}ar" RANLIB="${cross}ranlib" \\
+      prefix="$install_prefix" lib=lib gmake -C libcap install
+  )
+  if [ ! -f "$install_prefix/lib/pkgconfig/libcap.pc" ]; then
+    mkdir -p "$install_prefix/lib/pkgconfig"
+    cat >"$install_prefix/lib/pkgconfig/libcap.pc" <<EOF
+prefix=$install_prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: libcap
+Description: POSIX capabilities library
+Version: $expected_version
+Libs: -L\${libdir} -lcap
+Cflags: -I\${includedir}
+EOF
+  fi
+  echo "$expected_version" > "$install_prefix/VERSION"
+}
+
+LIBCAP_VERSION=2.69
+LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
+
 need_bash=false
 for arch in arm arm64; do
   if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
@@ -161,6 +204,24 @@ else
   echo "bash for arm and arm64 already current, skipping"
 fi
 
+need_libcap=false
+for arch in arm arm64; do
+  if ! component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
+    need_libcap=true
+    break
+  fi
+done
+
+if [ "$need_libcap" = true ]; then
+  libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
+  curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
+  build_libcap arm "$CROSS_COMPILE_ARM" "$LIBCAP_VERSION"
+  build_libcap arm64 "$CROSS_COMPILE_ARM64" "$LIBCAP_VERSION"
+  rm -rf "$libcap_src_dir"
+else
+  echo "libcap for arm and arm64 already current, skipping"
+fi
+
 # Build systemd for ARM and ARM64
 build_systemd() {
   local arch="$1" cross="$2" expected_version="$3"
@@ -173,6 +234,7 @@ build_systemd() {
   local host="$triple"
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
+  local libcap_prefix="$REPO_ROOT/$ARTIFACTS_DIR/libcap/$arch"
   if component_is_current "systemd" "$arch" "systemd" "$expected_version"; then
     echo "systemd for $arch already current, skipping"
     return
@@ -180,6 +242,11 @@ build_systemd() {
   mkdir -p "$out_dir"
   (
     cd "$systemd_src_dir"
+    local libcap_pc_dir="$libcap_prefix/lib/pkgconfig"
+    if [ -d "$libcap_pc_dir" ]; then
+      export PKG_CONFIG_PATH="$libcap_pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+      export PKG_CONFIG_LIBDIR="$libcap_pc_dir${PKG_CONFIG_LIBDIR:+:$PKG_CONFIG_LIBDIR}"
+    fi
     builddir="build-$arch"
     rm -rf "$builddir"
     mkdir -p "$builddir"

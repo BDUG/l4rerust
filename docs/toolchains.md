@@ -32,20 +32,18 @@ your distribution, Homebrew, or built with
    aarch64-linux-gnu-g++ --version
    ```
 
-4. Install target headers and libraries required for cross-building systemd:
+4. Install target headers and libraries that are not built in-tree:
 
    ```bash
    sudo dpkg --add-architecture armhf
    sudo dpkg --add-architecture arm64
    sudo apt update
-   sudo apt install libcap-dev:armhf libcap-dev:arm64 \
-                    libxcrypt-dev:armhf libxcrypt-dev:arm64
+   sudo apt install libxcrypt-dev:armhf libxcrypt-dev:arm64
    ```
 
-   The systemd build expects libcap headers for each target architecture. The
-   provided Docker image will include these packages once the container fix
-   lands; manual installation is only necessary when building directly on your
-   host machine. The matching `libxcrypt-dev` packages provide `libcrypt`
+   `scripts/build.sh` downloads and stages libcap locally, so only the
+   `libxcrypt-dev` packages are required to provide `libcrypt` within each
+   cross sysroot. The matching `libxcrypt-dev` packages provide `libcrypt`
    within the cross sysroots. Without them the systemd build fails while
    linking. After installing the missing packages re-run
    `scripts/build.sh --no-clean` to retry without discarding prior work.
