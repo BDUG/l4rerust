@@ -56,6 +56,11 @@ Built components and images are collected under the `out/` directory. To boot
 an image on your host, run `scripts/runqemu.sh` and optionally pass the path to
 the desired image in `out/images/`.
 
+The build scripts store version markers alongside cross-compiled binaries (for
+example `out/bash/arm/VERSION`). When the version constants in `scripts/build.sh`
+change, the updated marker causes the corresponding component to be rebuilt
+automatically on the next run.
+
 The build process first compiles the `l4re-libc` crate to provide a static
 libc for the Rust components. The resulting library is made available through
 the `LIBRARY_PATH` environment variable so that subsequent Rust crates link
