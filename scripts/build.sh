@@ -138,8 +138,9 @@ fi
 build_systemd() {
   local arch="$1" cross="$2"
   local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}g++ targets '$triple', but systemd requires a Linux-targeted toolchain" >&2
+    echo "Please use a cross compiler whose triple contains '-linux-' to build systemd." >&2
     exit 1
   fi
   local host="$triple"
@@ -154,6 +155,7 @@ build_systemd() {
     cd "$systemd_src_dir"
     builddir="build-$arch"
     rm -rf "$builddir"
+    mkdir -p "$builddir"
     cat > cross.txt <<EOF
 [binaries]
 c = '${cross}gcc'
@@ -167,6 +169,18 @@ cpu_family = '${cpu}'
 cpu = '${cpu}'
 endian = 'little'
 EOF
+    if ! "${cross}gcc" -x c -o "$builddir/crypt-test" - -lcrypt <<'EOF'; then
+#include <crypt.h>
+int main(void) {
+  const char salt[] = "aa";
+  return crypt("x", salt) == 0;
+}
+EOF
+      echo "${cross}gcc could not build a test program against -lcrypt for target '$triple'." >&2
+      echo "Install the cross libxcrypt development package for your toolchain and re-run the build." >&2
+      exit 1
+    fi
+    rm -f "$builddir/crypt-test"
     meson setup "$builddir" --cross-file cross.txt --prefix=/usr
     ninja -C "$builddir" systemd || ninja -C "$builddir"
     DESTDIR="$REPO_ROOT/$out_dir/root" meson install -C "$builddir"
