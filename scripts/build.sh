@@ -435,6 +435,36 @@ if [ -d "$sys_root" ]; then
   fi
 fi
 
+# Stage libcap runtime libraries in the root filesystem image
+libcap_stage_dir="$ARTIFACTS_DIR/libcap/arm64/lib"
+if [ -d "$libcap_stage_dir" ]; then
+  echo "Staging libcap shared libraries for arm64"
+  mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
+  debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
+  debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
+
+  # Copy regular shared objects
+  while IFS= read -r -d '' sofile; do
+    base="$(basename "$sofile")"
+    cp "$sofile" "config/lsb_root/lib/$base"
+    chmod 0644 "config/lsb_root/lib/$base"
+    debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+  done < <(find "$libcap_stage_dir" -maxdepth 1 -type f \( -name 'libcap.so*' -o -name 'libpsx.so*' \) -print0)
+
+  # Recreate any SONAME/development symlinks
+  while IFS= read -r -d '' solink; do
+    base="$(basename "$solink")"
+    target="$(readlink "$solink")"
+    ln -sf "$target" "config/lsb_root/lib/$base"
+    debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
+    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+  done < <(find "$libcap_stage_dir" -maxdepth 1 -type l \( -name 'libcap.so*' -o -name 'libpsx.so*' \) -print0)
+fi
+
 # Install systemd unit files into the image
 units_dir="config/systemd"
 if [ -d "$units_dir" ]; then
