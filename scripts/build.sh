@@ -210,6 +210,68 @@ EOF
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
 
+build_libcrypt() {
+  local arch="$1" cross="$2" expected_version="$3"
+  local triple="$(${cross}g++ -dumpmachine)"
+  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
+    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
+    exit 1
+  fi
+
+  local out_dir="$ARTIFACTS_DIR/libcrypt/$arch"
+  if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$expected_version"; then
+    echo "libcrypt for $arch already current, skipping"
+    return
+  fi
+
+  local install_prefix="$REPO_ROOT/$out_dir"
+  rm -rf "$install_prefix"
+  mkdir -p "$install_prefix"
+
+  local -a configure_args=(
+    "--host=$triple"
+    "--prefix=$install_prefix"
+  )
+
+  local microkernel=false
+  if [[ "$triple" == *-elf-* || "$triple" == *-elf ]]; then
+    microkernel=true
+    configure_args+=("--disable-shared")
+  fi
+
+  (
+    cd "$libxcrypt_src_dir"
+    gmake distclean >/dev/null 2>&1 || true
+    gmake clean >/dev/null 2>&1 || true
+
+    export CC="${cross}gcc"
+    export AR="${cross}ar"
+    export RANLIB="${cross}ranlib"
+    export STRIP="${cross}strip"
+    if [ "$microkernel" = true ]; then
+      export ac_cv_lib_pthread_pthread_create=no
+      export ac_cv_header_pthread_h=no
+    else
+      unset ac_cv_lib_pthread_pthread_create
+      unset ac_cv_header_pthread_h
+    fi
+
+    ./configure "${configure_args[@]}"
+    gmake
+    gmake install
+  )
+
+  local pkgconfig_dir="$install_prefix/lib/pkgconfig"
+  if [ -d "$pkgconfig_dir" ] && [ ! -f "$pkgconfig_dir/libcrypt.pc" ] && [ -f "$pkgconfig_dir/libxcrypt.pc" ]; then
+    ln -sf libxcrypt.pc "$pkgconfig_dir/libcrypt.pc"
+  fi
+
+  echo "$expected_version" > "$install_prefix/VERSION"
+}
+
+LIBXCRYPT_VERSION=4.4.36
+LIBXCRYPT_URL="https://github.com/besser82/libxcrypt/releases/download/v${LIBXCRYPT_VERSION}/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
+
 need_bash=false
 for arch in arm arm64; do
   if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
@@ -256,6 +318,25 @@ else
   echo "libcap for arm and arm64 already current, skipping"
 fi
 
+# Build libcrypt (libxcrypt) for ARM and ARM64
+need_libcrypt=false
+for arch in arm arm64; do
+  if ! component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
+    need_libcrypt=true
+    break
+  fi
+done
+
+if [ "$need_libcrypt" = true ]; then
+  libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
+  curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
+  build_libcrypt arm "$CROSS_COMPILE_ARM" "$LIBXCRYPT_VERSION"
+  build_libcrypt arm64 "$CROSS_COMPILE_ARM64" "$LIBXCRYPT_VERSION"
+  rm -rf "$libxcrypt_src_dir"
+else
+  echo "libcrypt for arm and arm64 already current, skipping"
+fi
+
 # Build systemd for ARM and ARM64
 build_systemd() {
   local arch="$1" cross="$2" expected_version="$3"
@@ -269,6 +350,7 @@ build_systemd() {
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
   local libcap_prefix="$REPO_ROOT/$ARTIFACTS_DIR/libcap/$arch"
+  local libcrypt_prefix="$REPO_ROOT/$ARTIFACTS_DIR/libcrypt/$arch"
   if component_is_current "systemd" "$arch" "systemd" "$expected_version"; then
     echo "systemd for $arch already current, skipping"
     return
@@ -277,6 +359,7 @@ build_systemd() {
   (
     cd "$systemd_src_dir"
     local libcap_pc_dir="$libcap_prefix/lib/pkgconfig"
+    local libcrypt_pc_dir="$libcrypt_prefix/lib/pkgconfig"
     # Meson relies on pkg-config for dependency discovery. Ensure the staged
     # libcap pkg-config metadata is visible without hiding the rest of the
     # cross sysroot. Capture the original pkg-config search variables so we can
@@ -291,15 +374,28 @@ build_systemd() {
     multiarch="$(${cross}gcc -print-multiarch 2>/dev/null || true)"
 
     local new_pkg_config_path="$old_pkg_config_path"
-    local -a pkgconfig_dirs=()
-    if [ -d "$libcap_pc_dir" ]; then
-      pkgconfig_dirs+=("$libcap_pc_dir")
-      if [ -n "$new_pkg_config_path" ]; then
-        new_pkg_config_path="$libcap_pc_dir:$new_pkg_config_path"
-      else
-        new_pkg_config_path="$libcap_pc_dir"
-      fi
+    local -a staged_pkgconfig_dirs=()
+    if [ -d "$libcrypt_pc_dir" ]; then
+      staged_pkgconfig_dirs+=("$libcrypt_pc_dir")
     fi
+    if [ -d "$libcap_pc_dir" ]; then
+      staged_pkgconfig_dirs+=("$libcap_pc_dir")
+    fi
+
+    if [ ${#staged_pkgconfig_dirs[@]} -gt 0 ]; then
+      local staged_dir
+      local idx
+      for (( idx=${#staged_pkgconfig_dirs[@]}-1; idx>=0; idx-- )); do
+        staged_dir="${staged_pkgconfig_dirs[$idx]}"
+        if [ -n "$new_pkg_config_path" ]; then
+          new_pkg_config_path="$staged_dir:$new_pkg_config_path"
+        else
+          new_pkg_config_path="$staged_dir"
+        fi
+      done
+    fi
+
+    local -a pkgconfig_dirs=("${staged_pkgconfig_dirs[@]}")
 
     if [ -n "$sysroot" ]; then
       local -a sysroot_pkgconfig_dirs=(
@@ -348,8 +444,39 @@ build_systemd() {
       unset PKG_CONFIG_LIBDIR
     fi
 
+    local overlay_sysroot=""
     if [ -n "$sysroot" ]; then
-      export PKG_CONFIG_SYSROOT_DIR="$sysroot"
+      overlay_sysroot="$REPO_ROOT/$ARTIFACTS_DIR/pkgconfig-sysroots/$arch"
+      rm -rf "$overlay_sysroot"
+      mkdir -p "$overlay_sysroot"
+      if [ -d "$sysroot" ]; then
+        while IFS= read -r -d '' entry; do
+          local base
+          base="$(basename "$entry")"
+          ln -sfn "$entry" "$overlay_sysroot/$base"
+        done < <(find "$sysroot" -mindepth 1 -maxdepth 1 -print0)
+      fi
+    fi
+
+    if [ -z "$overlay_sysroot" ]; then
+      overlay_sysroot="$REPO_ROOT/$ARTIFACTS_DIR/pkgconfig-sysroots/$arch"
+      rm -rf "$overlay_sysroot"
+      mkdir -p "$overlay_sysroot"
+    fi
+
+    local stage_prefix
+    for stage_prefix in "$libcap_prefix" "$libcrypt_prefix"; do
+      if [ -d "$stage_prefix" ]; then
+        local rel_path="${stage_prefix#/}"
+        local rel_dir
+        rel_dir="$(dirname "$rel_path")"
+        mkdir -p "$overlay_sysroot/$rel_dir"
+        ln -sfn "$stage_prefix" "$overlay_sysroot/$rel_path"
+      fi
+    done
+
+    if [ -n "$overlay_sysroot" ]; then
+      export PKG_CONFIG_SYSROOT_DIR="$overlay_sysroot"
     elif [ -n "$old_pkg_config_sysroot" ]; then
       export PKG_CONFIG_SYSROOT_DIR="$old_pkg_config_sysroot"
     else
@@ -571,6 +698,34 @@ if [ -d "$libcap_stage_dir" ]; then
     ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
     debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
   done < <(find "$libcap_stage_dir" -maxdepth 1 -type l \( -name 'libcap.so*' -o -name 'libpsx.so*' \) -print0)
+fi
+
+# Stage libcrypt runtime libraries in the root filesystem image
+libcrypt_stage_dir="$ARTIFACTS_DIR/libcrypt/arm64/lib"
+if [ -d "$libcrypt_stage_dir" ]; then
+  echo "Staging libcrypt shared libraries for arm64"
+  mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
+  debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
+  debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
+
+  while IFS= read -r -d '' sofile; do
+    base="$(basename "$sofile")"
+    cp "$sofile" "config/lsb_root/lib/$base"
+    chmod 0644 "config/lsb_root/lib/$base"
+    debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+  done < <(find "$libcrypt_stage_dir" -maxdepth 1 -type f -name 'libcrypt.so*' -print0)
+
+  while IFS= read -r -d '' solink; do
+    base="$(basename "$solink")"
+    target="$(readlink "$solink")"
+    ln -sf "$target" "config/lsb_root/lib/$base"
+    debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
+    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+  done < <(find "$libcrypt_stage_dir" -maxdepth 1 -type l -name 'libcrypt.so*' -print0)
 fi
 
 # Install systemd unit files into the image
