@@ -19,8 +19,6 @@ RUN dpkg --add-architecture armhf \
         g++-arm-linux-gnueabihf \
         git \
         graphviz \
-        libcap-dev:arm64 \
-        libcap-dev:armhf \
         libxcrypt-dev:arm64 \
         libxcrypt-dev:armhf \
         libgit-repository-perl \
