@@ -2,12 +2,21 @@
 
 The build scripts can produce a systemd-based image. `scripts/build.sh` fetches and cross-builds systemd for arm and arm64, then installs it together with unit files from `config/systemd` into the root filesystem. The same process can be invoked with `gmake systemd-image`.
 
-Cross-compiling systemd requires libcap headers for each target architecture. On
-Debian/Ubuntu hosts enable the `armhf` and `arm64` architectures and install
-`libcap-dev:armhf` and `libcap-dev:arm64` (see the detailed commands in
+Cross-compiling systemd requires Linux-targeted cross-compilers that provide
+glibc libraries. Ensure `CROSS_COMPILE_ARM=arm-linux-gnueabihf-` and
+`CROSS_COMPILE_ARM64=aarch64-linux-gnu-` are exported before launching the
+build. The stripped-down `aarch64-elf-` toolchain is insufficient because it
+omits `libcrypt` and other glibc libraries required by systemd.
+
+Systemd also depends on libcap headers and `libcrypt` for each target
+architecture. On Debian/Ubuntu hosts enable the `armhf` and `arm64`
+architectures and install `libcap-dev:armhf`, `libcap-dev:arm64`,
+`libxcrypt-dev:armhf`, and `libxcrypt-dev:arm64` (see the detailed commands in
 [`docs/toolchains.md`](./toolchains.md)). The project Docker image will bundle
 these packages once the container fix lands; manual installation is only needed
-when building on your own host.
+when building on your own host. If the systemd build fails due to missing
+`libcrypt` libraries, install the packages and rerun
+`scripts/build.sh --no-clean` to reuse the existing build directory.
 
 Unit files placed in `config/systemd` are copied to `/lib/systemd/system` at build time. `bash.service` is enabled by default. To enable or disable other services, create or remove the corresponding symlinks under `/etc/systemd/system/<target>.wants/` or run `systemctl enable`/`disable` after boot.
 
