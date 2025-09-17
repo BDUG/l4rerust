@@ -608,6 +608,39 @@ build_systemd() {
     else
       unset PKG_CONFIG_SYSROOT_DIR
     fi
+
+    local -a staged_lib_dirs=()
+    local lib_dir
+    for lib_dir in "$libcap_prefix/lib" "$libcrypt_prefix/lib"; do
+      if [ -d "$lib_dir" ]; then
+        staged_lib_dirs+=("$lib_dir")
+      fi
+    done
+
+    if [ ${#staged_lib_dirs[@]} -gt 0 ]; then
+      local staged_lib_path=""
+      for lib_dir in "${staged_lib_dirs[@]}"; do
+        if [ -n "$staged_lib_path" ]; then
+          staged_lib_path="$staged_lib_path:$lib_dir"
+        else
+          staged_lib_path="$lib_dir"
+        fi
+      done
+
+      local old_library_path="${LIBRARY_PATH:-}"
+      if [ -n "$old_library_path" ]; then
+        export LIBRARY_PATH="$staged_lib_path:$old_library_path"
+      else
+        export LIBRARY_PATH="$staged_lib_path"
+      fi
+
+      local old_ld_library_path="${LD_LIBRARY_PATH:-}"
+      if [ -n "$old_ld_library_path" ]; then
+        export LD_LIBRARY_PATH="$staged_lib_path:$old_ld_library_path"
+      else
+        export LD_LIBRARY_PATH="$staged_lib_path"
+      fi
+    fi
     builddir="build-$arch"
     rm -rf "$builddir"
     mkdir -p "$builddir"
