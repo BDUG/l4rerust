@@ -841,65 +841,86 @@ if [ -d "$sys_root" ]; then
   fi
 fi
 
-# Stage libcap runtime libraries in the root filesystem image
-libcap_runtime_prefix="$(component_prefix_path "libcap" "arm64")"
-libcap_stage_dir="$libcap_runtime_prefix/lib"
-if [ -d "$libcap_stage_dir" ]; then
-  echo "Staging libcap shared libraries for arm64"
+# Stage runtime libraries from staged components in the root filesystem image
+stage_component_runtime_libraries() {
+  local component="$1"
+  local arch="$2"
+  shift 2
+  local -a patterns=("$@")
+  if [ ${#patterns[@]} -eq 0 ]; then
+    patterns=("$component.so*")
+  fi
+
+  local runtime_prefix
+  runtime_prefix="$(component_prefix_path "$component" "$arch")"
+  local stage_dir="$runtime_prefix/lib"
+  if [ ! -d "$stage_dir" ]; then
+    return
+  fi
+
+  declare -A staged_files=()
+  declare -A staged_links=()
+  local pattern
+  for pattern in "${patterns[@]}"; do
+    while IFS= read -r -d '' sofile; do
+      staged_files["$sofile"]=1
+    done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
+    while IFS= read -r -d '' solink; do
+      staged_links["$solink"]=1
+    done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
+  done
+
+  if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
+    return
+  fi
+
+  echo "Staging $component shared libraries for $arch"
   mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
   debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
   debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
 
-  # Copy regular shared objects
-  while IFS= read -r -d '' sofile; do
+  local -a sorted_files=()
+  mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
+  local sofile base
+  for sofile in "${sorted_files[@]}"; do
+    [ -n "$sofile" ] || continue
     base="$(basename "$sofile")"
     cp "$sofile" "config/lsb_root/lib/$base"
     chmod 0644 "config/lsb_root/lib/$base"
+    debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
     debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
     debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
     ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
     debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done < <(find "$libcap_stage_dir" -maxdepth 1 -type f \( -name 'libcap.so*' -o -name 'libpsx.so*' \) -print0)
+  done
 
-  # Recreate any SONAME/development symlinks
-  while IFS= read -r -d '' solink; do
+  local -a sorted_links=()
+  mapfile -t sorted_links < <(printf '%s\n' "${!staged_links[@]}" | sort)
+  local solink target
+  for solink in "${sorted_links[@]}"; do
+    [ -n "$solink" ] || continue
     base="$(basename "$solink")"
     target="$(readlink "$solink")"
     ln -sf "$target" "config/lsb_root/lib/$base"
+    debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
     debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
     ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+    debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
     debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done < <(find "$libcap_stage_dir" -maxdepth 1 -type l \( -name 'libcap.so*' -o -name 'libpsx.so*' \) -print0)
-fi
+  done
+}
 
-# Stage libcrypt runtime libraries in the root filesystem image
-libcrypt_runtime_prefix="$(component_prefix_path "libcrypt" "arm64")"
-libcrypt_stage_dir="$libcrypt_runtime_prefix/lib"
-if [ -d "$libcrypt_stage_dir" ]; then
-  echo "Staging libcrypt shared libraries for arm64"
-  mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
-  debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
-  debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
-
-  while IFS= read -r -d '' sofile; do
-    base="$(basename "$sofile")"
-    cp "$sofile" "config/lsb_root/lib/$base"
-    chmod 0644 "config/lsb_root/lib/$base"
-    debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
-    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done < <(find "$libcrypt_stage_dir" -maxdepth 1 -type f -name 'libcrypt.so*' -print0)
-
-  while IFS= read -r -d '' solink; do
-    base="$(basename "$solink")"
-    target="$(readlink "$solink")"
-    ln -sf "$target" "config/lsb_root/lib/$base"
-    debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
-    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done < <(find "$libcrypt_stage_dir" -maxdepth 1 -type l -name 'libcrypt.so*' -print0)
-fi
+for component in "${SYSTEMD_COMPONENTS[@]}"; do
+  case "$component" in
+    libcap)
+      stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
+      ;;
+    *)
+      stage_component_runtime_libraries "$component" "arm64" "$component.so*"
+      ;;
+  esac
+done
 
 # Install systemd unit files into the image
 units_dir="config/systemd"
