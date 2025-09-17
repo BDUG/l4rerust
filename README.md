@@ -88,6 +88,42 @@ In case of issues with the Docker build container, run:
 docker image rm l4rerust-builder
 ```
 
+## CMake build
+
+The repository also exposes a CMake entry point at the repository root. Create
+an out-of-source build directory and configure it with:
+
+```bash
+cmake -S . -B build
+```
+
+The configuration step accepts the usual `CMAKE_TOOLCHAIN_FILE` argument if you
+maintain a bespoke toolchain description:
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_TOOLCHAIN_FILE=/path/to/toolchain.cmake
+```
+
+Alternatively, pass compilers directly on the command line. The cache variables
+`CROSS_COMPILE_ARM`, `CROSS_COMPILE_ARM64`, `CROSS_COMPILE_MIPS32R2`,
+`CROSS_COMPILE_MIPS32R6`, `CROSS_COMPILE_MIPS64R2`, and `CROSS_COMPILE_MIPS64R6`
+mirror the existing environment variables used by the gmake flow, allowing
+toolchain prefixes to be configured without exporting environment state:
+
+```bash
+cmake -S . -B build \
+  -DL4RE_CORE_DIR=/path/to/l4re-core \
+  -DCROSS_COMPILE_ARM=arm-linux-gnueabihf- \
+  -DCROSS_COMPILE_ARM64=aarch64-linux-gnu-
+```
+
+After configuration, build the selected targets as usual:
+
+```bash
+cmake --build build
+```
+
 ### Staged capability and crypt libraries
 
 `scripts/build.sh` cross-compiles libcap and libcrypt (via libxcrypt) for each
