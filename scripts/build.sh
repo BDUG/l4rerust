@@ -672,8 +672,60 @@ cpu_family = '${cpu}'
 cpu = '${cpu}'
 endian = 'little'
 EOF
-    meson setup "$builddir" --cross-file cross.txt --prefix=/usr \
-      -Dhomed=false -Dfirstboot=false -Dtests=false
+    local -a meson_setup_args=(
+      "$builddir"
+      --cross-file cross.txt
+      --prefix=/usr
+      -Dhomed=disabled
+      -Dfirstboot=false
+      -Dtests=false
+      -Dmachined=false
+      -Dnetworkd=false
+      -Dnss-myhostname=false
+      -Dnss-mymachines=disabled
+      -Dnss-resolve=disabled
+      -Dnss-systemd=false
+      -Dportabled=false
+      -Dresolve=false
+      -Dtimesyncd=false
+      -Dbacklight=false
+      -Dbinfmt=false
+      -Dcoredump=false
+      -Dhibernate=false
+      -Dhostnamed=false
+      -Dhwdb=false
+      -Dlocaled=false
+      -Dlogind=false
+      -Dpstore=false
+      -Dquotacheck=false
+      -Drandomseed=false
+      -Drfkill=false
+      -Dsysext=false
+      -Dtimedated=false
+      -Dtmpfiles=false
+      -Duserdb=false
+      -Dvconsole=false
+      -Dudev=false
+      -Dremovable=false
+      -Daudit=disabled
+      -Dbzip2=disabled
+      -Delfutils=disabled
+      -Dgnutls=disabled
+      -Didn=false
+      -Dlibiptc=disabled
+      -Dlz4=disabled
+      -Dopenssl=disabled
+      -Dpcre2=disabled
+      -Dpolkit=disabled
+      -Dpwquality=disabled
+      -Dseccomp=disabled
+      -Dselinux=disabled
+      -Dtpm=false
+      -Dtpm2=disabled
+      -Dxz=disabled
+      -Dzlib=disabled
+    )
+    meson setup "${meson_setup_args[@]}"
     ninja -C "$builddir" systemd || ninja -C "$builddir"
     DESTDIR="$REPO_ROOT/$out_dir/root" meson install -C "$builddir"
     cp "$REPO_ROOT/$out_dir/root/lib/systemd/systemd" "$REPO_ROOT/$out_dir/"
