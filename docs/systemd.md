@@ -8,34 +8,39 @@ glibc libraries. Ensure `CROSS_COMPILE_ARM=arm-linux-gnueabihf-` and
 build. The stripped-down `aarch64-elf-` toolchain is insufficient because it
 omits `libcrypt` and other glibc libraries required by systemd.
 
-Systemd also depends on libcap headers and `libcrypt` for each target
+Systemd also depends on libcap, `libcrypt`, and a handful of auxiliary
+libraries (`libblkid`, `libgcrypt`, `libmount`, and `libzstd`) for each target
 architecture. By default `scripts/build.sh` downloads both libcap and
 libxcrypt, cross-compiles them with the configured toolchains, and stages the
 headers, libraries, and pkg-config files under `out/libcap/<arch>` and
-`out/libcrypt/<arch>`. Meson picks up these self-contained artifacts when
- building systemd, so external `libxcrypt-dev` packages are no longer required
- in the cross sysroots. The systemd build also injects `out/libcap/<arch>/lib`
- (and `out/libcrypt/<arch>/lib`) into `LIBRARY_PATH`/`LD_LIBRARY_PATH` inside
- the build subshell before Meson/Ninja run, ensuring `${cross}gcc` searches the
- staged directories even when pkg-config resolves to bare `-lcap` or `-lcrypt`
- arguments. You may still install the distribution-provided packages if you
- prefer to rely on them, then rerun `scripts/build.sh --no-clean` to retry the
- systemd build without discarding prior work.
+`out/libcrypt/<arch>`. Additional staged prefixes for the other libraries can
+be prepared under `out/<component>/<arch>` or provided via environment
+overrides. Meson picks up these self-contained artifacts when building
+systemd, so external `libxcrypt-dev` packages are no longer required in the
+cross sysroots. The systemd build also injects the staged `lib/` directories
+into `LIBRARY_PATH`/`LD_LIBRARY_PATH` inside the build subshell before
+Meson/Ninja run, ensuring `${cross}gcc` searches the staged directories even
+when pkg-config resolves to bare library arguments. You may still install the
+distribution-provided packages if you prefer to rely on them, then rerun
+`scripts/build.sh --no-clean` to retry the systemd build without discarding
+prior work.
 
-If you already maintain custom libcap or libxcrypt builds, set the
-`SYSTEMD_LIBCAP_PREFIX` and/or `SYSTEMD_LIBCRYPT_PREFIX` environment variables
-before invoking `scripts/build.sh`. Each variable should reference the root of
-an installation that contains `include/`, `lib/`, and `lib/pkgconfig/`
-subdirectories; the build script validates the layout and then skips the
-download/compile logic. The overrides feed directly into Meson's pkg-config
-search path, the temporary sysroot overlay, and the runtime staging step, so
-the systemd build and resulting image rely exclusively on the caller-supplied
-artifacts. When different directories are needed per architecture, use the
-arch-specific forms (`SYSTEMD_LIBCAP_PREFIX_ARM`, `SYSTEMD_LIBCAP_PREFIX_ARM64`,
-`SYSTEMD_LIBCRYPT_PREFIX_ARM`, and `SYSTEMD_LIBCRYPT_PREFIX_ARM64`) to supply
-the appropriate paths. Leaving the environment variables unset restores the
-original behavior that populates `out/libcap/<arch>` and `out/libcrypt/<arch>`
-within the repository.
+If you already maintain custom builds for any of these components, set the
+matching environment variables (`SYSTEMD_LIBCAP_PREFIX`,
+`SYSTEMD_LIBCRYPT_PREFIX`, `SYSTEMD_LIBBLKID_PREFIX`,
+`SYSTEMD_LIBGCRYPT_PREFIX`, `SYSTEMD_LIBMOUNT_PREFIX`, and
+`SYSTEMD_LIBZSTD_PREFIX`) before invoking `scripts/build.sh`. Each variable
+should reference the root of an installation that contains `include/`, `lib/`,
+and `lib/pkgconfig/` subdirectories; the build script validates the layout and
+then skips the download/compile logic for libcap/libxcrypt. The overrides feed
+directly into Meson's pkg-config search path, the temporary sysroot overlay,
+and the runtime staging step, so the systemd build and resulting image rely
+exclusively on the caller-supplied artifacts. When different directories are
+needed per architecture, use the arch-specific forms (for example
+`SYSTEMD_LIBCAP_PREFIX_ARM` or `SYSTEMD_LIBZSTD_PREFIX_ARM64`) to supply the
+appropriate paths. Leaving the environment variables unset restores the
+original behavior that populates `out/libcap/<arch>` and
+`out/libcrypt/<arch>` within the repository.
 
 The generated systemd binary expects to resolve `libcap.so.2`, its
 `libpsx.so` helper, and `libcrypt.so.1` at runtime. The packaging step copies

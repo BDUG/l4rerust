@@ -47,6 +47,15 @@ validate_tools
 
 ARTIFACTS_DIR="out"
 
+readonly -a SYSTEMD_COMPONENTS=(
+  libcap
+  libcrypt
+  libblkid
+  libgcrypt
+  libmount
+  libzstd
+)
+
 # Convert a component or architecture name into the suffix used by the
 # environment variables that override staging prefixes.
 to_env_suffix() {
@@ -125,7 +134,7 @@ component_override_used() {
 
 initialize_component_prefixes() {
   local component arch key env_var prefix
-  for component in libcap libcrypt; do
+  for component in "${SYSTEMD_COMPONENTS[@]}"; do
     for arch in arm arm64; do
       key="$component:$arch"
       if env_var=$(component_override_env_var_name "$component" "$arch"); then
@@ -473,10 +482,11 @@ build_systemd() {
   local host="$triple"
   local cpu="${triple%%-*}"
   local out_dir="$ARTIFACTS_DIR/systemd/$arch"
-  local libcap_prefix
-  libcap_prefix="$(component_prefix_path "libcap" "$arch")"
-  local libcrypt_prefix
-  libcrypt_prefix="$(component_prefix_path "libcrypt" "$arch")"
+  local -a systemd_stage_prefixes=()
+  local component
+  for component in "${SYSTEMD_COMPONENTS[@]}"; do
+    systemd_stage_prefixes+=("$(component_prefix_path "$component" "$arch")")
+  done
   if component_is_current "systemd" "$arch" "systemd" "$expected_version"; then
     echo "systemd for $arch already current, skipping"
     return
@@ -484,8 +494,6 @@ build_systemd() {
   mkdir -p "$out_dir"
   (
     cd "$systemd_src_dir"
-    local libcap_pc_dir="$libcap_prefix/lib/pkgconfig"
-    local libcrypt_pc_dir="$libcrypt_prefix/lib/pkgconfig"
     # Meson relies on pkg-config for dependency discovery. Ensure the staged
     # libcap pkg-config metadata is visible without hiding the rest of the
     # cross sysroot. Capture the original pkg-config search variables so we can
@@ -501,12 +509,14 @@ build_systemd() {
 
     local new_pkg_config_path="$old_pkg_config_path"
     local -a staged_pkgconfig_dirs=()
-    if [ -d "$libcrypt_pc_dir" ]; then
-      staged_pkgconfig_dirs+=("$libcrypt_pc_dir")
-    fi
-    if [ -d "$libcap_pc_dir" ]; then
-      staged_pkgconfig_dirs+=("$libcap_pc_dir")
-    fi
+    local idx
+    for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
+      local prefix="${systemd_stage_prefixes[$idx]}"
+      local pc_dir="$prefix/lib/pkgconfig"
+      if [ -d "$pc_dir" ]; then
+        staged_pkgconfig_dirs+=("$pc_dir")
+      fi
+    done
 
     if [ ${#staged_pkgconfig_dirs[@]} -gt 0 ]; then
       local staged_dir
@@ -591,7 +601,7 @@ build_systemd() {
     fi
 
     local stage_prefix
-    for stage_prefix in "$libcap_prefix" "$libcrypt_prefix"; do
+    for stage_prefix in "${systemd_stage_prefixes[@]}"; do
       if [ -d "$stage_prefix" ]; then
         local rel_path="${stage_prefix#/}"
         local rel_dir
@@ -611,7 +621,9 @@ build_systemd() {
 
     local -a staged_lib_dirs=()
     local lib_dir
-    for lib_dir in "$libcap_prefix/lib" "$libcrypt_prefix/lib"; do
+    for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
+      local prefix="${systemd_stage_prefixes[$idx]}"
+      lib_dir="$prefix/lib"
       if [ -d "$lib_dir" ]; then
         staged_lib_dirs+=("$lib_dir")
       fi
