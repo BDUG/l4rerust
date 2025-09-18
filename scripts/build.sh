@@ -1277,9 +1277,10 @@ enable_service bash
 # Collect key build artifacts
 stage_bootable_images() {
   local source_root="obj/l4"
-  local dest_dir="$ARTIFACTS_DIR/images"
+  local distribution_dir="distribution"
+  local distribution_images_dir="$distribution_dir/images"
 
-  mkdir -p "$dest_dir"
+  mkdir -p "$distribution_images_dir"
 
   if [ ! -d "$source_root" ]; then
     return
@@ -1314,9 +1315,9 @@ stage_bootable_images() {
     file="${entry#*$'\t'}"
     [ -n "$file" ] || continue
     base="$(basename "$file")"
-    dest_path="$dest_dir/$base"
+    dest_path="$distribution_images_dir/$base"
 
-    echo "Staging image $base from $file"
+    echo "Staging image $base from $file into $distribution_images_dir"
     cp -f "$file" "$dest_path"
   done
 }
