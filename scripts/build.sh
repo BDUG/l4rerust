@@ -696,6 +696,7 @@ EOF
       -Dhwdb=false
       -Dlocaled=false
       -Dlogind=false
+      -Djournald=false
       -Dpstore=false
       -Dquotacheck=false
       -Drandomseed=false
@@ -733,34 +734,6 @@ EOF
   echo "$expected_version" > "$out_dir/VERSION"
 }
 
-# Build OpenSSH for ARM and ARM64
-build_openssh() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
-    exit 1
-  fi
-  local host="$triple"
-  local out_dir="$ARTIFACTS_DIR/openssh/$arch"
-  if component_is_current "openssh" "$arch" "sshd" "$expected_version"; then
-    echo "openssh for $arch already current, skipping"
-    return
-  fi
-  mkdir -p "$out_dir"
-  (
-    cd "$openssh_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
-      ./configure --host="$host" --with-privsep-path=/var/empty --disable-strip
-    gmake clean
-    CC="${cross}g++" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" LDFLAGS=-static \
-      gmake sshd
-    cp sshd "$REPO_ROOT/$out_dir/"
-  )
-  echo "$expected_version" > "$out_dir/VERSION"
-}
-
 SYSTEMD_VERSION=255.4
 SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
 
@@ -792,37 +765,6 @@ else
   echo "systemd for arm and arm64 already current, skipping"
 fi
 
-# Build OpenSSH for ARM and ARM64
-OPENSSH_VERSION=9.6p1
-OPENSSH_URL="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-${OPENSSH_VERSION}.tar.gz"
-
-need_openssh=false
-for arch in arm arm64; do
-  if ! component_is_current "openssh" "$arch" "sshd" "$OPENSSH_VERSION"; then
-    need_openssh=true
-    break
-  fi
-done
-
-if [ "$need_openssh" = true ]; then
-  openssh_src_dir=$(mktemp -d src/openssh-XXXXXX)
-  curl -L "$OPENSSH_URL" | tar -xz -C "$openssh_src_dir" --strip-components=1
-  build_openssh arm "$CROSS_COMPILE_ARM" "$OPENSSH_VERSION"
-  build_openssh arm64 "$CROSS_COMPILE_ARM64" "$OPENSSH_VERSION"
-  rm -rf "$openssh_src_dir"
-else
-  echo "openssh for arm and arm64 already current, skipping"
-fi
-
-# Link the OpenSSH server binary into the package directory so the
-# L4Re build system can pick it up when creating images.
-mkdir -p pkg/openssh
-for arch in arm arm64; do
-  if [ -f "$ARTIFACTS_DIR/openssh/$arch/sshd" ]; then
-    ln -sf "../../$ARTIFACTS_DIR/openssh/$arch/sshd" pkg/openssh/sshd
-  fi
-done
-
 # Build the tree including libc, Leo, and Rust crates
 gmake
 
@@ -847,23 +789,6 @@ debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/nu
 debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
 debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
 debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
-
-# Set up SSH configuration and host keys
-mkdir -p config/lsb_root/etc/ssh
-debugfs -w -R "mkdir /etc/ssh" "$lsb_img" >/dev/null
-chmod 0644 config/lsb_root/etc/ssh/sshd_config
-hostkey_tmp=$(mktemp)
-ssh-keygen -t rsa -N '' -f "$hostkey_tmp" >/dev/null
-cp "$hostkey_tmp" config/lsb_root/etc/ssh/ssh_host_rsa_key
-cp "$hostkey_tmp.pub" config/lsb_root/etc/ssh/ssh_host_rsa_key.pub
-chmod 600 config/lsb_root/etc/ssh/ssh_host_rsa_key config/lsb_root/etc/ssh/ssh_host_rsa_key.pub
-debugfs -w -R "write config/lsb_root/etc/ssh/sshd_config /etc/ssh/sshd_config" "$lsb_img" >/dev/null
-debugfs -w -R "chmod 0644 /etc/ssh/sshd_config" "$lsb_img" >/dev/null
-debugfs -w -R "write $hostkey_tmp /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
-debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key" "$lsb_img" >/dev/null
-debugfs -w -R "write $hostkey_tmp.pub /etc/ssh/ssh_host_rsa_key.pub" "$lsb_img" >/dev/null
-debugfs -w -R "chmod 0600 /etc/ssh/ssh_host_rsa_key.pub" "$lsb_img" >/dev/null
-rm "$hostkey_tmp" "$hostkey_tmp.pub"
 
 # Install systemd into the root filesystem image and staging area
 sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
@@ -1016,7 +941,6 @@ enable_service() {
 }
 
 enable_service bash
-enable_service sshd
 
 # Collect key build artifacts
 mkdir -p "$ARTIFACTS_DIR/images"

@@ -1,6 +1,13 @@
 --- a/meson_options.txt	2024-02-27 17:26:04.000000000 +0000
 +++ b/meson_options.txt	2025-09-17 19:22:15.176444716 +0000
-@@ -120,6 +120,8 @@
+@@ -118,6 +118,10 @@
+ option('logind', type : 'boolean',
+        description : 'install the systemd-logind stack')
++option('journald', type : 'boolean', value : true,
++       description : 'install the systemd-journald stack')
+ option('hostnamed', type : 'boolean',
+        description : 'install the systemd-hostnamed stack')
+ option('localed', type : 'boolean',
         description : 'install the systemd-localed stack')
  option('machined', type : 'boolean',
         description : 'install the systemd-machined stack')
@@ -20,7 +27,20 @@
  option('vconsole', type : 'boolean',
 --- a/meson.build	2024-02-27 17:26:04.000000000 +0000
 +++ b/meson.build	2025-09-17 19:23:03.306870968 +0000
-@@ -1603,6 +1603,7 @@
+@@ -1598,12 +1599,14 @@
+                 'initrd',
+                 'kernel-install',
+                 'ldconfig',
+                 'localed',
+                 'logind',
++                'journald',
+                 'machined',
+                 'networkd',
+                 'nscd',
+                 'nss-myhostname',
+                 'nss-systemd',
+                 'oomd',
+@@ -1609,6 +1612,7 @@
                  'pstore',
                  'quotacheck',
                  'randomseed',
@@ -28,7 +48,7 @@
                  'resolve',
                  'rfkill',
                  'smack',
-@@ -1612,6 +1613,7 @@
+@@ -1618,6 +1622,7 @@
                  'timesyncd',
                  'tmpfiles',
                  'tpm',
@@ -75,7 +95,21 @@
  subdir('test')
  
  ############################################################
-@@ -2801,6 +2815,7 @@
+@@ -2797,14 +2811,16 @@
+         ['importd'],
+         ['initrd'],
+         ['kernel-install'],
+         ['localed'],
+         ['logind'],
++        ['journald'],
+         ['machined'],
+         ['networkd'],
+         ['nss-myhostname'],
+         ['nss-mymachines'],
+         ['nss-resolve'],
+         ['nss-systemd'],
+         ['oomd'],
+         ['portabled'],
          ['pstore'],
          ['quotacheck'],
          ['randomseed'],
@@ -83,7 +117,7 @@
          ['repart'],
          ['resolve'],
          ['rfkill'],
-@@ -2812,6 +2827,7 @@
+@@ -2810,6 +2826,7 @@
          ['timedated'],
          ['timesyncd'],
          ['tmpfiles'],
@@ -154,3 +188,84 @@
            'symlinks' : ['sysinit.target.wants/'],
          },
          {
+@@ -2144,7 +2152,9 @@
+ subdir('src/initctl')
+ subdir('src/integritysetup')
+-subdir('src/journal')
++if get_option('journald')
++       subdir('src/journal')
++endif
+ subdir('src/journal-remote')
+ subdir('src/kernel-install')
+ subdir('src/locale')
+@@ -332,32 +342,52 @@
+         {
+           'file' : 'systemd-journal-catalog-update.service',
++          'conditions' : ['ENABLE_JOURNALD'],
+           'symlinks' : ['sysinit.target.wants/'],
+         },
+         {
+           'file' : 'systemd-journal-flush.service',
++          'conditions' : ['ENABLE_JOURNALD'],
+           'symlinks' : ['sysinit.target.wants/'],
+         },
+         {
+           'file' : 'systemd-journal-gatewayd.service.in',
+-          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
++          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
+         },
+         {
+           'file' : 'systemd-journal-gatewayd.socket',
+-          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
++          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
+         },
+         {
+           'file' : 'systemd-journal-remote.service.in',
+-          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
++          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
+         },
+         {
+           'file' : 'systemd-journal-remote.socket',
+-          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
++          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
+         },
+         {
+           'file' : 'systemd-journal-upload.service.in',
+-          'conditions' : ['ENABLE_REMOTE', 'HAVE_LIBCURL'],
++          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_LIBCURL'],
+         },
+-        { 'file' : 'systemd-journald-audit.socket' },
++        {
++          'file' : 'systemd-journald-audit.socket',
++          'conditions' : ['ENABLE_JOURNALD'],
++        },
+         {
+           'file' : 'systemd-journald-dev-log.socket',
++          'conditions' : ['ENABLE_JOURNALD'],
+           'symlinks' : ['sockets.target.wants/'],
+         },
+-        { 'file' : 'systemd-journald-varlink@.socket' },
++        {
++          'file' : 'systemd-journald-varlink@.socket',
++          'conditions' : ['ENABLE_JOURNALD'],
++        },
+         {
+           'file' : 'systemd-journald.service.in',
++          'conditions' : ['ENABLE_JOURNALD'],
+           'symlinks' : ['sysinit.target.wants/'],
+         },
+         {
+           'file' : 'systemd-journald.socket',
++          'conditions' : ['ENABLE_JOURNALD'],
+           'symlinks' : ['sockets.target.wants/'],
+         },
+-        { 'file' : 'systemd-journald@.service.in' },
+-        { 'file' : 'systemd-journald@.socket' },
++        {
++          'file' : 'systemd-journald@.service.in',
++          'conditions' : ['ENABLE_JOURNALD'],
++        },
++        {
++          'file' : 'systemd-journald@.socket',
++          'conditions' : ['ENABLE_JOURNALD'],
++        },

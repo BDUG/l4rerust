@@ -108,7 +108,6 @@ validate_tools() {
     "${CROSS_COMPILE_ARM64}g++"
     mke2fs
     debugfs
-    ssh-keygen
     cmake
     meson
     ninja
