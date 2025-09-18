@@ -46,6 +46,10 @@ To boot the built image on your host, run:
 scripts/runqemu.sh
 ```
 
+The helper prefers `out/images/bootstrap_hello_arm_virt.elf` when available and
+otherwise launches the most recently updated `.elf` image in `out/images/`. Pass
+an explicit path to boot a different artifact.
+
 ## Building for ARM
 
 Use `scripts/build.sh` to build the project. The script removes previous build
@@ -53,8 +57,10 @@ artifacts before compilation (the same effect as passing `--clean`). Provide
 `--no-clean` to skip this cleanup when iterating.
 
 Built components and images are collected under the `out/` directory. To boot
-an image on your host, run `scripts/runqemu.sh` and optionally pass the path to
-the desired image in `out/images/`.
+an image on your host, run `scripts/runqemu.sh`. The script automatically
+chooses a sensible default image (preferring
+`out/images/bootstrap_hello_arm_virt.elf`) but accepts a path to another image
+when provided.
 
 The build scripts store version markers alongside cross-compiled binaries (for
 example `out/bash/arm/VERSION`). When the version constants in `scripts/build.sh`
