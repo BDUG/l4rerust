@@ -553,6 +553,7 @@ check_tools()
 do_setup()
 {
   [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
+  [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
   get_fiasco_dir()
   {
