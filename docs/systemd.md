@@ -69,10 +69,11 @@ with an explicit set of `-D<option>` overrides before building systemd. The
 resulting binaries omit a large collection of optional daemons, utilities, and
 libraries:
 
-* Core infrastructure: `homed`, `firstboot`, `tests`, `machined`, `networkd`,
-  `portabled`, `resolve`, `timesyncd`, `timedated`, `logind`, `hostnamed`,
-  `localed`, `userdb`, `sysext`, and `tmpfiles` are all turned off so the image
-  boots without extra user-management, networking, or configuration daemons.
+* Core infrastructure: `journald`, `homed`, `firstboot`, `tests`, `machined`,
+  `networkd`, `portabled`, `resolve`, `timesyncd`, `timedated`, `logind`,
+  `hostnamed`, `localed`, `userdb`, `sysext`, and `tmpfiles` are all turned off
+  so the image boots without extra user-management, networking, or
+  configuration daemons.
 * Hardware and boot helpers: `backlight`, `binfmt`, `coredump`, `hibernate`,
   `hwdb`, `pstore`, `quotacheck`, `randomseed`, `rfkill`, `vconsole`, `udev`
   (including the udev rule and hwdb assets), and `removable` (which skips the
