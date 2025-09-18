@@ -35,12 +35,9 @@
  libshared_sym_path = meson.current_source_dir() / 'libshared.sym'
  libshared_build_dir = meson.current_build_dir()
  
---- a/src/test/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/src/test/meson.build	2025-09-17 04:47:20.520826070 +0000
-@@ -194,6 +194,16 @@
-         threads,
- ]
- 
+--- a/src/test/meson.build      2024-02-27 17:26:04.000000000 +0000
++++ b/src/test/meson.build      2025-09-17 04:47:20.520826070 +0000
+@@ -196,0 +197,10 @@
 +if libcrypt_found
 +        executables += [
 +                test_template + {
@@ -51,18 +48,9 @@
 +        ]
 +endif
 +
- executables += [
-         test_template + {
-                 'sources' : files('test-acl-util.c'),
-@@ -303,11 +313,6 @@
-                 'dependencies' : libm,
-         },
-         test_template + {
+@@ -305,5 +314,0 @@
+-        test_template + {
 -                'sources' : files('test-libcrypt-util.c'),
 -                'dependencies' : libcrypt,
 -                'timeout' : 120,
 -        },
--        test_template + {
-                 'sources' : files('test-libmount.c'),
-                 'dependencies' : [
-                         libmount,
