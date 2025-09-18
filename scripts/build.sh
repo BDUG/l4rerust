@@ -390,6 +390,242 @@ build_libcrypt() {
 LIBXCRYPT_VERSION=4.4.36
 LIBXCRYPT_URL="https://github.com/besser82/libxcrypt/releases/download/v${LIBXCRYPT_VERSION}/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
 
+build_libblkid() {
+  local arch="$1" cross="$2" expected_version="$3"
+  local triple="$(${cross}g++ -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}g++ targets '$triple', but libblkid requires a Linux-targeted toolchain" >&2
+    exit 1
+  fi
+
+  if component_override_used "libblkid" "$arch"; then
+    echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
+    return
+  fi
+
+  local install_prefix
+  install_prefix="$(component_prefix_path "libblkid" "$arch")"
+  if component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$expected_version"; then
+    echo "libblkid for $arch already current, skipping"
+    return
+  fi
+
+  rm -rf "$install_prefix"
+  mkdir -p "$install_prefix"
+
+  local build_triple
+  build_triple="$(gcc -dumpmachine)"
+
+  (
+    cd "$util_linux_src_dir"
+    gmake distclean >/dev/null 2>&1 || true
+    gmake clean >/dev/null 2>&1 || true
+
+    export CC="${cross}gcc"
+    export CXX="${cross}g++"
+    export AR="${cross}ar"
+    export RANLIB="${cross}ranlib"
+    export STRIP="${cross}strip"
+
+    local -a configure_args=(
+      "--build=$build_triple"
+      "--host=$triple"
+      "--prefix=$install_prefix"
+      "--disable-all-programs"
+      "--enable-libblkid"
+      "--disable-libfdisk"
+      "--disable-libmount"
+      "--disable-libsmartcols"
+      "--without-python"
+      "--without-readline"
+      "--without-systemd"
+    )
+
+    ./configure "${configure_args[@]}"
+    gmake
+    gmake install
+  )
+
+  local pkgconfig_file="$install_prefix/lib/pkgconfig/blkid.pc"
+  if [ ! -f "$pkgconfig_file" ]; then
+    mkdir -p "$install_prefix/lib/pkgconfig"
+    cat >"$pkgconfig_file" <<EOF
+prefix=$install_prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: blkid
+Description: Block device id library
+Version: $expected_version
+Libs: -L\${libdir} -lblkid
+Cflags: -I\${includedir}
+EOF
+  fi
+
+  echo "$expected_version" > "$install_prefix/VERSION"
+}
+
+UTIL_LINUX_VERSION=2.39.3
+UTIL_LINUX_MAJOR_MINOR="${UTIL_LINUX_VERSION%.*}"
+UTIL_LINUX_URL="https://cdn.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX_MAJOR_MINOR}/util-linux-${UTIL_LINUX_VERSION}.tar.xz"
+
+build_libgcrypt() {
+  local arch="$1" cross="$2" expected_version="$3"
+  local triple="$(${cross}g++ -dumpmachine)"
+  if [[ "$triple" != *-linux-* ]]; then
+    echo "${cross}g++ targets '$triple', but libgcrypt requires a Linux-targeted toolchain" >&2
+    exit 1
+  fi
+
+  if component_override_used "libgcrypt" "$arch"; then
+    echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
+    return
+  fi
+
+  local install_prefix
+  install_prefix="$(component_prefix_path "libgcrypt" "$arch")"
+  if component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$expected_version"; then
+    echo "libgcrypt for $arch already current, skipping"
+    return
+  fi
+
+  rm -rf "$install_prefix"
+  mkdir -p "$install_prefix"
+
+  local build_triple
+  build_triple="$(gcc -dumpmachine)"
+
+  (
+    cd "$libgpg_error_src_dir"
+    gmake distclean >/dev/null 2>&1 || true
+    gmake clean >/dev/null 2>&1 || true
+
+    export CC="${cross}gcc"
+    export AR="${cross}ar"
+    export RANLIB="${cross}ranlib"
+    export STRIP="${cross}strip"
+
+    ./configure \
+      --build="$build_triple" \
+      --host="$triple" \
+      --prefix="$install_prefix" \
+      --disable-doc
+    gmake
+    gmake install
+  )
+
+  (
+    cd "$libgcrypt_src_dir"
+    gmake distclean >/dev/null 2>&1 || true
+    gmake clean >/dev/null 2>&1 || true
+
+    export CC="${cross}gcc"
+    export AR="${cross}ar"
+    export RANLIB="${cross}ranlib"
+    export STRIP="${cross}strip"
+    export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+
+    ./configure \
+      --build="$build_triple" \
+      --host="$triple" \
+      --prefix="$install_prefix" \
+      --disable-doc \
+      --disable-asm \
+      --with-libgpg-error-prefix="$install_prefix"
+    gmake
+    gmake install
+  )
+
+  local pkgconfig_dir="$install_prefix/lib/pkgconfig"
+  mkdir -p "$pkgconfig_dir"
+  if [ ! -f "$pkgconfig_dir/gpg-error.pc" ]; then
+    cat >"$pkgconfig_dir/gpg-error.pc" <<EOF
+prefix=$install_prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: libgpg-error
+Description: Library for error codes used by GnuPG
+Version: $LIBGPG_ERROR_VERSION
+Libs: -L\${libdir} -lgpg-error
+Cflags: -I\${includedir}
+EOF
+  fi
+
+  echo "$expected_version" > "$install_prefix/VERSION"
+}
+
+LIBGPG_ERROR_VERSION=1.49
+LIBGPG_ERROR_URL="https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-${LIBGPG_ERROR_VERSION}.tar.bz2"
+LIBGCRYPT_VERSION=1.10.3
+LIBGCRYPT_VERSION_MARKER="${LIBGCRYPT_VERSION} (libgpg-error ${LIBGPG_ERROR_VERSION})"
+LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERSION}.tar.bz2"
+
+build_libzstd() {
+  local arch="$1" cross="$2" expected_version="$3"
+  local triple="$(${cross}g++ -dumpmachine)"
+  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
+    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
+    exit 1
+  fi
+
+  if component_override_used "libzstd" "$arch"; then
+    echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
+    return
+  fi
+
+  local install_prefix
+  install_prefix="$(component_prefix_path "libzstd" "$arch")"
+  if component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$expected_version"; then
+    echo "libzstd for $arch already current, skipping"
+    return
+  fi
+
+  rm -rf "$install_prefix"
+  mkdir -p "$install_prefix"
+
+  (
+    cd "$zstd_src_dir"
+    gmake -C lib distclean >/dev/null 2>&1 || true
+    gmake -C lib clean >/dev/null 2>&1 || true
+    gmake -C lib \
+      CC="${cross}gcc" \
+      AR="${cross}ar" \
+      RANLIB="${cross}ranlib" \
+      PREFIX="$install_prefix" \
+      libzstd
+    gmake -C lib \
+      CC="${cross}gcc" \
+      AR="${cross}ar" \
+      RANLIB="${cross}ranlib" \
+      PREFIX="$install_prefix" \
+      install
+  )
+
+  if [ ! -f "$install_prefix/lib/pkgconfig/libzstd.pc" ]; then
+    mkdir -p "$install_prefix/lib/pkgconfig"
+    cat >"$install_prefix/lib/pkgconfig/libzstd.pc" <<EOF
+prefix=$install_prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: libzstd
+Description: Zstandard compression library
+Version: $expected_version
+Libs: -L\${libdir} -lzstd
+Cflags: -I\${includedir}
+EOF
+  fi
+
+  echo "$expected_version" > "$install_prefix/VERSION"
+}
+
+LIBZSTD_VERSION=1.5.6
+LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
+
 need_bash=false
 for arch in arm arm64; do
   if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
@@ -466,6 +702,86 @@ else
     echo "libcrypt builds provided by environment overrides"
   else
     echo "libcrypt for arm and arm64 already current, skipping"
+  fi
+fi
+
+# Build libblkid (util-linux) for ARM and ARM64
+need_libblkid=false
+for arch in arm arm64; do
+  if component_override_used "libblkid" "$arch"; then
+    continue
+  fi
+  if ! component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
+    need_libblkid=true
+    break
+  fi
+done
+
+if [ "$need_libblkid" = true ]; then
+  util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
+  curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
+  build_libblkid arm "$CROSS_COMPILE_ARM" "$UTIL_LINUX_VERSION"
+  build_libblkid arm64 "$CROSS_COMPILE_ARM64" "$UTIL_LINUX_VERSION"
+  rm -rf "$util_linux_src_dir"
+else
+  if component_override_used "libblkid" arm || component_override_used "libblkid" arm64; then
+    echo "libblkid builds provided by environment overrides"
+  else
+    echo "libblkid for arm and arm64 already current, skipping"
+  fi
+fi
+
+# Build libgcrypt (and libgpg-error) for ARM and ARM64
+need_libgcrypt=false
+for arch in arm arm64; do
+  if component_override_used "libgcrypt" "$arch"; then
+    continue
+  fi
+  if ! component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
+    need_libgcrypt=true
+    break
+  fi
+done
+
+if [ "$need_libgcrypt" = true ]; then
+  libgpg_error_src_dir=$(mktemp -d src/libgpg-error-XXXXXX)
+  curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
+  libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
+  curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
+  build_libgcrypt arm "$CROSS_COMPILE_ARM" "$LIBGCRYPT_VERSION_MARKER"
+  build_libgcrypt arm64 "$CROSS_COMPILE_ARM64" "$LIBGCRYPT_VERSION_MARKER"
+  rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
+else
+  if component_override_used "libgcrypt" arm || component_override_used "libgcrypt" arm64; then
+    echo "libgcrypt builds provided by environment overrides"
+  else
+    echo "libgcrypt for arm and arm64 already current, skipping"
+  fi
+fi
+
+# Build libzstd for ARM and ARM64
+need_libzstd=false
+for arch in arm arm64; do
+  if component_override_used "libzstd" "$arch"; then
+    continue
+  fi
+  if ! component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
+    need_libzstd=true
+    break
+  fi
+done
+
+if [ "$need_libzstd" = true ]; then
+  zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
+  curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
+  build_libzstd arm "$CROSS_COMPILE_ARM" "$LIBZSTD_VERSION"
+  build_libzstd arm64 "$CROSS_COMPILE_ARM64" "$LIBZSTD_VERSION"
+  rm -rf "$zstd_src_dir"
+else
+  if component_override_used "libzstd" arm || component_override_used "libzstd" arm64; then
+    echo "libzstd builds provided by environment overrides"
+  else
+    echo "libzstd for arm and arm64 already current, skipping"
   fi
 fi
 
@@ -917,6 +1233,9 @@ for component in "${SYSTEMD_COMPONENTS[@]}"; do
   case "$component" in
     libcap)
       stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
+      ;;
+    libgcrypt)
+      stage_component_runtime_libraries "$component" "arm64" "libgcrypt.so*" "libgpg-error.so*"
       ;;
     *)
       stage_component_runtime_libraries "$component" "arm64" "$component.so*"
