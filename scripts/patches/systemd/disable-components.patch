@@ -182,13 +182,13 @@ index 99d6302..ad1af12 100644
 --- a/test/fuzz/meson.build
 +++ b/test/fuzz/meson.build
 @@ -7,4 +7,8 @@
-- directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
--               ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
--               ['fuzz-link-parser', 'directives.link',       udev_link_gperf_gperf],
--              ]
-+ directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
-+               ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
-+              ]
+-directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
+-              ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
+-              ['fuzz-link-parser', 'directives.link',       udev_link_gperf_gperf],
+-             ]
++directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
++              ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
++             ]
 +
 +if get_option('udev')
 +        directives += [['fuzz-link-parser', 'directives.link', udev_link_gperf_gperf]]
