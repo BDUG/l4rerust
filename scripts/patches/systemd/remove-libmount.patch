@@ -34,26 +34,26 @@ diff --git a/meson.build b/meson.build
 diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 --- a/src/shared/libmount-util.h
 +++ b/src/shared/libmount-util.h
-@@ -2,9 +2,12 @@
+@@ -2,10 +2,13 @@
  #pragma once
- 
+
  /* This needs to be after sys/mount.h */
--#include <libmount.h>
+-#include <libmount.h> /* IWYU pragma: export */
 +#include <stdio.h>
- 
- #include "macro.h"
- 
+
+ #include "forward.h"
+
 +#if HAVE_LIBMOUNT
-+#include <libmount.h>
++#include <libmount.h> /* IWYU pragma: export */
 +
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_table*, mnt_free_table, NULL);
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_iter*, mnt_free_iter, NULL);
- 
-@@ -18,3 +21,43 @@
- 
+
+@@ -35,3 +38,66 @@
  int libmount_is_leaf(
                  struct libmnt_table *table,
                  struct libmnt_fs *fs);
++
 +#else
 +#include <errno.h>
 +
@@ -72,18 +72,39 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_table*, mnt_free_table, NULL);
 +DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_iter*, mnt_free_iter, NULL);
 +
-+static inline int libmount_parse(
++static inline int libmount_parse_full(
 +                const char *path,
 +                FILE *source,
 +                struct libmnt_table **ret_table,
 +                struct libmnt_iter **ret_iter) {
 +        (void) path;
 +        (void) source;
++
 +        if (ret_table)
 +                *ret_table = NULL;
 +        if (ret_iter)
 +                *ret_iter = NULL;
++
 +        return -EOPNOTSUPP;
++}
++
++static inline int libmount_parse_mountinfo(
++                FILE *source,
++                struct libmnt_table **ret_table,
++                struct libmnt_iter **ret_iter) {
++
++        return libmount_parse_full("/proc/self/mountinfo", source, ret_table, ret_iter);
++}
++
++static inline int libmount_parse_with_utab(
++                struct libmnt_table **ret_table,
++                struct libmnt_iter **ret_iter) {
++
++        return libmount_parse_full(NULL, NULL, ret_table, ret_iter);
++}
++
++static inline int libmount_parse_fstab(struct libmnt_table **ret_table, struct libmnt_iter **ret_iter) {
++        return libmount_parse_full(NULL, NULL, ret_table, ret_iter);
 +}
 +
 +static inline int libmount_is_leaf(
@@ -91,6 +112,7 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +                struct libmnt_fs *fs) {
 +        (void) table;
 +        (void) fs;
++
 +        return -EOPNOTSUPP;
 +}
 +#endif
