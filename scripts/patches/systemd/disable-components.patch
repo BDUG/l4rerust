@@ -93,7 +93,7 @@ diff --git a/meson_options.txt b/meson_options.txt
 index 83b48ff..a04f5d1 100644
 --- a/meson_options.txt
 +++ b/meson_options.txt
-@@ -114,12 +114,16 @@ option('oomd', type : 'boolean',
+@@ -114,12 +114,18 @@ option('oomd', type : 'boolean',
         description : 'install the userspace oom killer')
 +option('check-filesystems', type : 'boolean', value : true,
 +       description : 'run check-filesystems.sh during configuration')
@@ -162,7 +162,7 @@ diff --git a/src/basic/meson.build b/src/basic/meson.build
 index 6e0a9b1..c7c7d2a 100644
 --- a/src/basic/meson.build
 +++ b/src/basic/meson.build
-@@ -210,8 +210,12 @@ filesystem_includes = ['linux/magic.h',
+@@ -210,7 +210,9 @@ filesystem_includes = ['linux/magic.h',
                         'linux/gfs2_ondisk.h']
  
 -check_filesystems = find_program('check-filesystems.sh')
