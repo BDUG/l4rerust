@@ -956,7 +956,50 @@ enable_service() {
 enable_service bash
 
 # Collect key build artifacts
-mkdir -p "$ARTIFACTS_DIR/images"
-if [ -f "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" ]; then
-  cp "obj/l4/arm64/images/bootstrap_hello_arm_virt.elf" "$ARTIFACTS_DIR/images/" 2>/dev/null || true
-fi
+stage_bootable_images() {
+  local source_root="obj/l4"
+  local dest_dir="$ARTIFACTS_DIR/images"
+
+  mkdir -p "$dest_dir"
+
+  if [ ! -d "$source_root" ]; then
+    return
+  fi
+
+  local -a images=()
+  while IFS= read -r -d '' image; do
+    images+=("$image")
+  done < <(find "$source_root" -type f \
+    \( -name '*.elf' -o -name '*.uimage' \) \
+    -path '*/images/*' -print0 2>/dev/null)
+
+  if (( ${#images[@]} == 0 )); then
+    return
+  fi
+
+  local image mtime
+  local -a sorted_entries=()
+  mapfile -t sorted_entries < <(
+    for image in "${images[@]}"; do
+      if ! mtime=$(stat -c %Y "$image" 2>/dev/null); then
+        if ! mtime=$(stat -f %m "$image" 2>/dev/null); then
+          mtime=0
+        fi
+      fi
+      printf '%011d\t%s\n' "$mtime" "$image"
+    done | sort -n -k1,1 -k2
+  )
+
+  local entry file base dest_path
+  for entry in "${sorted_entries[@]}"; do
+    file="${entry#*$'\t'}"
+    [ -n "$file" ] || continue
+    base="$(basename "$file")"
+    dest_path="$dest_dir/$base"
+
+    echo "Staging image $base from $file"
+    cp -f "$file" "$dest_path"
+  done
+}
+
+stage_bootable_images

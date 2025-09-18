@@ -56,11 +56,14 @@ Use `scripts/build.sh` to build the project. The script removes previous build
 artifacts before compilation (the same effect as passing `--clean`). Provide
 `--no-clean` to skip this cleanup when iterating.
 
-Built components and images are collected under the `out/` directory. To boot
-an image on your host, run `scripts/runqemu.sh`. The script automatically
-chooses a sensible default image (preferring
-`out/images/bootstrap_hello_arm_virt.elf`) but accepts a path to another image
-when provided.
+Built components and images are collected under the `out/` directory. Every
+bootable `.elf` (and any generated `.uimage`) discovered under
+`obj/l4/*/images/`—including nested entry-point directories produced by
+`.imagebuilds`—is staged into `out/images/`, overwriting older copies when
+duplicates share a basename. To boot an image on your host, run
+`scripts/runqemu.sh`. The script automatically chooses a sensible default image
+(preferring `out/images/bootstrap_hello_arm_virt.elf`) but accepts a path to
+another image when provided.
 
 The build scripts store version markers alongside cross-compiled binaries (for
 example `out/bash/arm/VERSION`). When the version constants in `scripts/build.sh`
