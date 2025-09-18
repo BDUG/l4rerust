@@ -748,7 +748,7 @@ case "$cmd" in
      ;;
   clean)
      do_clean
-     rm -rf out
+     rm -rf out distribution
      ;;
   *)
      echo "Call $0 [config|setup|clean|--non-interactive]"
