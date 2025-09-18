@@ -70,6 +70,12 @@ Pass `--clean` (the default) to force removal of previous build directories or
 `--no-clean` to reuse them for incremental builds. Build artifacts are placed
 under `out/`.
 
+All bootable `.elf` outputs—and any generated `.uimage` files—found under
+`obj/l4/*/images/` (including nested entry-point directories created from
+`.imagebuilds`) are staged into `out/images/`. When multiple images share a
+basename, the most recently built file wins so the latest
+`bootstrap_hello_arm_virt.elf` remains available without manual intervention.
+
 **Fallback**, to cross-compile inside a container, run:
 
 ```bash
