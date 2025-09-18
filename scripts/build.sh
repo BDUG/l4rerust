@@ -52,7 +52,6 @@ readonly -a SYSTEMD_COMPONENTS=(
   libcrypt
   libblkid
   libgcrypt
-  libmount
   libzstd
 )
 

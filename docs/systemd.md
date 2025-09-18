@@ -9,7 +9,7 @@ build. The stripped-down `aarch64-elf-` toolchain is insufficient because it
 omits `libcrypt` and other glibc libraries required by systemd.
 
 Systemd also depends on libcap, `libcrypt`, and a handful of auxiliary
-libraries (`libblkid`, `libgcrypt`, `libmount`, and `libzstd`) for each target
+libraries (`libblkid`, `libgcrypt`, and `libzstd`) for each target
 architecture. By default `scripts/build.sh` downloads both libcap and
 libxcrypt, cross-compiles them with the configured toolchains, and stages the
 headers, libraries, and pkg-config files under `out/libcap/<arch>` and
@@ -28,8 +28,8 @@ prior work.
 If you already maintain custom builds for any of these components, set the
 matching environment variables (`SYSTEMD_LIBCAP_PREFIX`,
 `SYSTEMD_LIBCRYPT_PREFIX`, `SYSTEMD_LIBBLKID_PREFIX`,
-`SYSTEMD_LIBGCRYPT_PREFIX`, `SYSTEMD_LIBMOUNT_PREFIX`, and
-`SYSTEMD_LIBZSTD_PREFIX`) before invoking `scripts/build.sh`. Each variable
+`SYSTEMD_LIBGCRYPT_PREFIX`, and `SYSTEMD_LIBZSTD_PREFIX`) before invoking
+`scripts/build.sh`. Each variable
 should reference the root of an installation that contains `include/`, `lib/`,
 and `lib/pkgconfig/` subdirectories; the build script validates the layout and
 then skips the download/compile logic for libcap/libxcrypt. The overrides feed
