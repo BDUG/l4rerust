@@ -819,6 +819,19 @@ if [ -d "$sys_root" ]; then
       done
     fi
   fi
+  if [ -f "$sys_root/usr/bin/systemctl" ]; then
+    mkdir -p config/lsb_root/usr/bin
+    cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
+    chmod 0755 config/lsb_root/usr/bin/systemctl
+    debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
+  fi
+  if [ -L "$sys_root/bin/systemctl" ]; then
+    mkdir -p config/lsb_root/bin
+    symlink_target="$(readlink "$sys_root/bin/systemctl")"
+    ln -snf "$symlink_target" config/lsb_root/bin/systemctl
+    debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
+  fi
 fi
 
 # Stage runtime libraries from staged components in the root filesystem image
