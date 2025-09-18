@@ -681,6 +681,7 @@ EOF
       -Dtests=false
       -Dmachined=false
       -Dnetworkd=false
+      -Dcheck-filesystems=false
       -Dnss-myhostname=false
       -Dnss-mymachines=disabled
       -Dnss-resolve=disabled
