@@ -95,6 +95,8 @@ index 83b48ff..a04f5d1 100644
 +++ b/meson_options.txt
 @@ -114,12 +114,16 @@ option('oomd', type : 'boolean',
         description : 'install the userspace oom killer')
++option('check-filesystems', type : 'boolean', value : true,
++       description : 'run check-filesystems.sh during configuration')
  option('logind', type : 'boolean',
         description : 'install the systemd-logind stack')
 +option('journald', type : 'boolean', value : true,
@@ -156,3 +158,22 @@ index e7bfb7f..0940c02 100644
          {
            'file' : 'systemd-repart.service.in',
            'conditions' : ['ENABLE_REPART'],
+diff --git a/src/basic/meson.build b/src/basic/meson.build
+index 6e0a9b1..c7c7d2a 100644
+--- a/src/basic/meson.build
++++ b/src/basic/meson.build
+@@ -210,8 +210,12 @@ filesystem_includes = ['linux/magic.h',
+                        'linux/gfs2_ondisk.h']
+ 
+-check_filesystems = find_program('check-filesystems.sh')
+-r = run_command([check_filesystems, cpp, files('filesystems-gperf.gperf')] + filesystem_includes, check: false)
+-if r.returncode() != 0
+-        error('Unknown filesystems defined in kernel headers:\n\n' + r.stdout())
+-endif
++if get_option('check-filesystems')
++        check_filesystems = find_program('check-filesystems.sh')
++        r = run_command([check_filesystems, cpp, files('filesystems-gperf.gperf')] + filesystem_includes, check: false)
++        if r.returncode() != 0
++                error('Unknown filesystems defined in kernel headers:\n\n' + r.stdout())
++        endif
++endif
