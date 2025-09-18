@@ -79,7 +79,7 @@ scripts/docker_build.sh   # cross-compiles and places artifacts in out/
 After building, boot the image on your host with:
 
 ```bash
-scripts/runqemu.sh        # launches the default image from out/images/
+scripts/runqemu.sh        # launches bootstrap_hello_arm_virt.elf or the newest .elf image
 ```
 
 In case of issues with the Docker build container, run:
