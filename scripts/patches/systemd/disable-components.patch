@@ -1,6 +1,100 @@
---- a/meson_options.txt	2024-02-27 17:26:04.000000000 +0000
-+++ b/meson_options.txt	2025-09-17 19:22:15.176444716 +0000
-@@ -118,6 +118,10 @@
+diff --git a/meson.build b/meson.build
+index a577ac7..b341114 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1593,6 +1593,7 @@ foreach term : ['analyze',
+                 'ldconfig',
+                 'localed',
+                 'logind',
++                'journald',
+                 'machined',
+                 'networkd',
+                 'nscd',
+@@ -1603,6 +1604,7 @@ foreach term : ['analyze',
+                 'pstore',
+                 'quotacheck',
+                 'randomseed',
++                'removable',
+                 'resolve',
+                 'rfkill',
+                 'smack',
+@@ -1612,6 +1614,7 @@ foreach term : ['analyze',
+                 'timesyncd',
+                 'tmpfiles',
+                 'tpm',
++                'udev',
+                 'userdb',
+                 'utmp',
+                 'vconsole',
+@@ -2126,7 +2129,13 @@ subdir('src/core')
+ # systemd-networkd requires 'libsystemd_network'
+ subdir('src/libsystemd-network')
+ # hwdb requires 'udev_link_with' and 'udev_rpath'
+-subdir('src/udev')
++if get_option('udev')
++        subdir('src/udev')
++else
++        udev_link_with = []
++        udev_rpath = ''
++        udev_pc = []
++endif
+ 
+ subdir('src/ac-power')
+ subdir('src/analyze')
+@@ -2233,7 +2242,11 @@ subdir('src/fuzz')
+ subdir('src/ukify/test')  # needs to be last for test_env variable
+ subdir('test/fuzz')
+ 
+-alias_target('devel', libsystemd_pc, libudev_pc, systemd_pc, udev_pc)
++devel_targets = [libsystemd_pc, libudev_pc, systemd_pc]
++if get_option('udev')
++        devel_targets += [udev_pc]
++endif
++alias_target('devel', devel_targets)
+ 
+ ############################################################
+ 
+@@ -2457,7 +2470,9 @@ endif
+ 
+ ############################################################
+ 
+-subdir('rules.d')
++if get_option('udev')
++        subdir('rules.d')
++endif
+ subdir('test')
+ 
+ ############################################################
+@@ -2790,6 +2805,7 @@ foreach tuple : [
+         ['kernel-install'],
+         ['localed'],
+         ['logind'],
++        ['journald'],
+         ['machined'],
+         ['networkd'],
+         ['nss-myhostname'],
+@@ -2801,6 +2817,7 @@ foreach tuple : [
+         ['pstore'],
+         ['quotacheck'],
+         ['randomseed'],
++        ['removable'],
+         ['repart'],
+         ['resolve'],
+         ['rfkill'],
+@@ -2812,6 +2829,7 @@ foreach tuple : [
+         ['timedated'],
+         ['timesyncd'],
+         ['tmpfiles'],
++        ['udev'],
+         ['userdb'],
+         ['vconsole'],
+         ['vmspawn'],
+diff --git a/meson_options.txt b/meson_options.txt
+index 83b48ff..a04f5d1 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -114,12 +114,16 @@ option('oomd', type : 'boolean',
+        description : 'install the userspace oom killer')
  option('logind', type : 'boolean',
         description : 'install the systemd-logind stack')
 +option('journald', type : 'boolean', value : true,
@@ -16,7 +110,7 @@
  option('portabled', type : 'boolean',
         description : 'install the systemd-portabled stack')
  option('sysext', type : 'boolean',
-@@ -152,6 +154,8 @@
+@@ -152,6 +156,8 @@ option('firstboot', type : 'boolean',
         description : 'support for firstboot mechanism')
  option('randomseed', type : 'boolean',
         description : 'support for restoring random seed')
@@ -25,108 +119,10 @@
  option('backlight', type : 'boolean',
         description : 'support for restoring backlight state')
  option('vconsole', type : 'boolean',
---- a/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/meson.build	2025-09-17 19:23:03.306870968 +0000
-@@ -1598,12 +1599,14 @@
-                 'initrd',
-                 'kernel-install',
-                 'ldconfig',
-                 'localed',
-                 'logind',
-+                'journald',
-                 'machined',
-                 'networkd',
-                 'nscd',
-                 'nss-myhostname',
-                 'nss-systemd',
-                 'oomd',
-@@ -1609,6 +1612,7 @@
-                 'pstore',
-                 'quotacheck',
-                 'randomseed',
-+                'removable',
-                 'resolve',
-                 'rfkill',
-                 'smack',
-@@ -1618,6 +1622,7 @@
-                 'timesyncd',
-                 'tmpfiles',
-                 'tpm',
-+                'udev',
-                 'userdb',
-                 'utmp',
-                 'vconsole',
-@@ -2126,7 +2128,13 @@
- # systemd-networkd requires 'libsystemd_network'
- subdir('src/libsystemd-network')
- # hwdb requires 'udev_link_with' and 'udev_rpath'
--subdir('src/udev')
-+if get_option('udev')
-+	subdir('src/udev')
-+else
-+	udev_link_with = []
-+	udev_rpath = ''
-+	udev_pc = []
-+endif
- 
- subdir('src/ac-power')
- subdir('src/analyze')
-@@ -2233,7 +2241,11 @@
- subdir('src/ukify/test')  # needs to be last for test_env variable
- subdir('test/fuzz')
- 
--alias_target('devel', libsystemd_pc, libudev_pc, systemd_pc, udev_pc)
-+devel_targets = [libsystemd_pc, libudev_pc, systemd_pc]
-+if get_option('udev')
-+	devel_targets += [udev_pc]
-+endif
-+alias_target('devel', devel_targets)
- 
- ############################################################
- 
-@@ -2457,7 +2469,9 @@
- 
- ############################################################
- 
--subdir('rules.d')
-+if get_option('udev')
-+	subdir('rules.d')
-+endif
- subdir('test')
- 
- ############################################################
-@@ -2797,14 +2811,16 @@
-         ['importd'],
-         ['initrd'],
-         ['kernel-install'],
-         ['localed'],
-         ['logind'],
-+        ['journald'],
-         ['machined'],
-         ['networkd'],
-         ['nss-myhostname'],
-         ['nss-mymachines'],
-         ['nss-resolve'],
-         ['nss-systemd'],
-         ['oomd'],
-         ['portabled'],
-         ['pstore'],
-         ['quotacheck'],
-         ['randomseed'],
-+        ['removable'],
-         ['repart'],
-         ['resolve'],
-         ['rfkill'],
-@@ -2810,6 +2826,7 @@
-         ['timedated'],
-         ['timesyncd'],
-         ['tmpfiles'],
-+        ['udev'],
-         ['userdb'],
-         ['vconsole'],
-         ['vmspawn'],
---- a/src/remount-fs/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/src/remount-fs/meson.build	2025-09-17 19:23:22.859853013 +0000
+diff --git a/src/remount-fs/meson.build b/src/remount-fs/meson.build
+index 8761d25..6704aa8 100644
+--- a/src/remount-fs/meson.build
++++ b/src/remount-fs/meson.build
 @@ -3,6 +3,7 @@
  executables += [
          libexec_template + {
@@ -135,9 +131,11 @@
                  'sources' : files('remount-fs.c'),
          },
  ]
---- a/units/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/units/meson.build	2025-09-17 19:23:40.388734993 +0000
-@@ -95,7 +95,7 @@
+diff --git a/units/meson.build b/units/meson.build
+index e7bfb7f..0940c02 100644
+--- a/units/meson.build
++++ b/units/meson.build
+@@ -95,7 +95,7 @@ units = [
          },
          {
            'file' : 'initrd-udevadm-cleanup-db.service',
@@ -146,7 +144,7 @@
          },
          {
            'file' : 'initrd-usr-fs.target',
-@@ -525,7 +525,10 @@
+@@ -525,7 +525,10 @@ units = [
            'symlinks' : ['sysinit.target.wants/'],
          },
          { 'file' : 'systemd-reboot.service' },
@@ -158,114 +156,3 @@
          {
            'file' : 'systemd-repart.service.in',
            'conditions' : ['ENABLE_REPART'],
-@@ -632,21 +635,28 @@
-           'conditions' : ['ENABLE_TMPFILES'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
--        { 'file' : 'systemd-udev-settle.service' },
-+        {
-+          'file' : 'systemd-udev-settle.service',
-+          'conditions' : ['ENABLE_UDEV'],
-+        },
-         {
-           'file' : 'systemd-udev-trigger.service',
-+          'conditions' : ['ENABLE_UDEV'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
-         {
-           'file' : 'systemd-udevd-control.socket',
-+          'conditions' : ['ENABLE_UDEV'],
-           'symlinks' : ['sockets.target.wants/'],
-         },
-         {
-           'file' : 'systemd-udevd-kernel.socket',
-+          'conditions' : ['ENABLE_UDEV'],
-           'symlinks' : ['sockets.target.wants/'],
-         },
-         {
-           'file' : 'systemd-udevd.service.in',
-+          'conditions' : ['ENABLE_UDEV'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
-         {
-@@ -2144,7 +2152,9 @@
- subdir('src/initctl')
- subdir('src/integritysetup')
--subdir('src/journal')
-+if get_option('journald')
-+       subdir('src/journal')
-+endif
- subdir('src/journal-remote')
- subdir('src/kernel-install')
- subdir('src/locale')
-@@ -332,32 +342,52 @@
-         {
-           'file' : 'systemd-journal-catalog-update.service',
-+          'conditions' : ['ENABLE_JOURNALD'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
-         {
-           'file' : 'systemd-journal-flush.service',
-+          'conditions' : ['ENABLE_JOURNALD'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
-         {
-           'file' : 'systemd-journal-gatewayd.service.in',
--          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-+          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-         },
-         {
-           'file' : 'systemd-journal-gatewayd.socket',
--          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-+          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-         },
-         {
-           'file' : 'systemd-journal-remote.service.in',
--          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-+          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-         },
-         {
-           'file' : 'systemd-journal-remote.socket',
--          'conditions' : ['ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-+          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_MICROHTTPD'],
-         },
-         {
-           'file' : 'systemd-journal-upload.service.in',
--          'conditions' : ['ENABLE_REMOTE', 'HAVE_LIBCURL'],
-+          'conditions' : ['ENABLE_JOURNALD', 'ENABLE_REMOTE', 'HAVE_LIBCURL'],
-         },
--        { 'file' : 'systemd-journald-audit.socket' },
-+        {
-+          'file' : 'systemd-journald-audit.socket',
-+          'conditions' : ['ENABLE_JOURNALD'],
-+        },
-         {
-           'file' : 'systemd-journald-dev-log.socket',
-+          'conditions' : ['ENABLE_JOURNALD'],
-           'symlinks' : ['sockets.target.wants/'],
-         },
--        { 'file' : 'systemd-journald-varlink@.socket' },
-+        {
-+          'file' : 'systemd-journald-varlink@.socket',
-+          'conditions' : ['ENABLE_JOURNALD'],
-+        },
-         {
-           'file' : 'systemd-journald.service.in',
-+          'conditions' : ['ENABLE_JOURNALD'],
-           'symlinks' : ['sysinit.target.wants/'],
-         },
-         {
-           'file' : 'systemd-journald.socket',
-+          'conditions' : ['ENABLE_JOURNALD'],
-           'symlinks' : ['sockets.target.wants/'],
-         },
--        { 'file' : 'systemd-journald@.service.in' },
--        { 'file' : 'systemd-journald@.socket' },
-+        {
-+          'file' : 'systemd-journald@.service.in',
-+          'conditions' : ['ENABLE_JOURNALD'],
-+        },
-+        {
-+          'file' : 'systemd-journald@.socket',
-+          'conditions' : ['ENABLE_JOURNALD'],
-+        },
