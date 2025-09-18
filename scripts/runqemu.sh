@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$0")"
 REPO_ROOT="$SCRIPT_DIR/.."
-DEFAULT_IMAGE_DIR="$REPO_ROOT/out/images"
-DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/bootstrap_hello_arm_virt.elf"
+DEFAULT_IMAGE_DIR="$REPO_ROOT/distribution"
+DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/images/bootstrap_bash_arm_virt.elf"
 
 IMAGE_PATH="${1:-}"
 
@@ -13,11 +13,11 @@ if [[ -z "$IMAGE_PATH" ]]; then
     IMAGE_PATH="$DEFAULT_IMAGE_CANDIDATE"
   else
     shopt -s nullglob
-    images=("$DEFAULT_IMAGE_DIR"/*.elf)
+    images=("$DEFAULT_IMAGE_DIR"/images/*.elf)
     shopt -u nullglob
 
     if (( ${#images[@]} == 0 )); then
-      echo "No bootable ELF image found under $DEFAULT_IMAGE_DIR." >&2
+      echo "No bootable ELF image found under $DEFAULT_IMAGE_DIR/images." >&2
       echo "Build the project first (e.g. run scripts/build.sh) or provide an image path." >&2
       exit 1
     fi
@@ -38,7 +38,7 @@ if [[ -z "$IMAGE_PATH" ]]; then
     done
 
     if [[ -z "$latest_image" ]]; then
-      echo "Unable to determine a bootable ELF image under $DEFAULT_IMAGE_DIR." >&2
+      echo "Unable to determine a bootable ELF image under $DEFAULT_IMAGE_DIR/images." >&2
       echo "Build the project first (e.g. run scripts/build.sh) or provide an image path." >&2
       exit 1
     fi
