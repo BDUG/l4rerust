@@ -1,7 +1,8 @@
 diff --git a/meson.build b/meson.build
+index a577ac7..1ccc854 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1125,9 +1125,8 @@
+@@ -1124,9 +1124,8 @@ else
          conf.set10('BPF_FRAMEWORK', deps_found)
  endif
  
@@ -13,7 +14,7 @@ diff --git a/meson.build b/meson.build
  libfdisk = dependency('fdisk',
                        version : '>= 2.32',
                        disabler : true,
-@@ -1959,7 +1957,6 @@
+@@ -1957,7 +1956,6 @@ install_libsystemd_static = static_library(
                          libdl,
                          libgcrypt,
                          liblz4,
@@ -21,7 +22,7 @@ diff --git a/meson.build b/meson.build
                          libopenssl,
                          librt,
                          libxz,
-@@ -1998,8 +1995,7 @@
+@@ -1996,8 +1994,7 @@ install_libudev_static = static_library(
          install_tag: 'libudev',
          install_dir : libdir,
          link_depends : libudev_sym,
@@ -32,6 +33,7 @@ diff --git a/meson.build b/meson.build
          c_args : static_libudev_pic ? [] : ['-fno-PIC'],
          pic : static_libudev_pic)
 diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
+index 2f789e7..8bbce23 100644
 --- a/src/shared/libmount-util.h
 +++ b/src/shared/libmount-util.h
 @@ -1,11 +1,14 @@
@@ -51,13 +53,10 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_table*, mnt_free_table, NULL);
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_iter*, mnt_free_iter, NULL);
  
-@@ -18,3 +21,46 @@
--int libmount_is_leaf(
--                struct libmnt_table *table,
--                struct libmnt_fs *fs);
-+int libmount_is_leaf(
-+                struct libmnt_table *table,
-+                struct libmnt_fs *fs);
+@@ -18,3 +21,146 @@ int libmount_parse(
+ int libmount_is_leaf(
+                 struct libmnt_table *table,
+                 struct libmnt_fs *fs);
 +#else
 +#include <errno.h>
 +
@@ -200,12 +199,12 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +        errno = EOPNOTSUPP;
 +        return -EOPNOTSUPP;
 +}
-+#endif
-
++#endif /* HAVE_LIBMOUNT */
 diff --git a/src/shared/meson.build b/src/shared/meson.build
+index b24a541..1f92b84 100644
 --- a/src/shared/meson.build
 +++ b/src/shared/meson.build
-@@ -104,7 +104,6 @@
+@@ -104,7 +104,6 @@ shared_sources = files(
          'label-util.c',
          'libcrypt-util.c',
          'libfido2-util.c',
@@ -213,7 +212,7 @@ diff --git a/src/shared/meson.build b/src/shared/meson.build
          'local-addresses.c',
          'locale-setup.c',
          'logs-show.c',
-@@ -117,8 +116,6 @@
+@@ -117,8 +116,6 @@ shared_sources = files(
          'macvlan-util.c',
          'mkdir-label.c',
          'mkfs-util.c',
@@ -222,7 +221,7 @@ diff --git a/src/shared/meson.build b/src/shared/meson.build
          'net-condition.c',
          'netif-naming-scheme.c',
          'netif-sriov.c',
-@@ -310,6 +307,16 @@
+@@ -310,6 +307,16 @@ ethtool_link_mode_xml = custom_target(
          capture : true)
  man_page_depends += ethtool_link_mode_xml
  
@@ -239,7 +238,7 @@ diff --git a/src/shared/meson.build b/src/shared/meson.build
  libshared_name = 'systemd-shared-@0@'.format(shared_lib_tag)
  
  libshared_deps = [threads,
-@@ -322,7 +329,6 @@
+@@ -322,7 +329,6 @@ libshared_deps = [threads,
                    libiptc_cflags,
                    libkmod,
                    liblz4,
@@ -247,254 +246,11 @@ diff --git a/src/shared/meson.build b/src/shared/meson.build
                    libopenssl,
                    libp11kit_cflags,
                    libpam,
-diff --git a/src/shared/mount-util-stub.c b/src/shared/mount-util-stub.c
-new file mode 100644
---- /dev/null
-+++ b/src/shared/mount-util-stub.c
-@@ -0,0 +1,238 @@
-+/* SPDX-License-Identifier: LGPL-2.1-or-later */
-+
-+#include "config.h"
-+
-+#include <errno.h>
-+#include <stdbool.h>
-+#include <stdlib.h>
-+#include <string.h>
-+
-+#include "libmount-util.h"
-+#include "mount-setup.h"
-+#include "mount-util.h"
-+
-+#define UNUSED(x) ((void) (x))
-+
-+int mount_setup_early(void) {
-+        return 0;
-+}
-+
-+int mount_setup(bool loaded_policy, bool leave_propagation) {
-+        UNUSED(loaded_policy);
-+        UNUSED(leave_propagation);
-+        return 0;
-+}
-+
-+int mount_cgroup_controllers(void) {
-+        return 0;
-+}
-+
-+bool mount_point_is_api(const char *path) {
-+        UNUSED(path);
-+        return false;
-+}
-+
-+bool mount_point_ignore(const char *path) {
-+        UNUSED(path);
-+        return false;
-+}
-+
-+int repeat_unmount(const char *path, int flags) {
-+        UNUSED(path);
-+        UNUSED(flags);
-+        return 0;
-+}
-+
-+int umount_recursive_full(const char *target, int flags, char **keep) {
-+        UNUSED(target);
-+        UNUSED(flags);
-+        UNUSED(keep);
-+        return 0;
-+}
-+
-+int bind_remount_recursive_with_mountinfo(const char *prefix, unsigned long new_flags, unsigned long flags_mask, char **deny_list, FILE *proc_self_mountinfo) {
-+        UNUSED(prefix);
-+        UNUSED(new_flags);
-+        UNUSED(flags_mask);
-+        UNUSED(deny_list);
-+        UNUSED(proc_self_mountinfo);
-+        return 0;
-+}
-+
-+int bind_remount_one_with_mountinfo(const char *path, unsigned long new_flags, unsigned long flags_mask, FILE *proc_self_mountinfo) {
-+        UNUSED(path);
-+        UNUSED(new_flags);
-+        UNUSED(flags_mask);
-+        UNUSED(proc_self_mountinfo);
-+        return 0;
-+}
-+
-+int mount_switch_root_full(const char *path, unsigned long mount_propagation_flag, bool force_ms_move) {
-+        UNUSED(path);
-+        UNUSED(mount_propagation_flag);
-+        UNUSED(force_ms_move);
-+        return -EOPNOTSUPP;
-+}
-+
-+int mount_verbose_full(int error_log_level, const char *what, const char *where, const char *type, unsigned long flags, const char *options, bool follow_symlink) {
-+        UNUSED(error_log_level);
-+        UNUSED(what);
-+        UNUSED(where);
-+        UNUSED(type);
-+        UNUSED(flags);
-+        UNUSED(options);
-+        UNUSED(follow_symlink);
-+        return 0;
-+}
-+
-+int umount_verbose(int error_log_level, const char *where, int flags) {
-+        UNUSED(error_log_level);
-+        UNUSED(where);
-+        UNUSED(flags);
-+        return 0;
-+}
-+
-+int mount_exchange_graceful(int fsmount_fd, const char *dest, bool mount_beneath) {
-+        UNUSED(fsmount_fd);
-+        UNUSED(dest);
-+        UNUSED(mount_beneath);
-+        return -EOPNOTSUPP;
-+}
-+
-+int mount_option_mangle(const char *options, unsigned long mount_flags, unsigned long *ret_mount_flags, char **ret_remaining_options) {
-+        if (ret_mount_flags)
-+                *ret_mount_flags = mount_flags;
-+
-+        if (ret_remaining_options) {
-+                if (options) {
-+                        char *copy = strdup(options);
-+                        if (!copy)
-+                                return -ENOMEM;
-+
-+                        *ret_remaining_options = copy;
-+                } else
-+                        *ret_remaining_options = NULL;
-+        }
-+
-+        return 0;
-+}
-+
-+int mode_to_inaccessible_node(const char *runtime_dir, mode_t mode, char **dest) {
-+        UNUSED(runtime_dir);
-+        UNUSED(mode);
-+        if (dest)
-+                *dest = NULL;
-+        return -EOPNOTSUPP;
-+}
-+
-+int mount_flags_to_string(unsigned long flags, char **ret) {
-+        UNUSED(flags);
-+        if (ret)
-+                *ret = NULL;
-+        return -EOPNOTSUPP;
-+}
-+
-+int bind_mount_in_namespace(PidRef *target, const char *propagate_path, const char *incoming_path, const char *src, const char *dest, bool read_only, bool make_file_or_directory) {
-+        UNUSED(target);
-+        UNUSED(propagate_path);
-+        UNUSED(incoming_path);
-+        UNUSED(src);
-+        UNUSED(dest);
-+        UNUSED(read_only);
-+        UNUSED(make_file_or_directory);
-+        return -EOPNOTSUPP;
-+}
-+
-+int mount_image_in_namespace(PidRef *target, const char *propagate_path, const char *incoming_path, const char *src, const char *dest, bool read_only, bool make_file_or_directory, const MountOptions *options, const ImagePolicy *image_policy) {
-+        UNUSED(target);
-+        UNUSED(propagate_path);
-+        UNUSED(incoming_path);
-+        UNUSED(src);
-+        UNUSED(dest);
-+        UNUSED(read_only);
-+        UNUSED(make_file_or_directory);
-+        UNUSED(options);
-+        UNUSED(image_policy);
-+        return -EOPNOTSUPP;
-+}
-+
-+int make_mount_point(const char *path) {
-+        UNUSED(path);
-+        return 0;
-+}
-+
-+int fd_make_mount_point(int fd) {
-+        UNUSED(fd);
-+        return 0;
-+}
-+
-+int make_userns(uid_t uid_shift, uid_t uid_range, uid_t owner, RemountIdmapping idmapping) {
-+        UNUSED(uid_shift);
-+        UNUSED(uid_range);
-+        UNUSED(owner);
-+        UNUSED(idmapping);
-+        return -EOPNOTSUPP;
-+}
-+
-+int remount_idmap_fd(char **p, int userns_fd) {
-+        UNUSED(p);
-+        UNUSED(userns_fd);
-+        return -EOPNOTSUPP;
-+}
-+
-+int remount_idmap(char **p, uid_t uid_shift, uid_t uid_range, uid_t owner, RemountIdmapping idmapping) {
-+        UNUSED(p);
-+        UNUSED(uid_shift);
-+        UNUSED(uid_range);
-+        UNUSED(owner);
-+        UNUSED(idmapping);
-+        return -EOPNOTSUPP;
-+}
-+
-+int bind_mount_submounts(const char *source, const char *target) {
-+        UNUSED(source);
-+        UNUSED(target);
-+        return 0;
-+}
-+
-+int make_mount_point_inode_from_stat(const struct stat *st, const char *dest, mode_t mode) {
-+        UNUSED(st);
-+        UNUSED(dest);
-+        UNUSED(mode);
-+        return 0;
-+}
-+
-+int make_mount_point_inode_from_path(const char *source, const char *dest, mode_t mode) {
-+        UNUSED(source);
-+        UNUSED(dest);
-+        UNUSED(mode);
-+        return 0;
-+}
-+
-+int trigger_automount_at(int dir_fd, const char *path) {
-+        UNUSED(dir_fd);
-+        UNUSED(path);
-+        return -EOPNOTSUPP;
-+}
-+
-+unsigned long credentials_fs_mount_flags(bool ro) {
-+        UNUSED(ro);
-+        return 0;
-+}
-+
-+int mount_credentials_fs(const char *path, size_t size, bool ro) {
-+        UNUSED(path);
-+        UNUSED(size);
-+        UNUSED(ro);
-+        return -EOPNOTSUPP;
-+}
-+
-+int make_fsmount(int error_log_level, const char *what, const char *type, unsigned long flags, const char *options, int userns_fd) {
-+        UNUSED(error_log_level);
-+        UNUSED(what);
-+        UNUSED(type);
-+        UNUSED(flags);
-+        UNUSED(options);
-+        UNUSED(userns_fd);
-+        return -EOPNOTSUPP;
-+}
 diff --git a/src/test/meson.build b/src/test/meson.build
+index cce90d7..d1b4e77 100644
 --- a/src/test/meson.build
 +++ b/src/test/meson.build
-@@ -163,8 +163,7 @@ simple_tests += files(
- ############################################################
+@@ -187,7 +187,6 @@ simple_tests += files(
  
  common_test_dependencies = [
          libblkid,
@@ -502,7 +258,7 @@ diff --git a/src/test/meson.build b/src/test/meson.build
          librt,
          libseccomp,
          libselinux,
-@@ -258,13 +257,6 @@ executables += [
+@@ -307,13 +306,6 @@ executables += [
                  'dependencies' : libcrypt,
                  'timeout' : 120,
          },
@@ -516,7 +272,7 @@ diff --git a/src/test/meson.build b/src/test/meson.build
          test_template + {
                  'sources' : files('test-loopback.c'),
                  'dependencies' : common_test_dependencies,
-@@ -276,10 +268,6 @@ executables += [
+@@ -326,10 +318,6 @@ executables += [
                  'sources' : files('test-mempress.c'),
                  'dependencies' : threads,
          },
