@@ -283,3 +283,341 @@ index cce90d7..d1b4e77 100644
          test_template + {
                  'sources' : files('test-netlink-manual.c'),
                  'dependencies' : libkmod,
+diff --git a/src/shared/mount-util-stub.c b/src/shared/mount-util-stub.c
+new file mode 100644
+index 0000000..d90e6d4
+--- /dev/null
++++ b/src/shared/mount-util-stub.c
+@@ -0,0 +1,332 @@
++#include <errno.h>
++
++#include "mount-util.h"
++#include "mount-setup.h"
++
++int repeat_unmount(const char *path, int flags) {
++        (void) path;
++        (void) flags;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int umount_recursive_full(const char *target, int flags, char **keep) {
++        (void) target;
++        (void) flags;
++        (void) keep;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int bind_remount_recursive_with_mountinfo(
++                const char *prefix,
++                unsigned long new_flags,
++                unsigned long flags_mask,
++                char **deny_list,
++                FILE *proc_self_mountinfo) {
++        (void) prefix;
++        (void) new_flags;
++        (void) flags_mask;
++        (void) deny_list;
++        (void) proc_self_mountinfo;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int bind_remount_one_with_mountinfo(
++                const char *path,
++                unsigned long new_flags,
++                unsigned long flags_mask,
++                FILE *proc_self_mountinfo) {
++        (void) path;
++        (void) new_flags;
++        (void) flags_mask;
++        (void) proc_self_mountinfo;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_switch_root_full(const char *path, unsigned long mount_propagation_flag, bool force_ms_move) {
++        (void) path;
++        (void) mount_propagation_flag;
++        (void) force_ms_move;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_verbose_full(
++                int error_log_level,
++                const char *what,
++                const char *where,
++                const char *type,
++                unsigned long flags,
++                const char *options,
++                bool follow_symlink) {
++        (void) error_log_level;
++        (void) what;
++        (void) where;
++        (void) type;
++        (void) flags;
++        (void) options;
++        (void) follow_symlink;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int umount_verbose(
++                int error_log_level,
++                const char *where,
++                int flags) {
++        (void) error_log_level;
++        (void) where;
++        (void) flags;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_exchange_graceful(int fsmount_fd, const char *dest, bool mount_beneath) {
++        (void) fsmount_fd;
++        (void) dest;
++        (void) mount_beneath;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_option_mangle(
++                const char *options,
++                unsigned long mount_flags,
++                unsigned long *ret_mount_flags,
++                char **ret_remaining_options) {
++        (void) options;
++        (void) mount_flags;
++
++        if (ret_mount_flags)
++                *ret_mount_flags = 0;
++        if (ret_remaining_options)
++                *ret_remaining_options = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mode_to_inaccessible_node(const char *runtime_dir, mode_t mode, char **dest) {
++        (void) runtime_dir;
++        (void) mode;
++
++        if (dest)
++                *dest = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_flags_to_string(unsigned long flags, char **ret) {
++        (void) flags;
++
++        if (ret)
++                *ret = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int bind_mount_in_namespace(
++                PidRef *target,
++                const char *propagate_path,
++                const char *incoming_path,
++                const char *src,
++                const char *dest,
++                bool read_only,
++                bool make_file_or_directory) {
++        (void) target;
++        (void) propagate_path;
++        (void) incoming_path;
++        (void) src;
++        (void) dest;
++        (void) read_only;
++        (void) make_file_or_directory;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_image_in_namespace(
++                PidRef *target,
++                const char *propagate_path,
++                const char *incoming_path,
++                const char *src,
++                const char *dest,
++                bool read_only,
++                bool make_file_or_directory,
++                const MountOptions *options,
++                const ImagePolicy *image_policy) {
++        (void) target;
++        (void) propagate_path;
++        (void) incoming_path;
++        (void) src;
++        (void) dest;
++        (void) read_only;
++        (void) make_file_or_directory;
++        (void) options;
++        (void) image_policy;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int make_mount_point(const char *path) {
++        (void) path;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int fd_make_mount_point(int fd) {
++        (void) fd;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int make_userns(uid_t uid_shift, uid_t uid_range, uid_t owner, RemountIdmapping idmapping) {
++        (void) uid_shift;
++        (void) uid_range;
++        (void) owner;
++        (void) idmapping;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int remount_idmap_fd(char **p, int userns_fd) {
++        (void) userns_fd;
++
++        if (p)
++                *p = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int remount_idmap(char **p, uid_t uid_shift, uid_t uid_range, uid_t owner, RemountIdmapping idmapping) {
++        (void) uid_shift;
++        (void) uid_range;
++        (void) owner;
++        (void) idmapping;
++
++        if (p)
++                *p = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int bind_mount_submounts(
++                const char *source,
++                const char *target) {
++        (void) source;
++        (void) target;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int make_mount_point_inode_from_stat(const struct stat *st, const char *dest, mode_t mode) {
++        (void) st;
++        (void) dest;
++        (void) mode;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int make_mount_point_inode_from_path(const char *source, const char *dest, mode_t mode) {
++        (void) source;
++        (void) dest;
++        (void) mode;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int trigger_automount_at(int dir_fd, const char *path) {
++        (void) dir_fd;
++        (void) path;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++unsigned long credentials_fs_mount_flags(bool ro) {
++        (void) ro;
++
++        errno = EOPNOTSUPP;
++        return 0;
++}
++
++int mount_credentials_fs(const char *path, size_t size, bool ro) {
++        (void) path;
++        (void) size;
++        (void) ro;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int make_fsmount(
++                int error_log_level,
++                const char *what,
++                const char *type,
++                unsigned long flags,
++                const char *options,
++                int userns_fd) {
++        (void) error_log_level;
++        (void) what;
++        (void) type;
++        (void) flags;
++        (void) options;
++        (void) userns_fd;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_setup_early(void) {
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_setup(bool loaded_policy, bool leave_propagation) {
++        (void) loaded_policy;
++        (void) leave_propagation;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++int mount_cgroup_controllers(void) {
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++bool mount_point_is_api(const char *path) {
++        (void) path;
++
++        errno = EOPNOTSUPP;
++        return false;
++}
++
++bool mount_point_ignore(const char *path) {
++        (void) path;
++
++        errno = EOPNOTSUPP;
++        return false;
++}
