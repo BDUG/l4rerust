@@ -64,6 +64,7 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +struct libmnt_table;
 +struct libmnt_iter;
 +struct libmnt_fs;
++struct libmnt_monitor;
 +
 +static inline void mnt_free_table(struct libmnt_table *table) {
 +        (void) table;
@@ -89,6 +90,7 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +        if (ret_iter)
 +                *ret_iter = NULL;
 +
++        errno = EOPNOTSUPP;
 +        return -EOPNOTSUPP;
 +}
 +
@@ -98,6 +100,104 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
 +        (void) table;
 +        (void) fs;
 +
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++static inline int mnt_table_next_fs(
++                struct libmnt_table *table,
++                struct libmnt_iter *iter,
++                struct libmnt_fs **ret_fs) {
++        (void) table;
++        (void) iter;
++
++        if (ret_fs)
++                *ret_fs = NULL;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++static inline const char *mnt_fs_get_source(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline const char *mnt_fs_get_target(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline const char *mnt_fs_get_options(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline const char *mnt_fs_get_fstype(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline void mnt_init_debug(int mask) {
++        (void) mask;
++}
++
++static inline struct libmnt_monitor *mnt_new_monitor(void) {
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline void mnt_unref_monitor(struct libmnt_monitor *monitor) {
++        (void) monitor;
++}
++
++static inline int mnt_monitor_enable_kernel(struct libmnt_monitor *monitor, int enable) {
++        (void) monitor;
++        (void) enable;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++static inline int mnt_monitor_enable_userspace(
++                struct libmnt_monitor *monitor,
++                int enable,
++                const char *filename) {
++        (void) monitor;
++        (void) enable;
++        (void) filename;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++static inline int mnt_monitor_get_fd(struct libmnt_monitor *monitor) {
++        (void) monitor;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
++static inline int mnt_monitor_next_change(
++                struct libmnt_monitor *monitor,
++                const char **filename,
++                int *type) {
++        (void) monitor;
++
++        if (filename)
++                *filename = NULL;
++        if (type)
++                *type = 0;
++
++        errno = EOPNOTSUPP;
 +        return -EOPNOTSUPP;
 +}
 +#endif
