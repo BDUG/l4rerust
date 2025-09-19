@@ -1,23 +1,21 @@
---- a/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/meson.build	2025-09-17 04:46:52.476708239 +0000
-@@ -1013,9 +1013,13 @@
+--- a/meson.build       2024-02-27 17:26:04.000000000 +0000
++++ b/meson.build       2025-09-19 14:04:53.424020501 +0000
+@@ -1013,9 +1013,11 @@
  libm = cc.find_library('m')
  libdl = cc.find_library('dl')
- libcrypt = dependency('libcrypt', required : false)
+ libcrypt = dependency('libcrypt', 'libxcrypt', required : false)
 -if not libcrypt.found()
-+if not libcrypt.found()
-+        libcrypt = dependency('libxcrypt', required : false)
-+endif
 +libcrypt_found = libcrypt.found()
 +if not libcrypt_found
          # fallback to use find_library() if libcrypt is provided by glibc, e.g. for LibreELEC.
-         libcrypt = cc.find_library('crypt', required : false)
-         libcrypt_found = libcrypt.found()
+-        libcrypt = cc.find_library('crypt')
++        libcrypt = cc.find_library('crypt', required : false)
++        libcrypt_found = libcrypt.found()
  endif
  libcap = dependency('libcap')
  
---- a/src/shared/meson.build	2024-02-27 17:26:04.000000000 +0000
-+++ b/src/shared/meson.build	2025-09-17 04:46:54.824717720 +0000
+--- a/src/shared/meson.build    2024-02-27 17:26:04.000000000 +0000
++++ b/src/shared/meson.build    2025-09-19 14:04:59.063975312 +0000
 @@ -316,7 +316,6 @@
                    libacl,
                    libblkid,
@@ -38,8 +36,23 @@
  libshared_build_dir = meson.current_build_dir()
  
 --- a/src/test/meson.build      2024-02-27 17:26:04.000000000 +0000
-+++ b/src/test/meson.build      2025-09-17 04:47:20.520826070 +0000
-@@ -196,0 +197,10 @@
++++ b/src/test/meson.build      2025-09-19 14:05:06.171918168 +0000
+@@ -303,11 +303,6 @@
+                 'dependencies' : libm,
+         },
+         test_template + {
+-                'sources' : files('test-libcrypt-util.c'),
+-                'dependencies' : libcrypt,
+-                'timeout' : 120,
+-        },
+-        test_template + {
+                 'sources' : files('test-libmount.c'),
+                 'dependencies' : [
+                         libmount,
+@@ -595,3 +590,13 @@
+                 ],
+         },
+ ]
 +if libcrypt_found
 +        executables += [
 +                test_template + {
@@ -50,9 +63,3 @@
 +        ]
 +endif
 +
-@@ -305,5 +314,0 @@
--        test_template + {
--                'sources' : files('test-libcrypt-util.c'),
--                'dependencies' : libcrypt,
--                'timeout' : 120,
--        },
