@@ -65,6 +65,29 @@ index 2f789e7..8bbce23 100644
 +struct libmnt_fs;
 +struct libmnt_monitor;
 +
++#define MNT_ITER_FORWARD 0
++#define MNT_ITER_BACKWARD 1
++
++static inline struct libmnt_table *mnt_new_table(void) {
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline struct libmnt_iter *mnt_new_iter(int direction) {
++        (void) direction;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline int mnt_table_parse_swaps(struct libmnt_table *table, const char *path) {
++        (void) table;
++        (void) path;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
++}
++
 +static inline void mnt_free_table(struct libmnt_table *table) {
 +        (void) table;
 +}
