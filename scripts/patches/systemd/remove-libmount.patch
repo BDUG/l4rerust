@@ -51,10 +51,13 @@ diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_table*, mnt_free_table, NULL);
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_iter*, mnt_free_iter, NULL);
  
-@@ -18,3 +21,47 @@ int libmount_is_leaf(
-                 struct libmnt_table *table,
-                 struct libmnt_fs *fs);
-+
+@@ -18,3 +21,46 @@
+-int libmount_is_leaf(
+-                struct libmnt_table *table,
+-                struct libmnt_fs *fs);
++int libmount_is_leaf(
++                struct libmnt_table *table,
++                struct libmnt_fs *fs);
 +#else
 +#include <errno.h>
 +
