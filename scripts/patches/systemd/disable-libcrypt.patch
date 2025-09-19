@@ -1,6 +1,6 @@
 --- a/meson.build	2024-02-27 17:26:04.000000000 +0000
 +++ b/meson.build	2025-09-17 04:46:52.476708239 +0000
-@@ -1013,9 +1013,11 @@
+@@ -1013,9 +1013,13 @@
  libm = cc.find_library('m')
  libdl = cc.find_library('dl')
  libcrypt = dependency('libcrypt', required : false)
