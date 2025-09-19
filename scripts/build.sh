@@ -788,6 +788,15 @@ fi
 # Build systemd for ARM and ARM64
 build_systemd() {
   local arch="$1" cross="$2" expected_version="$3"
+  local pkg_config_bin=""
+  if command -v pkg-config >/dev/null 2>&1; then
+    pkg_config_bin="$(command -v pkg-config)"
+  elif command -v pkgconf >/dev/null 2>&1; then
+    pkg_config_bin="$(command -v pkgconf)"
+  else
+    echo "pkg-config not found; please install pkg-config or pkgconf" >&2
+    exit 1
+  fi
   local triple="$(${cross}g++ -dumpmachine)"
   if [[ "$triple" != *-linux-* ]]; then
     echo "${cross}g++ targets '$triple', but systemd requires a Linux-targeted toolchain" >&2
@@ -980,6 +989,7 @@ c = '${cross}gcc'
 cpp = '${cross}g++'
 ar = '${cross}ar'
 strip = '${cross}strip'
+pkgconfig = '${pkg_config_bin}'
 
 [host_machine]
 system = 'linux'
