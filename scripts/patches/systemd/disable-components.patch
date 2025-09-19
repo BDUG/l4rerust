@@ -90,10 +90,12 @@ index a577ac7..b341114 100644
          ['vconsole'],
          ['vmspawn'],
 diff --git a/meson_options.txt b/meson_options.txt
-index 83b48ff..a04f5d1 100644
+index 83b48ff..77ba65d 100644
 --- a/meson_options.txt
 +++ b/meson_options.txt
-@@ -114,12 +114,18 @@ option('oomd', type : 'boolean',
+@@ -112,14 +112,20 @@ option('pstore', type : 'boolean',
+        description : 'install the pstore archival tool')
+ option('oomd', type : 'boolean',
         description : 'install the userspace oom killer')
 +option('check-filesystems', type : 'boolean', value : true,
 +       description : 'run check-filesystems.sh during configuration')
@@ -112,7 +114,7 @@ index 83b48ff..a04f5d1 100644
  option('portabled', type : 'boolean',
         description : 'install the systemd-portabled stack')
  option('sysext', type : 'boolean',
-@@ -152,6 +156,8 @@ option('firstboot', type : 'boolean',
+@@ -152,6 +158,8 @@ option('firstboot', type : 'boolean',
         description : 'support for firstboot mechanism')
  option('randomseed', type : 'boolean',
         description : 'support for restoring random seed')
@@ -159,39 +161,42 @@ index e7bfb7f..0940c02 100644
            'file' : 'systemd-repart.service.in',
            'conditions' : ['ENABLE_REPART'],
 diff --git a/src/basic/meson.build b/src/basic/meson.build
-index 6e0a9b1..c7c7d2a 100644
+index d7450d8..f19e17f 100644
 --- a/src/basic/meson.build
 +++ b/src/basic/meson.build
-@@ -210,7 +210,9 @@ filesystem_includes = ['linux/magic.h',
+@@ -232,10 +232,12 @@ run_target(
+ filesystem_includes = ['linux/magic.h',
                         'linux/gfs2_ondisk.h']
  
 -check_filesystems = find_program('check-filesystems.sh')
 -r = run_command([check_filesystems, cpp, files('filesystems-gperf.gperf')] + filesystem_includes, check: false)
 -if r.returncode() != 0
 -        error('Unknown filesystems defined in kernel headers:\n\n' + r.stdout())
--endif
 +if get_option('check-filesystems')
 +        check_filesystems = find_program('check-filesystems.sh')
 +        r = run_command([check_filesystems, cpp, files('filesystems-gperf.gperf')] + filesystem_includes, check: false)
 +        if r.returncode() != 0
 +                error('Unknown filesystems defined in kernel headers:\n\n' + r.stdout())
 +        endif
-+endif
+ endif
+ 
+ filesystems_gperf_h = custom_target(
 diff --git a/test/fuzz/meson.build b/test/fuzz/meson.build
-index 99d6302..ad1af12 100644
+index 54cbb75..799c7f6 100644
 --- a/test/fuzz/meson.build
 +++ b/test/fuzz/meson.build
-@@ -7,4 +7,8 @@
--directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
--              ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
+@@ -6,9 +6,13 @@ fuzz_regression_tests = {}
+ 
+ directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
+               ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
 -              ['fuzz-link-parser', 'directives.link',       udev_link_gperf_gperf],
--             ]
-+directives = [['fuzz-network-parser', 'directives.network', networkd_network_gperf_gperf],
-+              ['fuzz-netdev-parser', 'directives.netdev',   networkd_netdev_gperf_gperf],
-+             ]
-+
+              ]
+ 
 +if get_option('udev')
 +        directives += [['fuzz-link-parser', 'directives.link', udev_link_gperf_gperf]]
 +endif
 +
++
  foreach tuple : directives
+         directive = custom_target(
+                 tuple[1],
