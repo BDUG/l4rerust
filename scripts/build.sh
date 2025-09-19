@@ -946,6 +946,7 @@ build_systemd() {
     fi
 
     local -a staged_lib_dirs=()
+    local -a staged_include_dirs=()
     local lib_dir
     for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
       local prefix="${systemd_stage_prefixes[$idx]}"
@@ -954,7 +955,51 @@ build_systemd() {
           staged_lib_dirs+=("$lib_dir")
         fi
       done
+
+      local include_dir="$prefix/include"
+      if [ -d "$include_dir" ]; then
+        staged_include_dirs+=("$include_dir")
+        if [ -n "$multiarch" ]; then
+          local multiarch_include_dir="$include_dir/$multiarch"
+          if [ -d "$multiarch_include_dir" ]; then
+            staged_include_dirs+=("$multiarch_include_dir")
+          fi
+        fi
+      fi
     done
+
+    if [ ${#staged_include_dirs[@]} -gt 0 ]; then
+      local staged_include_path=""
+      local include_dir
+      for include_dir in "${staged_include_dirs[@]}"; do
+        if [ -n "$staged_include_path" ]; then
+          staged_include_path="$staged_include_path:$include_dir"
+        else
+          staged_include_path="$include_dir"
+        fi
+      done
+
+      local old_c_include_path="${C_INCLUDE_PATH:-}"
+      if [ -n "$old_c_include_path" ]; then
+        export C_INCLUDE_PATH="$staged_include_path:$old_c_include_path"
+      else
+        export C_INCLUDE_PATH="$staged_include_path"
+      fi
+
+      local old_cplus_include_path="${CPLUS_INCLUDE_PATH:-}"
+      if [ -n "$old_cplus_include_path" ]; then
+        export CPLUS_INCLUDE_PATH="$staged_include_path:$old_cplus_include_path"
+      else
+        export CPLUS_INCLUDE_PATH="$staged_include_path"
+      fi
+
+      local old_cpath="${CPATH:-}"
+      if [ -n "$old_cpath" ]; then
+        export CPATH="$staged_include_path:$old_cpath"
+      else
+        export CPATH="$staged_include_path"
+      fi
+    fi
 
     if [ ${#staged_lib_dirs[@]} -gt 0 ]; then
       local staged_lib_path=""
