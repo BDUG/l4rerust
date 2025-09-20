@@ -51,6 +51,10 @@ if [ -n "$SYSTEM" ]; then
   exit 1
 fi
 
+if [ "$cmd" != "clean" ]; then
+  CROSS_COMPILE=${CROSS_COMPILE:-arm-linux-gnueabihf-}
+fi
+
 if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
   if command -v dialog >/dev/null 2>&1 && [ -t 0 ]; then
     tmpfile=$(mktemp)
