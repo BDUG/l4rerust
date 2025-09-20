@@ -210,8 +210,9 @@ EOF
     printf '    %-14s %s\n' "$target" "${MAKE_TARGET_LABELS[$target]}"
   done
   echo
-  echo "  The interactive menu also offers an option to clean the build"
-  echo "  directories before starting."
+  echo "  The interactive menu offers checklists for external components and"
+  echo "  make targets along with an option to clean the build directories"
+  echo "  before starting."
 }
 
 is_valid_component() {
@@ -266,8 +267,10 @@ should_run_target() {
 }
 
 prompt_component_selection() {
-  local -n _result=$1
-  _result=()
+  local -n _component_result=$1
+  local -n _target_result=$2
+  _component_result=()
+  _target_result=()
 
   if [ ! -t 0 ]; then
     return 1
@@ -313,11 +316,56 @@ prompt_component_selection() {
     entry="${entry%\"}"
     entry="${entry#\"}"
     if [ -n "$entry" ]; then
-      _result+=("$entry")
+      _component_result+=("$entry")
     fi
   done
 
-  if [ ${#_result[@]} -eq 0 ]; then
+  if [ ${#_component_result[@]} -eq 0 ]; then
+    return 1
+  fi
+
+  tmpfile=$(mktemp)
+  dialog_status=0
+  local target_menu_args=()
+  local target
+  local default_state
+  for target in "${MAKE_TARGET_IDS[@]}"; do
+    default_state="off"
+    if [ "$target" = "all" ]; then
+      default_state="on"
+    fi
+    target_menu_args+=("$target" "${MAKE_TARGET_LABELS[$target]}" "$default_state")
+  done
+
+  if ! dialog --clear \
+      --checklist "Select make targets to invoke:" 18 70 ${#MAKE_TARGET_IDS[@]} \
+      "${target_menu_args[@]}" 2>"$tmpfile"; then
+    dialog_status=$?
+  fi
+
+  result=$(<"$tmpfile")
+  rm -f "$tmpfile"
+
+  if [ $dialog_status -ne 0 ]; then
+    return 1
+  fi
+
+  if [ -z "$result" ]; then
+    return 1
+  fi
+
+  for entry in $result; do
+    if [[ ${entry:0:1} != '"' ]]; then
+      entry="\"$entry\""
+    fi
+    entry="${entry%\"}"
+    entry="${entry#\"}"
+    if [ -n "$entry" ]; then
+      _target_result+=("$entry")
+    fi
+  done
+
+  if [ ${#_target_result[@]} -eq 0 ]; then
     return 1
   fi
 
@@ -455,10 +503,11 @@ if [ "$component_arg_set" = true ]; then
 else
   if [ "$show_menu" = true ]; then
     if [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
-      if prompt_component_selection selected_components; then
+      if prompt_component_selection selected_components selected_make_targets; then
         used_dialog_menu=true
+        explicit_make_target_selection=true
       else
-        echo "No components selected; exiting." >&2
+        echo "Menu selection cancelled; exiting." >&2
         exit 1
       fi
     fi
