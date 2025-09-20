@@ -293,10 +293,6 @@ prompt_component_selection() {
     return 1
   fi
 
-  if [ -z "$result" ]; then
-    return 1
-  fi
-
   local entry
   local systemd_image_selected=false
   for entry in $result; do
@@ -313,10 +309,6 @@ prompt_component_selection() {
       fi
     fi
   done
-
-  if [ ${#_component_result[@]} -eq 0 ]; then
-    return 1
-  fi
 
   if [ "$systemd_image_selected" = true ]; then
     _target_result+=(systemd-image)
@@ -557,6 +549,7 @@ else
     if [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
       if prompt_component_selection selected_components selected_make_targets; then
         used_dialog_menu=true
+        explicit_component_selection=true
         explicit_make_target_selection=true
       else
         echo "Menu selection cancelled; exiting." >&2
