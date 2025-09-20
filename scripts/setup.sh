@@ -77,7 +77,7 @@ if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
 fi
 
 export CROSS_COMPILE=${CROSS_COMPILE:-}
-CC=${CC:-${CROSS_COMPILE}g++}
+CC=${CC:-${CROSS_COMPILE}gcc}
 CXX=${CXX:-${CROSS_COMPILE}g++}
 LD=${LD:-${CROSS_COMPILE}ld}
 
