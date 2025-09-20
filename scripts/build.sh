@@ -104,7 +104,6 @@ readonly -a MAKE_TARGET_IDS=(
   systemd-image
   examples
   gen_prebuilt
-  docker-build
 )
 
 declare -A MAKE_TARGET_LABELS=(
@@ -115,7 +114,6 @@ declare -A MAKE_TARGET_LABELS=(
   [systemd-image]="Build image with systemd"
   [examples]="Build Rust example servers and clients"
   [gen_prebuilt]="Generate pre-built images"
-  [docker-build]="Build project inside Docker container"
 )
 
 run_component_build() {
