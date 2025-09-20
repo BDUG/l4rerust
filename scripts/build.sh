@@ -1100,7 +1100,7 @@ EOF
     meson setup "${meson_setup_args[@]}"
     ninja -C "$builddir" systemd || ninja -C "$builddir"
     DESTDIR="$REPO_ROOT/$out_dir/root" meson install -C "$builddir"
-    cp "$REPO_ROOT/$out_dir/root/lib/systemd/systemd" "$REPO_ROOT/$out_dir/"
+    cp "$REPO_ROOT/$out_dir/root/" "$REPO_ROOT/$out_dir/"
   )
   echo "$expected_version" > "$out_dir/VERSION"
 }
