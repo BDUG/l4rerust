@@ -914,7 +914,7 @@ EOF
       mkdir -p config/lsb_root/usr/lib/systemd
       mkdir -p config/lsb_root/lib/systemd
       if [ -d "$sys_root/usr/lib/systemd" ]; then
-        cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
+        cp -a "$sys_root/usr/lib/systemd/." config/lsb_root/usr/lib/systemd/
       fi
       if [ -f "$sys_root/lib/systemd/systemd" ]; then
         cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
