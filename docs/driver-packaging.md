@@ -11,9 +11,37 @@ consumed by the L4Re build system.
 tools/l4re-driver-wrap --linux-src /path/to/linux
 ```
 
-The script launches an interactive selector to choose a driver from the Linux
-source tree. After extraction, the driver is wrapped and a package directory is
-created.
+When invoked from an interactive terminal with the external
+[`dialog`](https://invisible-island.net/dialog/dialog.html) utility available,
+the wrapper launches `tools/driver_picker_menu.sh`. The helper gathers the
+catalog via `driver_picker --list`, presents a menu to select a subsystem and a
+driver, and finally runs the extraction pipeline with
+`driver_picker --driver <symbol> --subsystem <name>`. The resulting output still
+mirrors the traditional format:
+
+```
+Workspace: /tmp/l4re-driver.XXXXXX
+Manifest written to /tmp/l4re-driver.XXXXXX/driver.yaml
+```
+
+If `dialog` is missing or the session is non-interactive the workflow falls back
+to the original `cargo run -p driver_picker` prompts.
+
+To preview the available drivers without extracting anything, run:
+
+```
+cargo run -p driver_picker -- --linux-src /path/to/linux --list --format json
+```
+
+The picker can also operate non-interactively when both the subsystem and
+driver are known ahead of time:
+
+```
+cargo run -p driver_picker -- \
+  --linux-src /path/to/linux \
+  --subsystem net \
+  --driver E1000
+```
 
 ## Using a configuration file
 
@@ -35,7 +63,8 @@ generated manifest is used.
 ## Troubleshooting
 
 * Ensure the `tools/driver_picker` tool builds successfully and that `LINUX_SRC`
-  points to a valid kernel tree.
+  points to a valid kernel tree. Installing `dialog` enables the menu-based
+  picker used by `tools/l4re-driver-wrap` and `tools/driver_picker_menu.sh`.
 * If compilation fails, verify that cross-compilation toolchains referenced by
   the `CROSS_COMPILE` environment variable are installed.
 * Packaging errors usually indicate the build step did not produce the expected

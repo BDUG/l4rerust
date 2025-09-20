@@ -198,6 +198,9 @@ Guidance on required cross-compilers and environment setup is in [docs/toolchain
 macOS-specific toolchain setup is covered in [docs/toolchains.md](docs/toolchains.md).
 
 ### Driver packaging workflow
+See [docs/driver-packaging.md](docs/driver-packaging.md) for the end-to-end
+packaging flow. The menu-based helper described there depends on the external
+`dialog` utility, falling back to plain prompts when the binary is unavailable.
 Details on packaging drivers for L4Re are provided in [docs/driver-packaging.md](docs/driver-packaging.md).
 
 ### Systemd integration

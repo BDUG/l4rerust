@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-use clap::Parser;
+use anyhow::{bail, Context, Result};
+use clap::{Parser, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
 use regex::Regex;
 use serde::Serialize;
@@ -17,6 +17,24 @@ struct Args {
     /// Path to the Linux kernel source tree
     #[arg(long, env = "LINUX_SRC")]
     linux_src: PathBuf,
+    /// Print the driver catalog and exit
+    #[arg(long, default_value_t = false)]
+    list: bool,
+    /// Optional subsystem filter for non-interactive selection
+    #[arg(long)]
+    subsystem: Option<String>,
+    /// Select a driver without prompting
+    #[arg(long)]
+    driver: Option<String>,
+    /// Output format for --list results
+    #[arg(long, value_enum, default_value = "tsv", requires = "list")]
+    format: CatalogFormat,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum CatalogFormat {
+    Tsv,
+    Json,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -49,7 +67,13 @@ fn collect_drivers(linux_src: &Path) -> Result<HashMap<String, Vec<DriverInfo>>>
                 let symbol = cap[1].to_string();
                 let dir = entry.path().parent().unwrap().to_path_buf();
                 let rel = dir.strip_prefix(&drivers_dir).unwrap();
-                let subsystem = rel.components().next().unwrap().as_os_str().to_string_lossy().to_string();
+                let subsystem = rel
+                    .components()
+                    .next()
+                    .unwrap()
+                    .as_os_str()
+                    .to_string_lossy()
+                    .to_string();
                 map.entry(subsystem).or_default().push(DriverInfo {
                     symbol,
                     dir,
@@ -59,6 +83,120 @@ fn collect_drivers(linux_src: &Path) -> Result<HashMap<String, Vec<DriverInfo>>>
         }
     }
     Ok(map)
+}
+
+fn emit_catalog(map: &HashMap<String, Vec<DriverInfo>>, format: CatalogFormat) -> Result<()> {
+    let mut subsystems: Vec<&String> = map.keys().collect();
+    subsystems.sort_unstable();
+    match format {
+        CatalogFormat::Tsv => {
+            for subsystem in &subsystems {
+                let mut drivers: Vec<&DriverInfo> = map.get(*subsystem).unwrap().iter().collect();
+                drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
+                for driver in drivers {
+                    println!("{}\t{}", subsystem, driver.symbol);
+                }
+            }
+        }
+        CatalogFormat::Json => {
+            #[derive(Serialize)]
+            struct CatalogEntry<'a> {
+                subsystem: &'a str,
+                driver: &'a str,
+            }
+
+            let mut entries = Vec::new();
+            for subsystem in &subsystems {
+                let mut drivers: Vec<&DriverInfo> = map.get(*subsystem).unwrap().iter().collect();
+                drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
+                for driver in drivers {
+                    entries.push(CatalogEntry {
+                        subsystem: subsystem.as_str(),
+                        driver: driver.symbol.as_str(),
+                    });
+                }
+            }
+            println!("{}", serde_json::to_string_pretty(&entries)?);
+        }
+    }
+    Ok(())
+}
+
+fn resolve_driver<'a>(
+    map: &'a HashMap<String, Vec<DriverInfo>>,
+    subsystem: Option<&'a String>,
+    driver: &str,
+) -> Result<(&'a str, &'a DriverInfo)> {
+    if let Some(subsystem_name) = subsystem {
+        let drivers = map
+            .get(subsystem_name)
+            .with_context(|| format!("Subsystem '{}' not found", subsystem_name))?;
+        let driver_info = drivers
+            .iter()
+            .find(|d| d.symbol == driver)
+            .with_context(|| {
+                format!(
+                    "Driver '{}' not found in subsystem '{}'",
+                    driver, subsystem_name
+                )
+            })?;
+        return Ok((subsystem_name.as_str(), driver_info));
+    }
+
+    let mut matches: Vec<(&str, &DriverInfo)> = Vec::new();
+    for (subsystem_name, drivers) in map.iter() {
+        if let Some(driver_info) = drivers.iter().find(|d| d.symbol == driver) {
+            matches.push((subsystem_name.as_str(), driver_info));
+        }
+    }
+
+    match matches.len() {
+        0 => bail!("Driver '{}' not found", driver),
+        1 => Ok(matches.remove(0)),
+        _ => bail!(
+            "Driver '{}' exists in multiple subsystems, please specify --subsystem",
+            driver
+        ),
+    }
+}
+
+fn extract_driver(linux_src: &Path, subsystem: &str, driver: &DriverInfo) -> Result<()> {
+    let tmp = tempdir()?;
+    let workspace = tmp.keep();
+    let mut files = Vec::new();
+
+    copy_tree(&driver.dir, &workspace, &mut files)?;
+    fs::copy(&driver.kconfig, workspace.join("Kconfig"))?;
+
+    let headers = run_make_depend(linux_src, &driver.dir)?;
+    for h in &headers {
+        if let Ok(rel) = h.strip_prefix(linux_src) {
+            let dest = workspace.join(rel);
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(h, &dest).ok();
+            files.push(dest);
+        }
+    }
+
+    let manifest = Manifest {
+        driver: driver.symbol.clone(),
+        subsystem: subsystem.to_string(),
+        files: files.clone(),
+        headers: headers
+            .iter()
+            .map(|h| h.strip_prefix(linux_src).unwrap().to_path_buf())
+            .collect(),
+        kconfig: PathBuf::from("Kconfig"),
+        cflags: vec![],
+    };
+    let manifest_path = workspace.join("driver.yaml");
+    fs::write(&manifest_path, serde_yaml::to_string(&manifest)?)?;
+    println!("Workspace: {}", workspace.display());
+    println!("Manifest written to {}", manifest_path.display());
+
+    Ok(())
 }
 
 fn copy_tree(src: &Path, dst: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
@@ -118,53 +256,34 @@ fn main() -> Result<()> {
     let args = Args::parse();
     let map = collect_drivers(&args.linux_src)?;
 
-    let subsystems: Vec<_> = map.keys().cloned().collect();
+    if args.list {
+        emit_catalog(&map, args.format)?;
+        return Ok(());
+    }
+
+    if let Some(driver) = &args.driver {
+        let (subsystem, driver_info) = resolve_driver(&map, args.subsystem.as_ref(), driver)?;
+        return extract_driver(&args.linux_src, subsystem, driver_info);
+    }
+
+    let mut subsystems: Vec<&String> = map.keys().collect();
+    subsystems.sort_unstable();
+    let subsystem_labels: Vec<_> = subsystems.iter().map(|s| s.as_str()).collect();
     let subsystem_choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Select subsystem")
-        .items(&subsystems)
+        .items(&subsystem_labels)
         .default(0)
         .interact()?;
-    let subsystem = &subsystems[subsystem_choice];
-    let drivers = map.get(subsystem).unwrap();
-    let driver_symbols: Vec<_> = drivers.iter().map(|d| d.symbol.clone()).collect();
+    let subsystem = subsystems[subsystem_choice];
+    let mut drivers: Vec<&DriverInfo> = map.get(subsystem).unwrap().iter().collect();
+    drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
+    let driver_symbols: Vec<_> = drivers.iter().map(|d| d.symbol.as_str()).collect();
     let driver_choice = Select::with_theme(&ColorfulTheme::default())
         .with_prompt("Select driver")
         .items(&driver_symbols)
         .default(0)
         .interact()?;
-    let driver = &drivers[driver_choice];
+    let driver = drivers[driver_choice];
 
-    let tmp = tempdir()?;
-    let dst = tmp.path();
-    let mut files = Vec::new();
-    copy_tree(&driver.dir, dst, &mut files)?;
-    fs::copy(&driver.kconfig, dst.join("Kconfig"))?;
-
-    let headers = run_make_depend(&args.linux_src, &driver.dir)?;
-    for h in &headers {
-        if let Ok(rel) = h.strip_prefix(&args.linux_src) {
-            let dest = dst.join(rel);
-            if let Some(parent) = dest.parent() { fs::create_dir_all(parent)?; }
-            fs::copy(h, &dest).ok();
-            files.push(dest);
-        }
-    }
-
-    let manifest = Manifest {
-        driver: driver.symbol.clone(),
-        subsystem: subsystem.clone(),
-        files: files.clone(),
-        headers: headers
-            .iter()
-            .map(|h| h.strip_prefix(&args.linux_src).unwrap().to_path_buf())
-            .collect(),
-        kconfig: PathBuf::from("Kconfig"),
-        cflags: vec![],
-    };
-    let manifest_path = dst.join("driver.yaml");
-    fs::write(&manifest_path, serde_yaml::to_string(&manifest)?)?;
-    println!("Workspace: {}", dst.display());
-    println!("Manifest written to {}", manifest_path.display());
-
-    Ok(())
+    extract_driver(&args.linux_src, subsystem.as_str(), driver)
 }
