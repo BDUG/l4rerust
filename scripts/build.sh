@@ -389,6 +389,75 @@ prompt_clean_before_build() {
   return 0
 }
 
+prompt_cross_compiler_prefixes() {
+  if [ ! -t 0 ]; then
+    return 0
+  fi
+
+  if ! command -v dialog >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local default_arm="${CROSS_COMPILE_ARM:-arm-linux-gnueabihf-}"
+  local default_arm64="${CROSS_COMPILE_ARM64:-aarch64-linux-gnu-}"
+
+  local original_arm_set=false
+  local original_arm=""
+  if [ "${CROSS_COMPILE_ARM+x}" ]; then
+    original_arm_set=true
+    original_arm=$CROSS_COMPILE_ARM
+  fi
+
+  local original_arm64_set=false
+  local original_arm64=""
+  if [ "${CROSS_COMPILE_ARM64+x}" ]; then
+    original_arm64_set=true
+    original_arm64=$CROSS_COMPILE_ARM64
+  fi
+
+  local tmpfile
+  local new_value
+
+  tmpfile=$(mktemp)
+  if dialog --clear \
+      --inputbox "Enter CROSS_COMPILE_ARM prefix:" 10 70 "$default_arm" 2>"$tmpfile"; then
+    new_value=$(<"$tmpfile")
+    CROSS_COMPILE_ARM="$new_value"
+  else
+    rm -f "$tmpfile"
+    if [ "$original_arm_set" = true ]; then
+      CROSS_COMPILE_ARM="$original_arm"
+    else
+      unset CROSS_COMPILE_ARM
+    fi
+    return 1
+  fi
+  rm -f "$tmpfile"
+
+  tmpfile=$(mktemp)
+  if dialog --clear \
+      --inputbox "Enter CROSS_COMPILE_ARM64 prefix:" 10 70 "$default_arm64" 2>"$tmpfile"; then
+    new_value=$(<"$tmpfile")
+    CROSS_COMPILE_ARM64="$new_value"
+  else
+    rm -f "$tmpfile"
+    if [ "$original_arm_set" = true ]; then
+      CROSS_COMPILE_ARM="$original_arm"
+    else
+      unset CROSS_COMPILE_ARM
+    fi
+    if [ "$original_arm64_set" = true ]; then
+      CROSS_COMPILE_ARM64="$original_arm64"
+    else
+      unset CROSS_COMPILE_ARM64
+    fi
+    return 1
+  fi
+  rm -f "$tmpfile"
+
+  return 0
+}
+
 clean=false
 component_arg=""
 component_arg_set=false
@@ -605,6 +674,14 @@ HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
 )
 
 detect_cross_compilers
+if [ "$show_menu" = true ] && [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
+  if prompt_cross_compiler_prefixes; then
+    :
+  else
+    echo "Cross-compiler prefix entry cancelled; exiting." >&2
+    exit 1
+  fi
+fi
 validate_tools
 
 ARTIFACTS_DIR="out"
