@@ -458,6 +458,36 @@ prompt_cross_compiler_prefixes() {
   return 0
 }
 
+source_cross_compiler_prefixes_from_config() {
+  local config_file="$1"
+  if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+    return 1
+  fi
+
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      ''|'#'*)
+        continue
+        ;;
+    esac
+
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*\?=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+      if [ -z "${!key+x}" ]; then
+        eval "$key=$value"
+      fi
+    elif [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+      eval "$key=$value"
+    fi
+  done <"$config_file"
+
+  return 0
+}
+
 clean=false
 component_arg=""
 component_arg_set=false
@@ -670,11 +700,34 @@ HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
 (
   cd "$REPO_ROOT/src" &&
   "$HAM_BIN" init -u https://github.com/kernkonzept/manifest.git &&
-  "$HAM_BIN" sync 
+  "$HAM_BIN" sync
 )
 
-detect_cross_compilers
-if [ "$show_menu" = true ] && [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
+setup_mode="--non-interactive"
+config_source_path=""
+config_source_label=""
+
+if [ -f /workspace/.config ]; then
+  config_source_path="/workspace/.config"
+  config_source_label="/workspace/.config"
+  setup_mode="setup"
+elif [ -f "$SCRIPT_DIR/l4re.config" ]; then
+  config_source_path="$SCRIPT_DIR/l4re.config"
+  config_source_label="scripts/l4re.config"
+  setup_mode="setup"
+fi
+
+if [ -n "$config_source_path" ]; then
+  source_cross_compiler_prefixes_from_config "$config_source_path"
+fi
+
+cross_prefixes_missing=false
+if [ -z "${CROSS_COMPILE_ARM:-}" ] || [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
+  cross_prefixes_missing=true
+  detect_cross_compilers
+fi
+
+if [ "$cross_prefixes_missing" = true ] && [ "$show_menu" = true ] && [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
   if prompt_cross_compiler_prefixes; then
     :
   else
@@ -682,6 +735,8 @@ if [ "$show_menu" = true ] && [ -t 0 ] && command -v dialog >/dev/null 2>&1; the
     exit 1
   fi
 fi
+
+export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 validate_tools
 
 ARTIFACTS_DIR="out"
@@ -700,20 +755,12 @@ mkdir -p "$ARTIFACTS_DIR"
 initialize_component_prefixes
 
 # Configure for ARM using setup script
-export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
-setup_mode="--non-interactive"
-if [ -f /workspace/.config ]; then
-  echo "Using configuration from /workspace/.config"
+if [ -n "$config_source_path" ]; then
+  echo "Using configuration from $config_source_label"
   mkdir -p obj
-  cp /workspace/.config obj/.config
-  setup_mode="setup"
-elif [ -f "$SCRIPT_DIR/l4re.config" ]; then
-  echo "Using configuration from scripts/l4re.config"
-  mkdir -p obj
-  cp "$SCRIPT_DIR/l4re.config" obj/.config
-  setup_mode="setup"
+  cp "$config_source_path" obj/.config
 else
   "$SCRIPT_DIR/setup.sh" config
 fi
