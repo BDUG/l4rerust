@@ -93,93 +93,6 @@ UTIL_LINUX_VERSION=2.39.3
 UTIL_LINUX_MAJOR_MINOR="${UTIL_LINUX_VERSION%.*}"
 UTIL_LINUX_URL="https://cdn.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX_MAJOR_MINOR}/util-linux-${UTIL_LINUX_VERSION}.tar.xz"
 
-build_libgcrypt() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* ]]; then
-    echo "${cross}g++ targets '$triple', but libgcrypt requires a Linux-targeted toolchain" >&2
-    exit 1
-  fi
-
-  if component_override_used "libgcrypt" "$arch"; then
-    echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
-    return
-  fi
-
-  local install_prefix
-  install_prefix="$(component_prefix_path "libgcrypt" "$arch")"
-  if component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$expected_version"; then
-    echo "libgcrypt for $arch already current, skipping"
-    return
-  fi
-
-  rm -rf "$install_prefix"
-  mkdir -p "$install_prefix"
-
-  local build_triple
-  build_triple="$(gcc -dumpmachine)"
-
-  (
-    cd "$libgpg_error_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    gmake clean >/dev/null 2>&1 || true
-
-    export CC="${cross}gcc"
-    export AR="${cross}ar"
-    export RANLIB="${cross}ranlib"
-    export STRIP="${cross}strip"
-
-    ./configure \
-      --build="$build_triple" \
-      --host="$triple" \
-      --prefix="$install_prefix" \
-      --disable-doc
-    gmake
-    gmake install
-  )
-
-  (
-    cd "$libgcrypt_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    gmake clean >/dev/null 2>&1 || true
-
-    export CC="${cross}gcc"
-    export AR="${cross}ar"
-    export RANLIB="${cross}ranlib"
-    export STRIP="${cross}strip"
-    export PKG_CONFIG_PATH="$install_prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-
-    ./configure \
-      --build="$build_triple" \
-      --host="$triple" \
-      --prefix="$install_prefix" \
-      --disable-doc \
-      --disable-asm \
-      --with-libgpg-error-prefix="$install_prefix"
-    gmake
-    gmake install
-  )
-
-  local pkgconfig_dir="$install_prefix/lib/pkgconfig"
-  mkdir -p "$pkgconfig_dir"
-  if [ ! -f "$pkgconfig_dir/gpg-error.pc" ]; then
-    cat >"$pkgconfig_dir/gpg-error.pc" <<EOF
-prefix=$install_prefix
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-
-Name: libgpg-error
-Description: Library for error codes used by GnuPG
-Version: $LIBGPG_ERROR_VERSION
-Libs: -L\${libdir} -lgpg-error
-Cflags: -I\${includedir}
-EOF
-  fi
-
-  echo "$expected_version" > "$install_prefix/VERSION"
-}
-
 LIBGPG_ERROR_VERSION=1.49
 LIBGPG_ERROR_URL="https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-${LIBGPG_ERROR_VERSION}.tar.bz2"
 LIBGCRYPT_VERSION=1.10.3
@@ -442,8 +355,32 @@ if [ "$need_libgcrypt" = true ]; then
   curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
   libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
   curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
-  build_libgcrypt arm "$CROSS_COMPILE_ARM" "$LIBGCRYPT_VERSION_MARKER"
-  build_libgcrypt arm64 "$CROSS_COMPILE_ARM64" "$LIBGCRYPT_VERSION_MARKER"
+  for arch in arm arm64; do
+    cross=""
+    case "$arch" in
+      arm)
+        cross="$CROSS_COMPILE_ARM"
+        ;;
+      arm64)
+        cross="$CROSS_COMPILE_ARM64"
+        ;;
+      *)
+        echo "Unsupported architecture '$arch' for libgcrypt build" >&2
+        exit 1
+        ;;
+    esac
+    if component_override_used "libgcrypt" "$arch"; then
+      echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
+      continue
+    fi
+    install_prefix="$(component_prefix_path "libgcrypt" "$arch")"
+    if component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
+      echo "libgcrypt for $arch already current, skipping"
+      continue
+    fi
+    "$SCRIPT_DIR/build_libgcrypt.sh" "$arch" "$cross" "$LIBGCRYPT_VERSION_MARKER" \
+      "$libgpg_error_src_dir" "$libgcrypt_src_dir" "$install_prefix" "$LIBGPG_ERROR_VERSION"
+  done
   rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
 else
   if component_override_used "libgcrypt" arm || component_override_used "libgcrypt" arm64; then
