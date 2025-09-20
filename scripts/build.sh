@@ -12,10 +12,142 @@ source "$SCRIPT_DIR/common_build.sh"
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
-# Usage: build.sh [--clean|--no-clean]
-#   --clean     Remove previous build directories before building (default)
-#   --no-clean  Skip removal of build directories
+# Usage: build.sh [options]
+#   --clean                    Remove previous build directories before building (default)
+#   --no-clean                 Skip removal of build directories
+#   --components=name1,name2   Limit builds to the specified components
+#   --no-menu                  Skip the interactive component selection menu
+#   --help                     Show usage information and exit
+
+readonly -a BUILD_COMPONENT_IDS=(
+  bash
+  libcap
+  libcrypt
+  libblkid
+  libgcrypt
+  libzstd
+  systemd
+)
+
+declare -A BUILD_COMPONENT_LABELS=(
+  [bash]="GNU Bash shell"
+  [libcap]="libcap (POSIX capabilities)"
+  [libcrypt]="libxcrypt (libcrypt)"
+  [libblkid]="util-linux libblkid"
+  [libgcrypt]="libgcrypt (and libgpg-error)"
+  [libzstd]="Zstandard compression library"
+  [systemd]="systemd"
+)
+
+declare -A SHOULD_BUILD=()
+
+usage() {
+  cat <<EOF
+Usage: $0 [options]
+  --clean                    Remove previous build directories before building (default)
+  --no-clean                 Skip removal of build directories
+  --components=name1,name2   Limit builds to the specified components
+  --no-menu                  Skip the interactive component selection menu
+  --help                     Show this message and exit
+EOF
+  local components_list
+  components_list=$(IFS=,; echo "${BUILD_COMPONENT_IDS[*]}")
+  echo "  Available components: ${components_list}"
+}
+
+is_valid_component() {
+  local candidate="$1" component
+  for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    if [ "$component" = "$candidate" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+clear_component_selection() {
+  local component
+  for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    SHOULD_BUILD["$component"]=0
+  done
+}
+
+set_all_components_selected() {
+  local component
+  for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    SHOULD_BUILD["$component"]=1
+  done
+}
+
+should_build_component() {
+  local component="$1"
+  [[ "${SHOULD_BUILD["$component"]:-0}" == 1 ]]
+}
+
+prompt_component_selection() {
+  local -n _result=$1
+  _result=()
+
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+
+  if ! command -v dialog >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local tmpfile
+  tmpfile=$(mktemp)
+  local dialog_status=0
+
+  local menu_args=()
+  local component
+  for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    menu_args+=("$component" "${BUILD_COMPONENT_LABELS[$component]}" on)
+  done
+
+  if ! dialog --clear \
+      --checklist "Select components to build:" 20 70 ${#BUILD_COMPONENT_IDS[@]} \
+      "${menu_args[@]}" 2>"$tmpfile"; then
+    dialog_status=$?
+  fi
+
+  local result
+  result=$(<"$tmpfile")
+  rm -f "$tmpfile"
+
+  if [ $dialog_status -ne 0 ]; then
+    return 1
+  fi
+
+  if [ -z "$result" ]; then
+    return 1
+  fi
+
+  local entry
+  for entry in $result; do
+    if [[ ${entry:0:1} != '"' ]]; then
+      entry="\"$entry\""
+    fi
+    entry="${entry%\"}"
+    entry="${entry#\"}"
+    if [ -n "$entry" ]; then
+      _result+=("$entry")
+    fi
+  done
+
+  if [ ${#_result[@]} -eq 0 ]; then
+    return 1
+  fi
+
+  return 0
+}
+
 clean=true
+component_arg=""
+component_arg_set=false
+show_menu=true
+declare -a selected_components=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean)
@@ -26,12 +158,92 @@ while [[ $# -gt 0 ]]; do
       clean=false
       shift
       ;;
+    --components=*)
+      component_arg="${1#--components=}"
+      component_arg_set=true
+      show_menu=false
+      shift
+      ;;
+    --components)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --components requires a comma-separated list" >&2
+        usage >&2
+        exit 1
+      fi
+      component_arg="$2"
+      component_arg_set=true
+      show_menu=false
+      shift 2
+      ;;
+    --no-menu)
+      show_menu=false
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     *)
-      echo "Usage: $0 [--clean|--no-clean]" >&2
+      usage >&2
       exit 1
       ;;
   esac
 done
+
+if [ "$component_arg_set" = true ]; then
+  IFS=',' read -ra selected_components <<< "$component_arg"
+  declare -a sanitized_components=()
+  declare -A seen_components=()
+  component=""
+  for component in "${selected_components[@]}"; do
+    component="${component//[[:space:]]/}"
+    if [ -z "$component" ]; then
+      continue
+    fi
+    if ! is_valid_component "$component"; then
+      echo "Unknown component '$component'." >&2
+      usage >&2
+      exit 1
+    fi
+    if [[ -n "${seen_components["$component"]-}" ]]; then
+      continue
+    fi
+    sanitized_components+=("$component")
+    seen_components["$component"]=1
+  done
+  if [ ${#sanitized_components[@]} -eq 0 ]; then
+    echo "No valid components specified for --components" >&2
+    usage >&2
+    exit 1
+  fi
+  selected_components=("${sanitized_components[@]}")
+else
+  if [ "$show_menu" = true ]; then
+    if [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
+      if prompt_component_selection selected_components; then
+        :
+      else
+        echo "No components selected; exiting." >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+if [ ${#selected_components[@]} -eq 0 ]; then
+  selected_components=("${BUILD_COMPONENT_IDS[@]}")
+fi
+
+clear_component_selection
+if [ ${#selected_components[@]} -eq 0 ]; then
+  set_all_components_selected
+else
+  for component in "${selected_components[@]}"; do
+    SHOULD_BUILD["$component"]=1
+  done
+fi
+
+echo "Components selected for build: ${selected_components[*]}"
 
 # Set up the L4Re environment (l4re-core and ham)
 "$SCRIPT_DIR/setup_l4re_env.sh"
@@ -103,284 +315,308 @@ LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERS
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
 
-need_bash=false
-for arch in arm arm64; do
-  if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
-    need_bash=true
-    break
-  fi
-done
+if should_build_component "bash"; then
+  need_bash=false
+  for arch in arm arm64; do
+    if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
+      need_bash=true
+      break
+    fi
+  done
 
-if [ "$need_bash" = true ]; then
-  bash_src_dir=$(mktemp -d src/bash-XXXXXX)
-  curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
-  bash_patch_dir="$SCRIPT_DIR/patches/bash"
-  if [ -d "$bash_patch_dir" ]; then
-    (
-      cd "$bash_src_dir"
-      for patch_file in "$bash_patch_dir"/*.patch; do
-        [ -e "$patch_file" ] || continue
-        patch -p1 -N < "$patch_file"
-      done
-    )
+  if [ "$need_bash" = true ]; then
+    bash_src_dir=$(mktemp -d src/bash-XXXXXX)
+    curl -L "$BASH_URL" | tar -xz -C "$bash_src_dir" --strip-components=1
+    bash_patch_dir="$SCRIPT_DIR/patches/bash"
+    if [ -d "$bash_patch_dir" ]; then
+      (
+        cd "$bash_src_dir"
+        for patch_file in "$bash_patch_dir"/*.patch; do
+          [ -e "$patch_file" ] || continue
+          patch -p1 -N < "$patch_file"
+        done
+      )
+    fi
+    "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
+    "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
+    rm -rf "$bash_src_dir"
+  else
+    echo "bash for arm and arm64 already current, skipping"
   fi
-  "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
-  "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
-  rm -rf "$bash_src_dir"
 else
-  echo "bash for arm and arm64 already current, skipping"
+  echo "Skipping bash build (component disabled)"
 fi
 
-need_libcap=false
-for arch in arm arm64; do
-  if component_override_used "libcap" "$arch"; then
-    continue
-  fi
-  if ! component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
-    need_libcap=true
-    break
-  fi
-done
-
-if [ "$need_libcap" = true ]; then
-  libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
-  curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
+if should_build_component "libcap"; then
+  need_libcap=false
   for arch in arm arm64; do
-    cross=""
-    case "$arch" in
-      arm)
-        cross="$CROSS_COMPILE_ARM"
-        ;;
-      arm64)
-        cross="$CROSS_COMPILE_ARM64"
-        ;;
-      *)
-        echo "Unsupported architecture '$arch' for libcap build" >&2
-        exit 1
-        ;;
-    esac
     if component_override_used "libcap" "$arch"; then
-      echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
       continue
     fi
-    if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
-      echo "libcap for $arch already current, skipping"
-      continue
+    if ! component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
+      need_libcap=true
+      break
     fi
-    install_prefix="$(component_prefix_path "libcap" "$arch")"
-    "$SCRIPT_DIR/build_libcap.sh" "$arch" "$cross" "$LIBCAP_VERSION" "$libcap_src_dir" "$install_prefix"
   done
-  rm -rf "$libcap_src_dir"
-else
-  if component_override_used "libcap" arm || component_override_used "libcap" arm64; then
-    echo "libcap builds provided by environment overrides"
+
+  if [ "$need_libcap" = true ]; then
+    libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
+    curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
+    for arch in arm arm64; do
+      cross=""
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libcap build" >&2
+          exit 1
+          ;;
+      esac
+      if component_override_used "libcap" "$arch"; then
+        echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
+        continue
+      fi
+      if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
+        echo "libcap for $arch already current, skipping"
+        continue
+      fi
+      install_prefix="$(component_prefix_path "libcap" "$arch")"
+      "$SCRIPT_DIR/build_libcap.sh" "$arch" "$cross" "$LIBCAP_VERSION" "$libcap_src_dir" "$install_prefix"
+    done
+    rm -rf "$libcap_src_dir"
   else
-    echo "libcap for arm and arm64 already current, skipping"
+    if component_override_used "libcap" arm || component_override_used "libcap" arm64; then
+      echo "libcap builds provided by environment overrides"
+    else
+      echo "libcap for arm and arm64 already current, skipping"
+    fi
   fi
+else
+  echo "Skipping libcap build (component disabled)"
 fi
 
 # Build libcrypt (libxcrypt) for ARM and ARM64
-need_libcrypt=false
-for arch in arm arm64; do
-  if component_override_used "libcrypt" "$arch"; then
-    continue
-  fi
-  if ! component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
-    need_libcrypt=true
-    break
-  fi
-done
-
-if [ "$need_libcrypt" = true ]; then
-  libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
-  curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
+if should_build_component "libcrypt"; then
+  need_libcrypt=false
   for arch in arm arm64; do
     if component_override_used "libcrypt" "$arch"; then
-      echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
       continue
     fi
-    if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
-      echo "libcrypt for $arch already current, skipping"
-      continue
+    if ! component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
+      need_libcrypt=true
+      break
     fi
-    cross=""
-    case "$arch" in
-      arm)
-        cross="$CROSS_COMPILE_ARM"
-        ;;
-      arm64)
-        cross="$CROSS_COMPILE_ARM64"
-        ;;
-      *)
-        echo "Unsupported architecture '$arch' for libcrypt build" >&2
-        exit 1
-        ;;
-    esac
-    install_prefix="$(component_prefix_path "libcrypt" "$arch")"
-    "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
   done
-  rm -rf "$libxcrypt_src_dir"
-else
-  if component_override_used "libcrypt" arm || component_override_used "libcrypt" arm64; then
-    echo "libcrypt builds provided by environment overrides"
+
+  if [ "$need_libcrypt" = true ]; then
+    libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
+    curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
+    for arch in arm arm64; do
+      if component_override_used "libcrypt" "$arch"; then
+        echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
+        continue
+      fi
+      if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
+        echo "libcrypt for $arch already current, skipping"
+        continue
+      fi
+      cross=""
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libcrypt build" >&2
+          exit 1
+          ;;
+      esac
+      install_prefix="$(component_prefix_path "libcrypt" "$arch")"
+      "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
+    done
+    rm -rf "$libxcrypt_src_dir"
   else
-    echo "libcrypt for arm and arm64 already current, skipping"
+    if component_override_used "libcrypt" arm || component_override_used "libcrypt" arm64; then
+      echo "libcrypt builds provided by environment overrides"
+    else
+      echo "libcrypt for arm and arm64 already current, skipping"
+    fi
   fi
+else
+  echo "Skipping libcrypt build (component disabled)"
 fi
 
 # Build libblkid (util-linux) for ARM and ARM64
-need_libblkid=false
-for arch in arm arm64; do
-  if component_override_used "libblkid" "$arch"; then
-    continue
-  fi
-  if ! component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
-    need_libblkid=true
-    break
-  fi
-done
-
-if [ "$need_libblkid" = true ]; then
-  util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
-  curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
+if should_build_component "libblkid"; then
+  need_libblkid=false
   for arch in arm arm64; do
     if component_override_used "libblkid" "$arch"; then
-      echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
       continue
     fi
-    if component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
-      echo "libblkid for $arch already current, skipping"
-      continue
+    if ! component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
+      need_libblkid=true
+      break
     fi
-
-    cross=""
-    case "$arch" in
-      arm)
-        cross="$CROSS_COMPILE_ARM"
-        ;;
-      arm64)
-        cross="$CROSS_COMPILE_ARM64"
-        ;;
-      *)
-        echo "Unsupported architecture '$arch' for libblkid build" >&2
-        exit 1
-        ;;
-    esac
-
-    install_prefix="$(component_prefix_path "libblkid" "$arch")"
-    "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
   done
-  rm -rf "$util_linux_src_dir"
-else
-  if component_override_used "libblkid" arm || component_override_used "libblkid" arm64; then
-    echo "libblkid builds provided by environment overrides"
+
+  if [ "$need_libblkid" = true ]; then
+    util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
+    curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
+    for arch in arm arm64; do
+      if component_override_used "libblkid" "$arch"; then
+        echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
+        continue
+      fi
+      if component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
+        echo "libblkid for $arch already current, skipping"
+        continue
+      fi
+
+      cross=""
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libblkid build" >&2
+          exit 1
+          ;;
+      esac
+
+      install_prefix="$(component_prefix_path "libblkid" "$arch")"
+      "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
+    done
+    rm -rf "$util_linux_src_dir"
   else
-    echo "libblkid for arm and arm64 already current, skipping"
+    if component_override_used "libblkid" arm || component_override_used "libblkid" arm64; then
+      echo "libblkid builds provided by environment overrides"
+    else
+      echo "libblkid for arm and arm64 already current, skipping"
+    fi
   fi
+else
+  echo "Skipping libblkid build (component disabled)"
 fi
 
 # Build libgcrypt (and libgpg-error) for ARM and ARM64
-need_libgcrypt=false
-for arch in arm arm64; do
-  if component_override_used "libgcrypt" "$arch"; then
-    continue
-  fi
-  if ! component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
-    need_libgcrypt=true
-    break
-  fi
-done
-
-if [ "$need_libgcrypt" = true ]; then
-  libgpg_error_src_dir=$(mktemp -d src/libgpg-error-XXXXXX)
-  curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
-  libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
-  curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
+if should_build_component "libgcrypt"; then
+  need_libgcrypt=false
   for arch in arm arm64; do
-    cross=""
-    case "$arch" in
-      arm)
-        cross="$CROSS_COMPILE_ARM"
-        ;;
-      arm64)
-        cross="$CROSS_COMPILE_ARM64"
-        ;;
-      *)
-        echo "Unsupported architecture '$arch' for libgcrypt build" >&2
-        exit 1
-        ;;
-    esac
     if component_override_used "libgcrypt" "$arch"; then
-      echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
       continue
     fi
-    install_prefix="$(component_prefix_path "libgcrypt" "$arch")"
-    if component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
-      echo "libgcrypt for $arch already current, skipping"
-      continue
+    if ! component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
+      need_libgcrypt=true
+      break
     fi
-    "$SCRIPT_DIR/build_libgcrypt.sh" "$arch" "$cross" "$LIBGCRYPT_VERSION_MARKER" \
-      "$libgpg_error_src_dir" "$libgcrypt_src_dir" "$install_prefix" "$LIBGPG_ERROR_VERSION"
   done
-  rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
-else
-  if component_override_used "libgcrypt" arm || component_override_used "libgcrypt" arm64; then
-    echo "libgcrypt builds provided by environment overrides"
+
+  if [ "$need_libgcrypt" = true ]; then
+    libgpg_error_src_dir=$(mktemp -d src/libgpg-error-XXXXXX)
+    curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
+    libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
+    curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
+    for arch in arm arm64; do
+      cross=""
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libgcrypt build" >&2
+          exit 1
+          ;;
+      esac
+      if component_override_used "libgcrypt" "$arch"; then
+        echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
+        continue
+      fi
+      install_prefix="$(component_prefix_path "libgcrypt" "$arch")"
+      if component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
+        echo "libgcrypt for $arch already current, skipping"
+        continue
+      fi
+      "$SCRIPT_DIR/build_libgcrypt.sh" "$arch" "$cross" "$LIBGCRYPT_VERSION_MARKER" \
+        "$libgpg_error_src_dir" "$libgcrypt_src_dir" "$install_prefix" "$LIBGPG_ERROR_VERSION"
+    done
+    rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
   else
-    echo "libgcrypt for arm and arm64 already current, skipping"
+    if component_override_used "libgcrypt" arm || component_override_used "libgcrypt" arm64; then
+      echo "libgcrypt builds provided by environment overrides"
+    else
+      echo "libgcrypt for arm and arm64 already current, skipping"
+    fi
   fi
+else
+  echo "Skipping libgcrypt build (component disabled)"
 fi
 
 # Build libzstd for ARM and ARM64
-need_libzstd=false
-for arch in arm arm64; do
-  if component_override_used "libzstd" "$arch"; then
-    continue
-  fi
-  if ! component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
-    need_libzstd=true
-    break
-  fi
-done
-
-if [ "$need_libzstd" = true ]; then
-  zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
-  curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
+if should_build_component "libzstd"; then
+  need_libzstd=false
   for arch in arm arm64; do
     if component_override_used "libzstd" "$arch"; then
-      echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
       continue
     fi
-
-    if component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
-      echo "libzstd for $arch already current, skipping"
-      continue
+    if ! component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
+      need_libzstd=true
+      break
     fi
-
-    cross=""
-    case "$arch" in
-      arm)
-        cross="$CROSS_COMPILE_ARM"
-        ;;
-      arm64)
-        cross="$CROSS_COMPILE_ARM64"
-        ;;
-      *)
-        echo "Unsupported architecture '$arch' for libzstd build" >&2
-        exit 1
-        ;;
-    esac
-
-    install_prefix="$(component_prefix_path "libzstd" "$arch")"
-    "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
   done
-  rm -rf "$zstd_src_dir"
-else
-  if component_override_used "libzstd" arm || component_override_used "libzstd" arm64; then
-    echo "libzstd builds provided by environment overrides"
+
+  if [ "$need_libzstd" = true ]; then
+    zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
+    curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
+    for arch in arm arm64; do
+      if component_override_used "libzstd" "$arch"; then
+        echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
+        continue
+      fi
+
+      if component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
+        echo "libzstd for $arch already current, skipping"
+        continue
+      fi
+
+      cross=""
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libzstd build" >&2
+          exit 1
+          ;;
+      esac
+
+      install_prefix="$(component_prefix_path "libzstd" "$arch")"
+      "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
+    done
+    rm -rf "$zstd_src_dir"
   else
-    echo "libzstd for arm and arm64 already current, skipping"
+    if component_override_used "libzstd" arm || component_override_used "libzstd" arm64; then
+      echo "libzstd builds provided by environment overrides"
+    else
+      echo "libzstd for arm and arm64 already current, skipping"
+    fi
   fi
+else
+  echo "Skipping libzstd build (component disabled)"
 fi
 
 # Build systemd for ARM and ARM64
@@ -388,32 +624,36 @@ fi
 SYSTEMD_VERSION=255.4
 SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
 
-need_systemd=false
-for arch in arm arm64; do
-  if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
-    need_systemd=true
-    break
-  fi
-done
+if should_build_component "systemd"; then
+  need_systemd=false
+  for arch in arm arm64; do
+    if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
+      need_systemd=true
+      break
+    fi
+  done
 
-if [ "$need_systemd" = true ]; then
-  systemd_src_dir=$(mktemp -d src/systemd-XXXXXX)
-  curl -L "$SYSTEMD_URL" | tar -xz -C "$systemd_src_dir" --strip-components=1
-  systemd_patch_dir="$SCRIPT_DIR/patches/systemd"
-  if [ -d "$systemd_patch_dir" ]; then
-    (
-      cd "$systemd_src_dir"
-      for patch_file in "$systemd_patch_dir"/*.patch; do
-        [ -e "$patch_file" ] || continue
-        patch -p1 -N < "$patch_file"
-      done
-    )
+  if [ "$need_systemd" = true ]; then
+    systemd_src_dir=$(mktemp -d src/systemd-XXXXXX)
+    curl -L "$SYSTEMD_URL" | tar -xz -C "$systemd_src_dir" --strip-components=1
+    systemd_patch_dir="$SCRIPT_DIR/patches/systemd"
+    if [ -d "$systemd_patch_dir" ]; then
+      (
+        cd "$systemd_src_dir"
+        for patch_file in "$systemd_patch_dir"/*.patch; do
+          [ -e "$patch_file" ] || continue
+          patch -p1 -N < "$patch_file"
+        done
+      )
+    fi
+    "$SCRIPT_DIR/build_systemd.sh" arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION" "$systemd_src_dir"
+    "$SCRIPT_DIR/build_systemd.sh" arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION" "$systemd_src_dir"
+    rm -rf "$systemd_src_dir"
+  else
+    echo "systemd for arm and arm64 already current, skipping"
   fi
-  "$SCRIPT_DIR/build_systemd.sh" arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION" "$systemd_src_dir"
-  "$SCRIPT_DIR/build_systemd.sh" arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION" "$systemd_src_dir"
-  rm -rf "$systemd_src_dir"
 else
-  echo "systemd for arm and arm64 already current, skipping"
+  echo "Skipping systemd build (component disabled)"
 fi
 
 echo "######### EXTERNAL BUILD DONE ###############"
@@ -444,46 +684,48 @@ debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/
 debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
 # Install systemd into the root filesystem image and staging area
-sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
-if [ -d "$sys_root" ]; then
-  mkdir -p config/lsb_root/usr/lib/systemd
-  mkdir -p config/lsb_root/lib/systemd
-  if [ -d "$sys_root/usr/lib/systemd" ]; then
-    cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
-  fi
-  if [ -f "$sys_root/lib/systemd/systemd" ]; then
-    cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
-    cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
-    debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+if should_build_component "systemd"; then
+  sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
+  if [ -d "$sys_root" ]; then
+    mkdir -p config/lsb_root/usr/lib/systemd
+    mkdir -p config/lsb_root/lib/systemd
     if [ -d "$sys_root/usr/lib/systemd" ]; then
-      find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
-        rel="${d#$sys_root}"
-        debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
-      done
-      find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
-        rel="${f#$sys_root}"
-        debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
-      done
+      cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
     fi
-  fi
-  if [ -f "$sys_root/usr/bin/systemctl" ]; then
-    mkdir -p config/lsb_root/usr/bin
-    cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
-    chmod 0755 config/lsb_root/usr/bin/systemctl
-    debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
-  fi
-  if [ -L "$sys_root/bin/systemctl" ]; then
-    mkdir -p config/lsb_root/bin
-    symlink_target="$(readlink "$sys_root/bin/systemctl")"
-    ln -snf "$symlink_target" config/lsb_root/bin/systemctl
-    debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
+    if [ -f "$sys_root/lib/systemd/systemd" ]; then
+      cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
+      cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
+      debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
+      debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
+      debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
+      debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+      if [ -d "$sys_root/usr/lib/systemd" ]; then
+        find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
+          rel="${d#$sys_root}"
+          debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
+        done
+        find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
+          rel="${f#$sys_root}"
+          debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
+        done
+      fi
+    fi
+    if [ -f "$sys_root/usr/bin/systemctl" ]; then
+      mkdir -p config/lsb_root/usr/bin
+      cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
+      chmod 0755 config/lsb_root/usr/bin/systemctl
+      debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
+    fi
+    if [ -L "$sys_root/bin/systemctl" ]; then
+      mkdir -p config/lsb_root/bin
+      symlink_target="$(readlink "$sys_root/bin/systemctl")"
+      ln -snf "$symlink_target" config/lsb_root/bin/systemctl
+      debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
+    fi
   fi
 fi
 
@@ -567,6 +809,9 @@ stage_component_runtime_libraries() {
 }
 
 for component in "${SYSTEMD_COMPONENTS[@]}"; do
+  if ! should_build_component "$component"; then
+    continue
+  fi
   case "$component" in
     libcap)
       stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
@@ -581,17 +826,19 @@ for component in "${SYSTEMD_COMPONENTS[@]}"; do
 done
 
 # Install systemd unit files into the image
-units_dir="config/systemd"
-if [ -d "$units_dir" ]; then
-  mkdir -p config/lsb_root/lib/systemd/system
-  debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-  for unit in "$units_dir"/*.service; do
-    [ -f "$unit" ] || continue
-    base="$(basename "$unit")"
-    cp "$unit" config/lsb_root/lib/systemd/system/
-    debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
-  done
+if should_build_component "systemd"; then
+  units_dir="config/systemd"
+  if [ -d "$units_dir" ]; then
+    mkdir -p config/lsb_root/lib/systemd/system
+    debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+    for unit in "$units_dir"/*.service; do
+      [ -f "$unit" ] || continue
+      base="$(basename "$unit")"
+      cp "$unit" config/lsb_root/lib/systemd/system/
+      debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+    done
+  fi
 fi
 
 # Enable services
@@ -609,7 +856,9 @@ enable_service() {
   fi
 }
 
-enable_service bash
+if should_build_component "systemd"; then
+  enable_service bash
+fi
 
 # Collect key build artifacts
 stage_bootable_images() {
