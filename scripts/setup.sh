@@ -367,13 +367,6 @@ check_cc()
   return 1
 }
 
-check_eabi_gxx()
-{
-  # probably half-hearted approach but well
-  [ -z "$1" ] && return 1
-  $1 -E -dD -x c++ /dev/null | grep -qw __ARM_EABI__
-}
-
 check_tool()
 {
   command -v $1 > /dev/null
@@ -579,10 +572,6 @@ do_setup()
 
   mkdir -p obj/fiasco
   mkdir -p obj/l4
-  mkdir -p obj/l4linux
-
-  [ -e src/l4linux ] && l4lx_avail=1
-
   # Fiasco build dirs
   for b in $fiasco_configs; do
     fiasco_dir=$(get_fiasco_dir "$b") || {
@@ -657,24 +646,6 @@ do_setup()
     echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
   fi
 
-  # L4Linux build setup
-  [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
-
-  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
-
-    mkdir -p obj/l4linux/arm-up
-
-    if [ "$ARM_L4_DIR_FOR_LX_MP" ]; then
-      mkdir -p obj/l4linux/arm-mp
-    fi
-
-    if ! check_eabi_gxx ${CROSS_COMPILE_ARM}g++; then
-      echo "WARNING: L4Linux has been disabled due to a detected old OABI compiler"
-      echo "WARNING: Please update your compiler to an EABI version"
-      add_to_config SKIP_L4LINUX_ARM_BUILD=1
-    fi
-  fi
-
   common_paths=$(pwd)/config:$(pwd)/config/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
 
   if [ "$CONF_DO_ARM" ]; then
@@ -683,15 +654,13 @@ do_setup()
     mkdir -p $odir/conf
 
     if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
+      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$common_paths" >> $Mboot
       cat<<EOF >> $Mboot
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
 EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
     fi
 
     add_std_qemu_options $Mboot
@@ -715,8 +684,6 @@ EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
     fi
 
 

@@ -29,13 +29,12 @@ setup:
 	  echo ;                                                                        \
 	fi
 
-build_all: build_fiasco build_l4re build_l4linux build_images
+build_all: build_fiasco build_l4re build_images
 
-#.NOTPARALLEL: build_fiasco build_l4re build_l4linux build_images build_all
+#.NOTPARALLEL: build_fiasco build_l4re build_images build_all
 
 build_fiasco: $(addsuffix /fiasco,$(wildcard obj/fiasco/*))
 build_l4re: $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*))
-build_l4linux: $(addsuffix /vmlinux,$(wildcard obj/l4linux/*))
 
 $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 	$(MAKE) -C $(@D)
@@ -43,26 +42,7 @@ $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*)):
 	$(MAKE) -C $(@D)
 
-obj/l4linux/arm-mp/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
-	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
-	                          O=$(abspath $(@D)) arm-mp_defconfig
-	src/l4linux/scripts/config --file $(@D)/.config \
-	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
-
-obj/l4linux/arm-up/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
-	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
-	                          O=$(abspath $(@D)) arm_defconfig
-	src/l4linux/scripts/config --file $(@D)/.config \
-	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
-
-obj/l4linux/arm64/vmlinux: obj/l4/arm64/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM64
-
-build_images: build_l4linux build_l4re build_fiasco
+build_images: build_l4re build_fiasco
 	@echo "=============== Building Images ==============================="
 	export PATH=$$(pwd)/bin:$$PATH;                                        \
 	[ -e obj/.config ] && . obj/.config;                                   \
@@ -154,5 +134,5 @@ help:
 	@echo "  docker-build  Build project inside Docker container"
 
 .PHONY: setup all build_all clean help docker-build \
-build_images build_fiasco build_l4re build_l4linux bash-image \
+build_images build_fiasco build_l4re bash-image \
 systemd-image examples
