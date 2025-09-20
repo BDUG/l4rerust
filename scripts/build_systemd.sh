@@ -340,7 +340,7 @@ CROSS_EOF
   meson setup "${meson_setup_args[@]}"
   ninja -C "$builddir" systemd || ninja -C "$builddir"
   DESTDIR="$out_dir/root" meson install -C "$builddir"
-  cp "$out_dir/root/" "$out_dir/"
+  cp -a "$out_dir/root/." "$out_dir/"
 )
 
 echo "$expected_version" > "$out_dir/VERSION"
