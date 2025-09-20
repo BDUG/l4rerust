@@ -33,31 +33,33 @@ index a577ac7..1ccc854 100644
          c_args : static_libudev_pic ? [] : ['-fno-PIC'],
          pic : static_libudev_pic)
 diff --git a/src/shared/libmount-util.h b/src/shared/libmount-util.h
-index 2f789e7..8bbce23 100644
+index 2f789e7..b9fc848 100644
 --- a/src/shared/libmount-util.h
 +++ b/src/shared/libmount-util.h
 @@ -1,11 +1,14 @@
  /* SPDX-License-Identifier: LGPL-2.1-or-later */
  #pragma once
-
+ 
 -/* This needs to be after sys/mount.h */
 -#include <libmount.h>
 +#include <stdio.h>
-
+ 
  #include "macro.h"
-
+ 
 +#if HAVE_LIBMOUNT
 +/* This needs to be after sys/mount.h */
 +#include <libmount.h> /* IWYU pragma: export */
 +
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_table*, mnt_free_table, NULL);
  DEFINE_TRIVIAL_CLEANUP_FUNC_FULL(struct libmnt_iter*, mnt_free_iter, NULL);
-
-@@ -18,3 +21,170 @@ int libmount_parse(
+ 
+@@ -18,3 +21,195 @@ int libmount_parse(
  int libmount_is_leaf(
                  struct libmnt_table *table,
                  struct libmnt_fs *fs);
-+#else
++#endif
++
++#if !HAVE_LIBMOUNT
 +#include <errno.h>
 +
 +struct libmnt_table;
@@ -246,8 +248,7 @@ index 2f789e7..8bbce23 100644
 +        errno = EOPNOTSUPP;
 +        return -EOPNOTSUPP;
 +}
-+
-+#endif /* HAVE_LIBMOUNT */
++#endif /* !HAVE_LIBMOUNT */
 diff --git a/src/shared/meson.build b/src/shared/meson.build
 index b24a541..1f92b84 100644
 --- a/src/shared/meson.build
