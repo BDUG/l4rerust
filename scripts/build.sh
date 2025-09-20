@@ -5,6 +5,9 @@ declare -A SHOULD_BUILD=()
 declare -A BUILD_RESULTS=()
 declare -A BUILD_NOTES=()
 declare -a FAILED_COMPONENTS=()
+declare -A SHOULD_RUN_TARGET=()
+declare -A TARGET_RESULTS=()
+declare -A TARGET_NOTES=()
 BUILD_FAILURE_COUNT=0
 COMPONENT_BUILD_NOTE=""
 
@@ -21,6 +24,24 @@ print_component_summary() {
     result="${BUILD_RESULTS[$component]:-not run}"
     note="${BUILD_NOTES[$component]:-}"
     printf '  %-12s | %-8s | %s\n' "$component" "$result" "$note"
+  done
+
+  print_make_target_summary
+}
+
+print_make_target_summary() {
+  local target
+  local result
+  local note
+
+  echo
+  echo "Make target summary:"
+  printf '  %-14s | %-8s | %s\n' "Target" "Result" "Details"
+  printf '  %-14s-+-%-8s-+-%s\n' "--------------" "--------" "------------------------------"
+  for target in "${MAKE_TARGET_IDS[@]}"; do
+    result="${TARGET_RESULTS[$target]:-not run}"
+    note="${TARGET_NOTES[$target]:-}"
+    printf '  %-14s | %-8s | %s\n' "$target" "$result" "$note"
   done
 }
 
@@ -45,11 +66,13 @@ source "$SCRIPT_DIR/common_build.sh"
 # shellcheck source=lib/component_artifacts.sh
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
+export BUILD_SH_INVOKED=1
 
 # Usage: build.sh [options]
 #   --clean                    Remove previous build directories before building
 #   --no-clean                 Skip removal of build directories (default)
 #   --components=name1,name2   Limit builds to the specified components
+#   --make-targets=name1,name2 Limit gmake invocations to the specified targets
 #   --no-menu                  Skip the interactive component selection menu
 #   --help                     Show usage information and exit
 
@@ -71,6 +94,28 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
+)
+
+readonly -a MAKE_TARGET_IDS=(
+  all
+  clean
+  setup
+  bash-image
+  systemd-image
+  examples
+  gen_prebuilt
+  docker-build
+)
+
+declare -A MAKE_TARGET_LABELS=(
+  [all]="Build the entire project"
+  [clean]="Remove previous build outputs"
+  [setup]="Run the initial project setup"
+  [bash-image]="Build image with Bash as first program"
+  [systemd-image]="Build image with systemd"
+  [examples]="Build Rust example servers and clients"
+  [gen_prebuilt]="Generate pre-built images"
+  [docker-build]="Build project inside Docker container"
 )
 
 run_component_build() {
@@ -116,18 +161,54 @@ run_component_build() {
   return 0
 }
 
+run_make_target() {
+  local target="$1"
+  local previous_errexit
+  local status
+
+  if ! should_run_target "$target"; then
+    TARGET_RESULTS["$target"]="skipped"
+    TARGET_NOTES["$target"]="not selected"
+    return 0
+  fi
+
+  echo "Running 'gmake $target'"
+  previous_errexit=$(set +o | grep errexit)
+  set +e
+  gmake "$target"
+  status=$?
+  eval "$previous_errexit"
+
+  if [ $status -eq 0 ]; then
+    TARGET_RESULTS["$target"]="success"
+    TARGET_NOTES["$target"]="completed"
+    return 0
+  fi
+
+  TARGET_RESULTS["$target"]="failed"
+  TARGET_NOTES["$target"]="exit status $status"
+  BUILD_FAILURE_COUNT=$((BUILD_FAILURE_COUNT + 1))
+  return $status
+}
+
 usage() {
   cat <<EOF
 Usage: $0 [options]
   --clean                    Remove previous build directories before building
   --no-clean                 Skip removal of build directories (default)
   --components=name1,name2   Limit builds to the specified components
+  --make-targets=name1,name2 Limit gmake invocations to the specified targets
   --no-menu                  Skip the interactive component selection menu
   --help                     Show this message and exit
 EOF
   local components_list
   components_list=$(IFS=,; echo "${BUILD_COMPONENT_IDS[*]}")
   echo "  Available components: ${components_list}"
+  echo "  Available make targets:"
+  local target
+  for target in "${MAKE_TARGET_IDS[@]}"; do
+    printf '    %-14s %s\n' "$target" "${MAKE_TARGET_LABELS[$target]}"
+  done
   echo
   echo "  The interactive menu also offers an option to clean the build"
   echo "  directories before starting."
@@ -160,6 +241,28 @@ set_all_components_selected() {
 should_build_component() {
   local component="$1"
   [[ "${SHOULD_BUILD["$component"]:-0}" == 1 ]]
+}
+
+is_valid_make_target() {
+  local candidate="$1" target
+  for target in "${MAKE_TARGET_IDS[@]}"; do
+    if [ "$target" = "$candidate" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+clear_target_selection() {
+  local target
+  for target in "${MAKE_TARGET_IDS[@]}"; do
+    SHOULD_RUN_TARGET["$target"]=0
+  done
+}
+
+should_run_target() {
+  local target="$1"
+  [[ "${SHOULD_RUN_TARGET["$target"]:-0}" == 1 ]]
 }
 
 prompt_component_selection() {
@@ -256,11 +359,15 @@ clean=false
 component_arg=""
 component_arg_set=false
 explicit_component_selection=false
+make_targets_arg=""
+make_targets_arg_set=false
+explicit_make_target_selection=false
 show_menu=true
 clean_cli_override=""
 menu_clean_requested=false
 used_dialog_menu=false
 declare -a selected_components=()
+declare -a selected_make_targets=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean)
@@ -286,6 +393,21 @@ while [[ $# -gt 0 ]]; do
       component_arg="$2"
       component_arg_set=true
       show_menu=false
+      shift 2
+      ;;
+    --make-targets=*)
+      make_targets_arg="${1#--make-targets=}"
+      make_targets_arg_set=true
+      shift
+      ;;
+    --make-targets)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --make-targets requires a comma-separated list" >&2
+        usage >&2
+        exit 1
+      fi
+      make_targets_arg="$2"
+      make_targets_arg_set=true
       shift 2
       ;;
     --no-menu)
@@ -343,6 +465,35 @@ else
   fi
 fi
 
+if [ "$make_targets_arg_set" = true ]; then
+  IFS=',' read -ra selected_make_targets <<< "$make_targets_arg"
+  declare -a sanitized_targets=()
+  declare -A seen_targets=()
+  target=""
+  for target in "${selected_make_targets[@]}"; do
+    target="${target//[[:space:]]/}"
+    if [ -z "$target" ]; then
+      continue
+    fi
+    if ! is_valid_make_target "$target"; then
+      echo "Unknown make target '$target'." >&2
+      usage >&2
+      exit 1
+    fi
+    if [[ -n "${seen_targets["$target"]-}" ]]; then
+      continue
+    fi
+    sanitized_targets+=("$target")
+    seen_targets["$target"]=1
+  done
+  explicit_make_target_selection=true
+  if [ ${#sanitized_targets[@]} -eq 0 ]; then
+    selected_make_targets=()
+  else
+    selected_make_targets=("${sanitized_targets[@]}")
+  fi
+fi
+
 if [ "${used_dialog_menu:-false}" = true ]; then
   if prompt_clean_before_build menu_clean_requested; then
     :
@@ -369,6 +520,21 @@ else
   done
 fi
 
+clear_target_selection
+if [ ${#selected_make_targets[@]} -eq 0 ]; then
+  if [ "$explicit_make_target_selection" = true ]; then
+    :
+  else
+    selected_make_targets=(all)
+  fi
+fi
+
+if [ ${#selected_make_targets[@]} -gt 0 ]; then
+  for target in "${selected_make_targets[@]}"; do
+    SHOULD_RUN_TARGET["$target"]=1
+  done
+fi
+
 if [ "$clean_cli_override" = "no-clean" ]; then
   clean=false
 elif [ "$clean_cli_override" = "clean" ]; then
@@ -386,6 +552,11 @@ else
 fi
 
 echo "Components selected for build: ${selected_components[*]}"
+if [ ${#selected_make_targets[@]} -gt 0 ]; then
+  echo "Make targets selected for invocation: ${selected_make_targets[*]}"
+else
+  echo "Make targets selected for invocation: (none)"
+fi
 
 # Set up the L4Re environment (l4re-core and ham)
 "$SCRIPT_DIR/setup_l4re_env.sh"
@@ -887,298 +1058,328 @@ run_component_build "systemd" build_systemd_component
 
 if (( BUILD_FAILURE_COUNT > 0 )); then
   echo "One or more external component builds failed; skipping remaining build steps."
+  if [ ${#selected_make_targets[@]} -gt 0 ]; then
+    for target in "${selected_make_targets[@]}"; do
+      if should_run_target "$target"; then
+        TARGET_RESULTS["$target"]="skipped"
+        TARGET_NOTES["$target"]="component build failed"
+      fi
+    done
+  fi
 else
   echo "######### EXTERNAL BUILD DONE ###############"
 
-  # Build the tree including libc, Leo, and Rust crates
-  gmake
-
-  # Create a minimal LSB root filesystem image
-  lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
-  rm -f "$lsb_img"
-  mkdir -p "$(dirname "$lsb_img")"
-  dd if=/dev/zero of="$lsb_img" bs=1M count=8
-  mke2fs -F "$lsb_img" >/dev/null
-  for d in /bin /etc /usr /usr/bin /sbin; do
-    debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
-  done
-  tmpfile=$(mktemp)
-  cat <<'EOF' > "$tmpfile"
-DISTRIB_ID=L4Re
-DISTRIB_RELEASE=1.0
-DISTRIB_DESCRIPTION="L4Re root image"
-EOF
-  debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
-  rm "$tmpfile"
-  if [ -f "$ARTIFACTS_DIR/bash/arm64/bash" ]; then
-    debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
-    debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+  if [ ${#selected_make_targets[@]} -eq 0 ]; then
+    echo "No make targets requested; skipping gmake invocation."
   else
-    echo "Warning: $ARTIFACTS_DIR/bash/arm64/bash missing; skipping shell installation" >&2
-  fi
-
-  custom_init_src="$REPO_ROOT/scripts/custom-init.c"
-  if [ -f "$custom_init_src" ]; then
-    custom_init_artifact_dir="$ARTIFACTS_DIR/custom-init"
-    mkdir -p "$custom_init_artifact_dir/arm" "$custom_init_artifact_dir/arm64"
-
-    declare -A custom_init_compilers=(
-      [arm]="${CROSS_COMPILE_ARM}gcc"
-      [arm64]="${CROSS_COMPILE_ARM64}gcc"
-    )
-
-    for arch in arm arm64; do
-      compiler="${custom_init_compilers[$arch]}"
-      custom_init_artifact="$custom_init_artifact_dir/$arch/custom-init"
-      if command -v "$compiler" >/dev/null 2>&1; then
-        "$compiler" -Os -s -o "$custom_init_artifact" "$custom_init_src"
-        chmod 0755 "$custom_init_artifact"
-      else
-        echo "Warning: compiler $compiler not found; skipping custom init build for $arch" >&2
-        rm -f "$custom_init_artifact"
+    for (( target_index=0; target_index<${#selected_make_targets[@]}; target_index++ )); do
+      target="${selected_make_targets[$target_index]}"
+      if ! should_run_target "$target"; then
+        continue
+      fi
+      run_make_target "$target"
+      if (( BUILD_FAILURE_COUNT > 0 )); then
+        echo "Make target '$target' failed; skipping remaining make targets."
+        for (( remaining_index=target_index+1; remaining_index<${#selected_make_targets[@]}; remaining_index++ )); do
+          next_target="${selected_make_targets[$remaining_index]}"
+          if should_run_target "$next_target"; then
+            TARGET_RESULTS["$next_target"]="skipped"
+            TARGET_NOTES["$next_target"]="previous make target failed"
+          fi
+        done
+        break
       fi
     done
+  fi
 
-    if [ -f "$custom_init_artifact_dir/arm64/custom-init" ]; then
-      mkdir -p config/lsb_root/sbin
-      cp "$custom_init_artifact_dir/arm64/custom-init" config/lsb_root/sbin/init
-      chmod 0755 config/lsb_root/sbin/init
-
-      debugfs -w -R "write $custom_init_artifact_dir/arm64/custom-init /sbin/init" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0755 /sbin/init" "$lsb_img" >/dev/null
+  if should_run_target "all" && [ "${TARGET_RESULTS[all]:-}" = "success" ]; then
+    # Create a minimal LSB root filesystem image
+    lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
+    rm -f "$lsb_img"
+    mkdir -p "$(dirname "$lsb_img")"
+    dd if=/dev/zero of="$lsb_img" bs=1M count=8
+    mke2fs -F "$lsb_img" >/dev/null
+    for d in /bin /etc /usr /usr/bin /sbin; do
+      debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
+    done
+    tmpfile=$(mktemp)
+    cat <<'EOF' > "$tmpfile"
+  DISTRIB_ID=L4Re
+  DISTRIB_RELEASE=1.0
+  DISTRIB_DESCRIPTION="L4Re root image"
+  EOF
+    debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
+    rm "$tmpfile"
+    if [ -f "$ARTIFACTS_DIR/bash/arm64/bash" ]; then
+      debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+      debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
     else
-      echo "Error: custom init binary for arm64 not produced" >&2
-      exit 1
+      echo "Warning: $ARTIFACTS_DIR/bash/arm64/bash missing; skipping shell installation" >&2
     fi
-  fi
 
-  # Install systemd into the root filesystem image and staging area
-  if should_build_component "systemd"; then
-    sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
-    if [ -d "$sys_root" ]; then
-      mkdir -p config/lsb_root/usr/lib/systemd
-      mkdir -p config/lsb_root/lib/systemd
-      if [ -d "$sys_root/usr/lib/systemd" ]; then
-        cp -a "$sys_root/usr/lib/systemd/." config/lsb_root/usr/lib/systemd/
-      fi
-      systemd_bin="$sys_root/lib/systemd/systemd"
-      if [ -f "$systemd_bin" ]; then
-        cp "$systemd_bin" config/lsb_root/lib/systemd/systemd
-        cp "$systemd_bin" config/lsb_root/usr/lib/systemd/systemd
-        debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "write $systemd_bin /lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-        if [ -d "$sys_root/usr/lib/systemd" ]; then
-          find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
-            rel="${d#$sys_root}"
-            debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
-          done
-          find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
-            rel="${f#$sys_root}"
-            debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
-            debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
-          done
+    custom_init_src="$REPO_ROOT/scripts/custom-init.c"
+    if [ -f "$custom_init_src" ]; then
+      custom_init_artifact_dir="$ARTIFACTS_DIR/custom-init"
+      mkdir -p "$custom_init_artifact_dir/arm" "$custom_init_artifact_dir/arm64"
+
+      declare -A custom_init_compilers=(
+        [arm]="${CROSS_COMPILE_ARM}gcc"
+        [arm64]="${CROSS_COMPILE_ARM64}gcc"
+      )
+
+      for arch in arm arm64; do
+        compiler="${custom_init_compilers[$arch]}"
+        custom_init_artifact="$custom_init_artifact_dir/$arch/custom-init"
+        if command -v "$compiler" >/dev/null 2>&1; then
+          "$compiler" -Os -s -o "$custom_init_artifact" "$custom_init_src"
+          chmod 0755 "$custom_init_artifact"
+        else
+          echo "Warning: compiler $compiler not found; skipping custom init build for $arch" >&2
+          rm -f "$custom_init_artifact"
         fi
-      fi
-      if [ -f "$sys_root/usr/bin/systemctl" ]; then
-        mkdir -p config/lsb_root/usr/bin
-        cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
-        chmod 0755 config/lsb_root/usr/bin/systemctl
-        debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
-      fi
-      if [ -L "$sys_root/bin/systemctl" ]; then
-        mkdir -p config/lsb_root/bin
-        symlink_target="$(readlink "$sys_root/bin/systemctl")"
-        ln -snf "$symlink_target" config/lsb_root/bin/systemctl
-        debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
-      fi
-    fi
-  fi
-
-  # Stage runtime libraries from staged components in the root filesystem image
-  stage_component_runtime_libraries() {
-    local component="$1"
-    local arch="$2"
-    shift 2
-    local -a patterns=("$@")
-    if [ ${#patterns[@]} -eq 0 ]; then
-      patterns=("$component.so*")
-    fi
-
-    local runtime_prefix
-    runtime_prefix="$(component_prefix_path "$component" "$arch")"
-    local -a stage_dirs=()
-    local candidate
-    for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
-      if [ -d "$candidate" ]; then
-        stage_dirs+=("$candidate")
-      fi
-    done
-
-    if [ ${#stage_dirs[@]} -eq 0 ]; then
-      return
-    fi
-
-    declare -A staged_files=()
-    declare -A staged_links=()
-    local pattern stage_dir
-    for stage_dir in "${stage_dirs[@]}"; do
-      for pattern in "${patterns[@]}"; do
-        while IFS= read -r -d '' sofile; do
-          staged_files["$sofile"]=1
-        done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
-        while IFS= read -r -d '' solink; do
-          staged_links["$solink"]=1
-        done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
       done
-    done
 
-    if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
-      return
+      if [ -f "$custom_init_artifact_dir/arm64/custom-init" ]; then
+        mkdir -p config/lsb_root/sbin
+        cp "$custom_init_artifact_dir/arm64/custom-init" config/lsb_root/sbin/init
+        chmod 0755 config/lsb_root/sbin/init
+
+        debugfs -w -R "write $custom_init_artifact_dir/arm64/custom-init /sbin/init" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /sbin/init" "$lsb_img" >/dev/null
+      else
+        echo "Error: custom init binary for arm64 not produced" >&2
+        exit 1
+      fi
     fi
 
-    echo "Staging $component shared libraries for $arch"
-    mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
-    debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
-    debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
-
-    local -a sorted_files=()
-    mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
-    local sofile base
-    for sofile in "${sorted_files[@]}"; do
-      [ -n "$sofile" ] || continue
-      base="$(basename "$sofile")"
-      cp "$sofile" "config/lsb_root/lib/$base"
-      chmod 0644 "config/lsb_root/lib/$base"
-      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
-      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-    done
-
-    local -a sorted_links=()
-    mapfile -t sorted_links < <(printf '%s\n' "${!staged_links[@]}" | sort)
-    local solink target
-    for solink in "${sorted_links[@]}"; do
-      [ -n "$solink" ] || continue
-      base="$(basename "$solink")"
-      target="$(readlink "$solink")"
-      ln -sf "$target" "config/lsb_root/lib/$base"
-      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
-      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-    done
-  }
-
-  for component in "${SYSTEMD_COMPONENTS[@]}"; do
-    if ! should_build_component "$component"; then
-      continue
-    fi
-    case "$component" in
-      libcap)
-        stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
-        ;;
-      libgcrypt)
-        stage_component_runtime_libraries "$component" "arm64" "libgcrypt.so*" "libgpg-error.so*"
-        ;;
-      *)
-        stage_component_runtime_libraries "$component" "arm64" "$component.so*"
-        ;;
-    esac
-  done
-
-  # Install systemd unit files into the image
-  if should_build_component "systemd"; then
-    units_dir="config/systemd"
-    if [ -d "$units_dir" ]; then
-      mkdir -p config/lsb_root/lib/systemd/system
-      debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-      for unit in "$units_dir"/*.service; do
-        [ -f "$unit" ] || continue
-        base="$(basename "$unit")"
-        cp "$unit" config/lsb_root/lib/systemd/system/
-        debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
-      done
-    fi
-  fi
-
-  # Enable services
-  enable_service() {
-    local name="$1"
-    local unit="config/systemd/${name}.service"
-    if [ -f "$unit" ]; then
-      mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
-      ln -sf ../../../../lib/systemd/system/${name}.service \
-        config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
-      debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
-      debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
-      debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
-      debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
-    fi
-  }
-
-  if should_build_component "systemd"; then
-    enable_service bash
-  fi
-
-  # Collect key build artifacts
-  stage_bootable_images() {
-    local source_root="obj/l4"
-    local distribution_dir="distribution"
-    local distribution_images_dir="$distribution_dir/images"
-
-    mkdir -p "$distribution_images_dir"
-
-    if [ ! -d "$source_root" ]; then
-      return
-    fi
-
-    local -a images=()
-    while IFS= read -r -d '' image; do
-      images+=("$image")
-    done < <(find "$source_root" -type f \
-      \( -name '*.elf' -o -name '*.uimage' \) \
-      -path '*/images/*' -print0 2>/dev/null)
-
-    if (( ${#images[@]} == 0 )); then
-      return
-    fi
-
-    local image mtime
-    local -a sorted_entries=()
-    mapfile -t sorted_entries < <(
-      for image in "${images[@]}"; do
-        if ! mtime=$(stat -c %Y "$image" 2>/dev/null); then
-          if ! mtime=$(stat -f %m "$image" 2>/dev/null); then
-            mtime=0
+    # Install systemd into the root filesystem image and staging area
+    if should_build_component "systemd"; then
+      sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
+      if [ -d "$sys_root" ]; then
+        mkdir -p config/lsb_root/usr/lib/systemd
+        mkdir -p config/lsb_root/lib/systemd
+        if [ -d "$sys_root/usr/lib/systemd" ]; then
+          cp -a "$sys_root/usr/lib/systemd/." config/lsb_root/usr/lib/systemd/
+        fi
+        systemd_bin="$sys_root/lib/systemd/systemd"
+        if [ -f "$systemd_bin" ]; then
+          cp "$systemd_bin" config/lsb_root/lib/systemd/systemd
+          cp "$systemd_bin" config/lsb_root/usr/lib/systemd/systemd
+          debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
+          debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
+          debugfs -w -R "write $systemd_bin /lib/systemd/systemd" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
+          debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+          if [ -d "$sys_root/usr/lib/systemd" ]; then
+            find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
+              rel="${d#$sys_root}"
+              debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
+            done
+            find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
+              rel="${f#$sys_root}"
+              debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+              debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
+            done
           fi
         fi
-        printf '%011d\t%s\n' "$mtime" "$image"
-      done | sort -n -k1,1 -k2
-    )
+        if [ -f "$sys_root/usr/bin/systemctl" ]; then
+          mkdir -p config/lsb_root/usr/bin
+          cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
+          chmod 0755 config/lsb_root/usr/bin/systemctl
+          debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
+        fi
+        if [ -L "$sys_root/bin/systemctl" ]; then
+          mkdir -p config/lsb_root/bin
+          symlink_target="$(readlink "$sys_root/bin/systemctl")"
+          ln -snf "$symlink_target" config/lsb_root/bin/systemctl
+          debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
+        fi
+      fi
+    fi
 
-    local entry file base dest_path
-    for entry in "${sorted_entries[@]}"; do
-      file="${entry#*$'\t'}"
-      [ -n "$file" ] || continue
-      base="$(basename "$file")"
-      dest_path="$distribution_images_dir/$base"
+    # Stage runtime libraries from staged components in the root filesystem image
+    stage_component_runtime_libraries() {
+      local component="$1"
+      local arch="$2"
+      shift 2
+      local -a patterns=("$@")
+      if [ ${#patterns[@]} -eq 0 ]; then
+        patterns=("$component.so*")
+      fi
 
-      echo "Staging image $base from $file into $distribution_images_dir"
-      cp -f "$file" "$dest_path"
+      local runtime_prefix
+      runtime_prefix="$(component_prefix_path "$component" "$arch")"
+      local -a stage_dirs=()
+      local candidate
+      for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
+        if [ -d "$candidate" ]; then
+          stage_dirs+=("$candidate")
+        fi
+      done
+
+      if [ ${#stage_dirs[@]} -eq 0 ]; then
+        return
+      fi
+
+      declare -A staged_files=()
+      declare -A staged_links=()
+      local pattern stage_dir
+      for stage_dir in "${stage_dirs[@]}"; do
+        for pattern in "${patterns[@]}"; do
+          while IFS= read -r -d '' sofile; do
+            staged_files["$sofile"]=1
+          done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
+          while IFS= read -r -d '' solink; do
+            staged_links["$solink"]=1
+          done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
+        done
+      done
+
+      if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
+        return
+      fi
+
+      echo "Staging $component shared libraries for $arch"
+      mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
+      debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
+      debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
+
+      local -a sorted_files=()
+      mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
+      local sofile base
+      for sofile in "${sorted_files[@]}"; do
+        [ -n "$sofile" ] || continue
+        base="$(basename "$sofile")"
+        cp "$sofile" "config/lsb_root/lib/$base"
+        chmod 0644 "config/lsb_root/lib/$base"
+        debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+        debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+        ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+        debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+        debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+      done
+
+      local -a sorted_links=()
+      mapfile -t sorted_links < <(printf '%s\n' "${!staged_links[@]}" | sort)
+      local solink target
+      for solink in "${sorted_links[@]}"; do
+        [ -n "$solink" ] || continue
+        base="$(basename "$solink")"
+        target="$(readlink "$solink")"
+        ln -sf "$target" "config/lsb_root/lib/$base"
+        debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+        debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
+        ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+        debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+        debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+      done
+    }
+
+    for component in "${SYSTEMD_COMPONENTS[@]}"; do
+      if ! should_build_component "$component"; then
+        continue
+      fi
+      case "$component" in
+        libcap)
+          stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
+          ;;
+        libgcrypt)
+          stage_component_runtime_libraries "$component" "arm64" "libgcrypt.so*" "libgpg-error.so*"
+          ;;
+        *)
+          stage_component_runtime_libraries "$component" "arm64" "$component.so*"
+          ;;
+      esac
     done
-  }
 
-  stage_bootable_images
+    # Install systemd unit files into the image
+    if should_build_component "systemd"; then
+      units_dir="config/systemd"
+      if [ -d "$units_dir" ]; then
+        mkdir -p config/lsb_root/lib/systemd/system
+        debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+        for unit in "$units_dir"/*.service; do
+          [ -f "$unit" ] || continue
+          base="$(basename "$unit")"
+          cp "$unit" config/lsb_root/lib/systemd/system/
+          debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+        done
+      fi
+    fi
+
+    # Enable services
+    enable_service() {
+      local name="$1"
+      local unit="config/systemd/${name}.service"
+      if [ -f "$unit" ]; then
+        mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
+        ln -sf ../../../../lib/systemd/system/${name}.service \
+          config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
+        debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
+        debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
+        debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
+        debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
+      fi
+    }
+
+    if should_build_component "systemd"; then
+      enable_service bash
+    fi
+
+    # Collect key build artifacts
+    stage_bootable_images() {
+      local source_root="obj/l4"
+      local distribution_dir="distribution"
+      local distribution_images_dir="$distribution_dir/images"
+
+      mkdir -p "$distribution_images_dir"
+
+      if [ ! -d "$source_root" ]; then
+        return
+      fi
+
+      local -a images=()
+      while IFS= read -r -d '' image; do
+        images+=("$image")
+      done < <(find "$source_root" -type f \
+        \( -name '*.elf' -o -name '*.uimage' \) \
+        -path '*/images/*' -print0 2>/dev/null)
+
+      if (( ${#images[@]} == 0 )); then
+        return
+      fi
+
+      local image mtime
+      local -a sorted_entries=()
+      mapfile -t sorted_entries < <(
+        for image in "${images[@]}"; do
+          if ! mtime=$(stat -c %Y "$image" 2>/dev/null); then
+            if ! mtime=$(stat -f %m "$image" 2>/dev/null); then
+              mtime=0
+            fi
+          fi
+          printf '%011d\t%s\n' "$mtime" "$image"
+        done | sort -n -k1,1 -k2
+      )
+
+      local entry file base dest_path
+      for entry in "${sorted_entries[@]}"; do
+        file="${entry#*$'\t'}"
+        [ -n "$file" ] || continue
+        base="$(basename "$file")"
+        dest_path="$distribution_images_dir/$base"
+
+        echo "Staging image $base from $file into $distribution_images_dir"
+        cp -f "$file" "$dest_path"
+      done
+    }
+
+    stage_bootable_images
+  fi
 fi
