@@ -54,11 +54,17 @@ when developing locally to ensure `l4re-core` is up to date.
 
 ## Standard Build
 
+After running `gmake setup` once to initialize the tree, invoking `gmake`
+without arguments now builds the `systemd-image` target. This produces a
+systemd-based boot image and serves as the primary build configuration. Other
+gmake targets remain available—run them explicitly (for example,
+`gmake bash-image` or `gmake examples`) when you need alternative outputs.
+
 On a host with the necessary prerequisites installed, run:
 
 **Linux:**
 ```bash
-scripts/build.sh          # builds natively
+scripts/build.sh          # builds the systemd image natively
 ```
 
 **Mac:**
@@ -72,10 +78,13 @@ existing directories for incremental builds; `--no-clean` enforces this reuse in
 automation. Build artifacts are placed under `out/`.
 
 When `dialog` is available the script shows interactive checklists covering the
-external components (Bash, libcap, systemd, etc.) to build and the make targets
-to invoke, followed by a cleanup prompt. Choose the desired entries or pass
-`--no-menu` (and optionally `--components=foo,bar` and
-`--make-targets=target1,target2`) to skip the prompts in automation.
+external components (Bash, libcap, systemd, etc.) to build and the make target
+to invoke, followed by a cleanup prompt. The make-target list is now limited to
+the systemd image and defaults to that selection. Choose the desired entries or
+pass `--no-menu` (and optionally `--components=foo,bar`) to skip the prompts in
+automation. To invoke other make targets, call `gmake <target>` directly after
+the script completes or run the desired target via `gmake` without using the
+menu.
 
 At the end of the run the script prints summary tables enumerating each
 external component and make target as `success`, `skipped`, or `failed`. A

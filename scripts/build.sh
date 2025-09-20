@@ -97,23 +97,11 @@ declare -A BUILD_COMPONENT_LABELS=(
 )
 
 readonly -a MAKE_TARGET_IDS=(
-  all
-  clean
-  setup
-  bash-image
   systemd-image
-  examples
-  gen_prebuilt
 )
 
 declare -A MAKE_TARGET_LABELS=(
-  [all]="Build the entire project"
-  [clean]="Remove previous build outputs"
-  [setup]="Run the initial project setup"
-  [bash-image]="Build image with Bash as first program"
   [systemd-image]="Build image with systemd"
-  [examples]="Build Rust example servers and clients"
-  [gen_prebuilt]="Generate pre-built images"
 )
 
 run_component_build() {
@@ -329,7 +317,7 @@ prompt_component_selection() {
   local default_state
   for target in "${MAKE_TARGET_IDS[@]}"; do
     default_state="off"
-    if [ "$target" = "all" ]; then
+    if [ "$target" = "systemd-image" ]; then
       default_state="on"
     fi
     target_menu_args+=("$target" "${MAKE_TARGET_LABELS[$target]}" "$default_state")
@@ -572,7 +560,7 @@ if [ ${#selected_make_targets[@]} -eq 0 ]; then
   if [ "$explicit_make_target_selection" = true ]; then
     :
   else
-    selected_make_targets=(all)
+    selected_make_targets=(systemd-image)
   fi
 fi
 

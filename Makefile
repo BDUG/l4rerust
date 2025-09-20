@@ -1,8 +1,8 @@
-all: 
+all:
 	@if [ -d obj ]; then                                           \
-	  $(MAKE) build_all;                                           \
+	  $(MAKE) systemd-image;                                       \
 	else                                                           \
-          echo "Call 'gmake setup' once for initial setup." ;           \
+	  echo "Call 'gmake setup' once for initial setup." ;           \
 	  exit 1;                                                      \
 	fi
 
@@ -130,12 +130,12 @@ pre-built-images/l4image:
 
 help:
 	@echo "Targets:"
-	@echo "  all"
-	@echo "  setup"
-	@echo "  gen_prebuilt"
-	@echo "  bash-image    Build image with Bash as first program"
-	@echo "  systemd-image Build image with systemd"
-	@echo "  examples      Build Rust example servers and clients"
+	@echo "  systemd-image (default) Build image with systemd"
+	@echo "  all                      Alias for systemd-image"
+	@echo "  setup                    Prepare the source tree"
+	@echo "  gen_prebuilt             Generate pre-built images"
+	@echo "  bash-image               Build image with Bash as first program"
+	@echo "  examples                 Build Rust example servers and clients"
 .PHONY: setup all build_all clean help \
 build_images build_fiasco build_l4re bash-image \
 systemd-image examples
