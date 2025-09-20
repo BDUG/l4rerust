@@ -255,6 +255,7 @@ prompt_clean_before_build() {
 clean=false
 component_arg=""
 component_arg_set=false
+explicit_component_selection=false
 show_menu=true
 clean_cli_override=""
 menu_clean_requested=false
@@ -323,12 +324,12 @@ if [ "$component_arg_set" = true ]; then
     sanitized_components+=("$component")
     seen_components["$component"]=1
   done
+  explicit_component_selection=true
   if [ ${#sanitized_components[@]} -eq 0 ]; then
-    echo "No valid components specified for --components" >&2
-    usage >&2
-    exit 1
+    selected_components=()
+  else
+    selected_components=("${sanitized_components[@]}")
   fi
-  selected_components=("${sanitized_components[@]}")
 else
   if [ "$show_menu" = true ]; then
     if [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
@@ -351,13 +352,17 @@ if [ "${used_dialog_menu:-false}" = true ]; then
   fi
 fi
 
-if [ ${#selected_components[@]} -eq 0 ]; then
+if [ ${#selected_components[@]} -eq 0 ] && [ "$explicit_component_selection" != true ]; then
   selected_components=("${BUILD_COMPONENT_IDS[@]}")
 fi
 
 clear_component_selection
 if [ ${#selected_components[@]} -eq 0 ]; then
-  set_all_components_selected
+  if [ "$explicit_component_selection" = true ]; then
+    :
+  else
+    set_all_components_selected
+  fi
 else
   for component in "${selected_components[@]}"; do
     SHOULD_BUILD["$component"]=1
@@ -415,18 +420,21 @@ initialize_component_prefixes
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
+setup_mode="--non-interactive"
 if [ -f /workspace/.config ]; then
   echo "Using configuration from /workspace/.config"
   mkdir -p obj
   cp /workspace/.config obj/.config
+  setup_mode="setup"
 elif [ -f "$SCRIPT_DIR/l4re.config" ]; then
   echo "Using configuration from scripts/l4re.config"
   mkdir -p obj
   cp "$SCRIPT_DIR/l4re.config" obj/.config
+  setup_mode="setup"
 else
   "$SCRIPT_DIR/setup.sh" config
 fi
-"$SCRIPT_DIR/setup.sh" --non-interactive
+"$SCRIPT_DIR/setup.sh" "$setup_mode"
 
 # Build the Rust libc crate so other crates can link against it
 cargo build -p l4re-libc --release
@@ -891,7 +899,7 @@ else
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=8
   mke2fs -F "$lsb_img" >/dev/null
-  for d in /bin /etc /usr /usr/bin; do
+  for d in /bin /etc /usr /usr/bin /sbin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
   done
   tmpfile=$(mktemp)
@@ -902,10 +910,49 @@ DISTRIB_DESCRIPTION="L4Re root image"
 EOF
   debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
   rm "$tmpfile"
-  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
-  debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
-  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
-  debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+  if [ -f "$ARTIFACTS_DIR/bash/arm64/bash" ]; then
+    debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+    debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+    debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+  else
+    echo "Warning: $ARTIFACTS_DIR/bash/arm64/bash missing; skipping shell installation" >&2
+  fi
+
+  custom_init_src="$REPO_ROOT/scripts/custom-init.c"
+  if [ -f "$custom_init_src" ]; then
+    custom_init_artifact_dir="$ARTIFACTS_DIR/custom-init"
+    mkdir -p "$custom_init_artifact_dir/arm" "$custom_init_artifact_dir/arm64"
+
+    declare -A custom_init_compilers=(
+      [arm]="${CROSS_COMPILE_ARM}gcc"
+      [arm64]="${CROSS_COMPILE_ARM64}gcc"
+    )
+
+    for arch in arm arm64; do
+      compiler="${custom_init_compilers[$arch]}"
+      custom_init_artifact="$custom_init_artifact_dir/$arch/custom-init"
+      if command -v "$compiler" >/dev/null 2>&1; then
+        "$compiler" -Os -s -o "$custom_init_artifact" "$custom_init_src"
+        chmod 0755 "$custom_init_artifact"
+      else
+        echo "Warning: compiler $compiler not found; skipping custom init build for $arch" >&2
+        rm -f "$custom_init_artifact"
+      fi
+    done
+
+    if [ -f "$custom_init_artifact_dir/arm64/custom-init" ]; then
+      mkdir -p config/lsb_root/sbin
+      cp "$custom_init_artifact_dir/arm64/custom-init" config/lsb_root/sbin/init
+      chmod 0755 config/lsb_root/sbin/init
+
+      debugfs -w -R "write $custom_init_artifact_dir/arm64/custom-init /sbin/init" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0755 /sbin/init" "$lsb_img" >/dev/null
+    else
+      echo "Error: custom init binary for arm64 not produced" >&2
+      exit 1
+    fi
+  fi
 
   # Install systemd into the root filesystem image and staging area
   if should_build_component "systemd"; then
