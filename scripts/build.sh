@@ -86,69 +86,6 @@ BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
 
-build_libcrypt() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
-    exit 1
-  fi
-
-  if component_override_used "libcrypt" "$arch"; then
-    echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
-    return
-  fi
-
-  local install_prefix
-  install_prefix="$(component_prefix_path "libcrypt" "$arch")"
-  if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$expected_version"; then
-    echo "libcrypt for $arch already current, skipping"
-    return
-  fi
-  rm -rf "$install_prefix"
-  mkdir -p "$install_prefix"
-
-  local -a configure_args=(
-    "--host=$triple"
-    "--prefix=$install_prefix"
-  )
-
-  local microkernel=false
-  if [[ "$triple" == *-elf-* || "$triple" == *-elf ]]; then
-    microkernel=true
-    configure_args+=("--disable-shared")
-  fi
-
-  (
-    cd "$libxcrypt_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    gmake clean >/dev/null 2>&1 || true
-
-    export CC="${cross}gcc"
-    export AR="${cross}ar"
-    export RANLIB="${cross}ranlib"
-    export STRIP="${cross}strip"
-    if [ "$microkernel" = true ]; then
-      export ac_cv_lib_pthread_pthread_create=no
-      export ac_cv_header_pthread_h=no
-    else
-      unset ac_cv_lib_pthread_pthread_create
-      unset ac_cv_header_pthread_h
-    fi
-
-    ./configure "${configure_args[@]}"
-    gmake
-    gmake install
-  )
-
-  local pkgconfig_dir="$install_prefix/lib/pkgconfig"
-  if [ -d "$pkgconfig_dir" ] && [ ! -f "$pkgconfig_dir/libcrypt.pc" ] && [ -f "$pkgconfig_dir/libxcrypt.pc" ]; then
-    ln -sf libxcrypt.pc "$pkgconfig_dir/libcrypt.pc"
-  fi
-
-  echo "$expected_version" > "$install_prefix/VERSION"
-}
-
 LIBXCRYPT_VERSION=4.4.36
 LIBXCRYPT_URL="https://github.com/besser82/libxcrypt/releases/download/v${LIBXCRYPT_VERSION}/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
 
@@ -479,8 +416,31 @@ done
 if [ "$need_libcrypt" = true ]; then
   libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
   curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
-  build_libcrypt arm "$CROSS_COMPILE_ARM" "$LIBXCRYPT_VERSION"
-  build_libcrypt arm64 "$CROSS_COMPILE_ARM64" "$LIBXCRYPT_VERSION"
+  for arch in arm arm64; do
+    if component_override_used "libcrypt" "$arch"; then
+      echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
+      continue
+    fi
+    if component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
+      echo "libcrypt for $arch already current, skipping"
+      continue
+    fi
+    cross=""
+    case "$arch" in
+      arm)
+        cross="$CROSS_COMPILE_ARM"
+        ;;
+      arm64)
+        cross="$CROSS_COMPILE_ARM64"
+        ;;
+      *)
+        echo "Unsupported architecture '$arch' for libcrypt build" >&2
+        exit 1
+        ;;
+    esac
+    install_prefix="$(component_prefix_path "libcrypt" "$arch")"
+    "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
+  done
   rm -rf "$libxcrypt_src_dir"
 else
   if component_override_used "libcrypt" arm || component_override_used "libcrypt" arm64; then
