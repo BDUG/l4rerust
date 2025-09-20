@@ -37,18 +37,14 @@ On a host with the necessary prerequisites installed, run:
 
 **Linux:**
 ```bash
-scripts/build.sh          # builds the systemd image natively
+gmake
 ```
+
 
 **Mac:**
 ```bash
-CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Supply the Linux-targeted prefix explicitly.
+CROSS_COMPILE=aarch64-linux-gnu- gmake
 ```
-
-Pass `--clean` (or select “Clean out directory before build” in the interactive
-menu) to remove previous build directories. By default the script reuses
-existing directories for incremental builds; `--no-clean` enforces this reuse in
-automation. Build artifacts are placed under `out/`.
 
 ## Test 
 
