@@ -19,8 +19,22 @@ if [ ! -x "$HAM_BIN" ]; then
   if [ ! -x "$HAM_BIN" ]; then
     (cd "$HAM_PATH" && gmake >/dev/null 2>&1 || true)
   fi
-  if [ ! -x "$HAM_BIN" ]; then
-    curl -L "https://github.com/kernkonzept/ham/releases/latest/download/ham" -o "$HAM_BIN"
-  fi
-  chmod +x "$HAM_BIN"
 fi
+
+# The ham build from source depends on Perl modules that might not be available
+# in minimal environments. Fall back to the official prebuilt binary if the
+# required modules are missing so the script would not run successfully.
+if ! perl -MGit::Repository -e1 >/dev/null 2>&1; then
+  echo "Perl module Git::Repository missing, downloading prebuilt ham binary..."
+  tmp_bin="${HAM_BIN}.tmp"
+  if curl -fsSL "https://github.com/kernkonzept/ham/releases/latest/download/ham" -o "$tmp_bin"; then
+    mv "$tmp_bin" "$HAM_BIN"
+    chmod +x "$HAM_BIN"
+  else
+    rm -f "$tmp_bin"
+    echo "Failed to download prebuilt ham. Install the Perl dependency 'Git::Repository' and rerun setup." >&2
+    exit 1
+  fi
+fi
+
+chmod +x "$HAM_BIN"

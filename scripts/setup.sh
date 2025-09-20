@@ -23,7 +23,7 @@ if [ "$cmd" != "clean" ]; then
   "$SCRIPT_DIR/setup_l4re_env.sh"
 
   if ! command -v ham >/dev/null 2>&1; then
-    HAM_BIN="$(resolve_path "$SCRIPT_DIR/ham/ham")"
+    HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
     if [ -x "$HAM_BIN" ]; then
       PATH="$(dirname "$HAM_BIN"):$PATH"
       export PATH
