@@ -1167,7 +1167,7 @@ if [ -d "$sys_root" ]; then
   mkdir -p config/lsb_root/usr/lib/systemd
   mkdir -p config/lsb_root/lib/systemd
   if [ -d "$sys_root/usr/lib/systemd" ]; then
-    cp -r "$sys_root/usr/lib/systemd/"* config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
+    cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
   fi
   if [ -f "$sys_root/lib/systemd/systemd" ]; then
     cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
@@ -1176,7 +1176,7 @@ if [ -d "$sys_root" ]; then
     debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
     debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
     debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
-    debugfs -w -R "write $sys_root/lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+    debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
     debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
     if [ -d "$sys_root/usr/lib/systemd" ]; then
       find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
