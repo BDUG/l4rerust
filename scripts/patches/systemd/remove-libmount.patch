@@ -161,11 +161,35 @@ index 2f789e7..8bbce23 100644
 +        return NULL;
 +}
 +
++static inline const char *mnt_fs_get_vfs_options(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
++static inline const char *mnt_fs_get_fs_options(struct libmnt_fs *fs) {
++        (void) fs;
++
++        errno = EOPNOTSUPP;
++        return NULL;
++}
++
 +static inline const char *mnt_fs_get_fstype(struct libmnt_fs *fs) {
 +        (void) fs;
 +
 +        errno = EOPNOTSUPP;
 +        return NULL;
++}
++
++static inline int mnt_fs_get_propagation(struct libmnt_fs *fs, unsigned long *flags) {
++        (void) fs;
++
++        if (flags)
++                *flags = 0;
++
++        errno = EOPNOTSUPP;
++        return -EOPNOTSUPP;
 +}
 +
 +static inline void mnt_init_debug(int mask) {
