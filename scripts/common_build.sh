@@ -19,7 +19,11 @@ setup_macos_paths() {
   local prefix
   local -a formulas=(
     arm-linux-gnueabihf-g++
-    aarch64-elf-g++
+    arm-linux-gnueabihf-gcc
+    aarch64-linux-gnu-g++
+    aarch64-linux-gnu-gcc
+    aarch64-unknown-linux-gnu-g++
+    aarch64-unknown-linux-gnu-gcc
     e2fsprogs
   )
 
@@ -59,7 +63,7 @@ detect_cross_compilers() {
           CROSS_COMPILE_ARM="$prefix"
         else
           echo "No Linux-targeted ARM g++ cross compiler found (expected arm-linux-gnueabihf-g++)." \
-            "Install it on macOS via Homebrew: 'brew install arm-linux-gnueabihf-g++'." >&2
+            "Install it on macOS via Homebrew: 'brew install arm-linux-gnueabihf-gcc'." >&2
           exit 1
         fi
       fi
@@ -67,20 +71,27 @@ detect_cross_compilers() {
       if [ -z "${CROSS_COMPILE_ARM64:-}" ]; then
         local prefix
         if prefix=$(find_gpp_cross_prefix \
-          aarch64-elf-g++ \
-          aarch64-none-elf-g++ \
           aarch64-linux-gnu-g++ \
-          aarch64-unknown-linux-gnu-g++
+          aarch64-unknown-linux-gnu-g++ \
+          aarch64-linux-musl-g++ \
+          aarch64-unknown-linux-musl-g++
         ); then
           CROSS_COMPILE_ARM64="$prefix"
         else
-          echo "No AArch64 g++ cross compiler found. Please install aarch64-elf-g++ (preferred; Linux hosts may use aarch64-linux-gnu-g++ or aarch64-unknown-linux-gnu-g++)." >&2
+          if prefix=$(find_gpp_cross_prefix \
+            aarch64-elf-g++ \
+            aarch64-none-elf-g++
+          ); then
+            echo "Found ${prefix}g++, but it targets ELF-only environments. Install a Linux-targeted AArch64 cross compiler (e.g., Homebrew: 'brew install aarch64-linux-gnu-gcc')." >&2
+          else
+            echo "No Linux-targeted AArch64 g++ cross compiler found (expected commands like aarch64-linux-gnu-g++ or aarch64-unknown-linux-gnu-g++). Install one via Homebrew: 'brew install aarch64-linux-gnu-gcc'." >&2
+          fi
           exit 1
         fi
       fi
 
-      if [[ ${CROSS_COMPILE_ARM64} != *elf* && ${CROSS_COMPILE_ARM64} != *linux* ]]; then
-        echo "No ELF- or Linux-targeted AArch64 g++ cross compiler prefix found (expected aarch64-elf- (macOS), aarch64-none-elf-, aarch64-linux-gnu-, or aarch64-unknown-linux-gnu-)." >&2
+      if [[ ${CROSS_COMPILE_ARM64} != *linux-* ]]; then
+        echo "CROSS_COMPILE_ARM64 must target Linux (expected a prefix containing 'linux', such as aarch64-linux-gnu- or aarch64-unknown-linux-gnu-)." >&2
         exit 1
       fi
 
