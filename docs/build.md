@@ -52,9 +52,11 @@ an explicit path to boot a different artifact.
 
 ## Building for ARM
 
-Use `scripts/build.sh` to build the project. The script removes previous build
-artifacts before compilation (the same effect as passing `--clean`). Provide
-`--no-clean` to skip this cleanup when iterating.
+Use `scripts/build.sh` to build the project. By default the script reuses
+previous build artifacts so incremental builds are faster. Pass `--clean` (or
+select “Clean out directory before build” in the interactive menu) to remove old
+artifacts before compilation, and use `--no-clean` to explicitly request reuse
+in automation.
 
 Built components and images are collected under the `out/` directory. Every
 bootable `.elf` (and any generated `.uimage`) discovered under

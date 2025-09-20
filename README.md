@@ -66,14 +66,15 @@ scripts/build.sh          # builds natively
 CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Override any aarch64-elf- default.
 ```
 
-Pass `--clean` (the default) to force removal of previous build directories or
-`--no-clean` to reuse them for incremental builds. Build artifacts are placed
-under `out/`.
+Pass `--clean` (or select “Clean out directory before build” in the interactive
+menu) to remove previous build directories. By default the script reuses
+existing directories for incremental builds; `--no-clean` enforces this reuse in
+automation. Build artifacts are placed under `out/`.
 
 When `dialog` is available the script shows an interactive checklist of
-external components (Bash, libcap, systemd, etc.) to build. Choose the desired
-entries or pass `--no-menu` (and optionally `--components=foo,bar`) to skip the
-prompt in automation.
+external components (Bash, libcap, systemd, etc.) to build along with a follow-
+up prompt to request cleanup. Choose the desired entries or pass `--no-menu`
+(and optionally `--components=foo,bar`) to skip the prompts in automation.
 
 At the end of the run the script prints a summary table enumerating each
 external component as `success`, `skipped`, or `failed`. A non-zero exit status

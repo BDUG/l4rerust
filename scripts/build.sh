@@ -47,8 +47,8 @@ source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
 # Usage: build.sh [options]
-#   --clean                    Remove previous build directories before building (default)
-#   --no-clean                 Skip removal of build directories
+#   --clean                    Remove previous build directories before building
+#   --no-clean                 Skip removal of build directories (default)
 #   --components=name1,name2   Limit builds to the specified components
 #   --no-menu                  Skip the interactive component selection menu
 #   --help                     Show usage information and exit
@@ -119,8 +119,8 @@ run_component_build() {
 usage() {
   cat <<EOF
 Usage: $0 [options]
-  --clean                    Remove previous build directories before building (default)
-  --no-clean                 Skip removal of build directories
+  --clean                    Remove previous build directories before building
+  --no-clean                 Skip removal of build directories (default)
   --components=name1,name2   Limit builds to the specified components
   --no-menu                  Skip the interactive component selection menu
   --help                     Show this message and exit
@@ -128,6 +128,9 @@ EOF
   local components_list
   components_list=$(IFS=,; echo "${BUILD_COMPONENT_IDS[*]}")
   echo "  Available components: ${components_list}"
+  echo
+  echo "  The interactive menu also offers an option to clean the build"
+  echo "  directories before starting."
 }
 
 is_valid_component() {
@@ -218,19 +221,53 @@ prompt_component_selection() {
   return 0
 }
 
-clean=true
+prompt_clean_before_build() {
+  local -n _result=$1
+  _result=false
+
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+
+  if ! command -v dialog >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local dialog_status=0
+  if dialog --clear \
+      --yesno "Clean out directory before build?" 7 60; then
+    _result=true
+  else
+    dialog_status=$?
+    case $dialog_status in
+      1)
+        _result=false
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
+clean=false
 component_arg=""
 component_arg_set=false
 show_menu=true
+clean_cli_override=""
+menu_clean_requested=false
+used_dialog_menu=false
 declare -a selected_components=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean)
-      clean=true
+      clean_cli_override="clean"
       shift
       ;;
     --no-clean)
-      clean=false
+      clean_cli_override="no-clean"
       shift
       ;;
     --components=*)
@@ -296,12 +333,21 @@ else
   if [ "$show_menu" = true ]; then
     if [ -t 0 ] && command -v dialog >/dev/null 2>&1; then
       if prompt_component_selection selected_components; then
-        :
+        used_dialog_menu=true
       else
         echo "No components selected; exiting." >&2
         exit 1
       fi
     fi
+  fi
+fi
+
+if [ "${used_dialog_menu:-false}" = true ]; then
+  if prompt_clean_before_build menu_clean_requested; then
+    :
+  else
+    echo "Cleanup selection cancelled; exiting." >&2
+    exit 1
   fi
 fi
 
@@ -316,6 +362,22 @@ else
   for component in "${selected_components[@]}"; do
     SHOULD_BUILD["$component"]=1
   done
+fi
+
+if [ "$clean_cli_override" = "no-clean" ]; then
+  clean=false
+elif [ "$clean_cli_override" = "clean" ]; then
+  clean=true
+elif [ "$menu_clean_requested" = true ]; then
+  clean=true
+else
+  clean=false
+fi
+
+if [ "$clean" = true ]; then
+  echo "Cleanup before build: enabled"
+else
+  echo "Cleanup before build: disabled"
 fi
 
 echo "Components selected for build: ${selected_components[*]}"
@@ -339,7 +401,10 @@ export ARTIFACTS_DIR
 
 # Start from a clean state if requested
 if [ "$clean" = true ]; then
+  echo "Cleaning previous build directories..."
   "$SCRIPT_DIR/setup.sh" clean
+else
+  echo "Skipping cleanup of previous build directories."
 fi
 
 mkdir -p "$ARTIFACTS_DIR"
