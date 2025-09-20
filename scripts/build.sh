@@ -99,66 +99,6 @@ LIBGCRYPT_VERSION=1.10.3
 LIBGCRYPT_VERSION_MARKER="${LIBGCRYPT_VERSION} (libgpg-error ${LIBGPG_ERROR_VERSION})"
 LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERSION}.tar.bz2"
 
-build_libzstd() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
-    exit 1
-  fi
-
-  if component_override_used "libzstd" "$arch"; then
-    echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
-    return
-  fi
-
-  local install_prefix
-  install_prefix="$(component_prefix_path "libzstd" "$arch")"
-  if component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$expected_version"; then
-    echo "libzstd for $arch already current, skipping"
-    return
-  fi
-
-  rm -rf "$install_prefix"
-  mkdir -p "$install_prefix"
-
-  (
-    cd "$zstd_src_dir"
-    gmake -C lib distclean >/dev/null 2>&1 || true
-    gmake -C lib clean >/dev/null 2>&1 || true
-    gmake -C lib \
-      CC="${cross}gcc" \
-      AR="${cross}ar" \
-      RANLIB="${cross}ranlib" \
-      PREFIX="$install_prefix" \
-      libzstd
-    gmake -C lib \
-      CC="${cross}gcc" \
-      AR="${cross}ar" \
-      RANLIB="${cross}ranlib" \
-      PREFIX="$install_prefix" \
-      install
-  )
-
-  if [ ! -f "$install_prefix/lib/pkgconfig/libzstd.pc" ]; then
-    mkdir -p "$install_prefix/lib/pkgconfig"
-    cat >"$install_prefix/lib/pkgconfig/libzstd.pc" <<EOF
-prefix=$install_prefix
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-
-Name: libzstd
-Description: Zstandard compression library
-Version: $expected_version
-Libs: -L\${libdir} -lzstd
-Cflags: -I\${includedir}
-EOF
-  fi
-
-  echo "$expected_version" > "$install_prefix/VERSION"
-}
-
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
 
@@ -405,8 +345,34 @@ done
 if [ "$need_libzstd" = true ]; then
   zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
   curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
-  build_libzstd arm "$CROSS_COMPILE_ARM" "$LIBZSTD_VERSION"
-  build_libzstd arm64 "$CROSS_COMPILE_ARM64" "$LIBZSTD_VERSION"
+  for arch in arm arm64; do
+    if component_override_used "libzstd" "$arch"; then
+      echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
+      continue
+    fi
+
+    if component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
+      echo "libzstd for $arch already current, skipping"
+      continue
+    fi
+
+    cross=""
+    case "$arch" in
+      arm)
+        cross="$CROSS_COMPILE_ARM"
+        ;;
+      arm64)
+        cross="$CROSS_COMPILE_ARM64"
+        ;;
+      *)
+        echo "Unsupported architecture '$arch' for libzstd build" >&2
+        exit 1
+        ;;
+    esac
+
+    install_prefix="$(component_prefix_path "libzstd" "$arch")"
+    "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
+  done
   rm -rf "$zstd_src_dir"
 else
   if component_override_used "libzstd" arm || component_override_used "libzstd" arm64; then
