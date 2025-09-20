@@ -916,14 +916,15 @@ EOF
       if [ -d "$sys_root/usr/lib/systemd" ]; then
         cp -a "$sys_root/usr/lib/systemd/." config/lsb_root/usr/lib/systemd/
       fi
-      if [ -f "$sys_root/lib/systemd/systemd" ]; then
-        cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
-        cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
+      systemd_bin="$sys_root/lib/systemd/systemd"
+      if [ -f "$systemd_bin" ]; then
+        cp "$systemd_bin" config/lsb_root/lib/systemd/systemd
+        cp "$systemd_bin" config/lsb_root/usr/lib/systemd/systemd
         debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "write $systemd_bin /lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
           find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
