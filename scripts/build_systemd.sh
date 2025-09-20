@@ -268,7 +268,7 @@ mkdir -p "$out_dir"
   builddir="build-$arch"
   rm -rf "$builddir"
   mkdir -p "$builddir"
-  cat > cross.txt <<'CROSS_EOF'
+  cat > cross.txt <<CROSS_EOF
 [binaries]
 c = '${cross}gcc'
 cpp = '${cross}g++'
