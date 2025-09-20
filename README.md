@@ -63,7 +63,7 @@ scripts/build.sh          # builds natively
 
 **Mac:**
 ```bash
-CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Override any aarch64-elf- default.
+CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Supply the Linux-targeted prefix explicitly.
 ```
 
 Pass `--clean` (or select “Clean out directory before build” in the interactive

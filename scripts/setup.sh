@@ -263,7 +263,7 @@ do_config()
 
     if [ -n "$CONF_DO_ARM64" ]; then
       dialog --no-mouse --visit-items \
-	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-elf-" \
+        --inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-linux-gnu-" \
 	2> $tmpfile
       CROSS_COMPILE_ARM64=$(cat $tmpfile)
     fi
