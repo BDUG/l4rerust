@@ -125,11 +125,8 @@ pre-built-images/l4image:
 	@echo Creating $@
 	@src/l4/tool/bin/l4image --create-l4image-binary $@
 
-docker-build:
-	@scripts/docker_build.sh $(filter-out $@,$(MAKECMDGOALS))
-
 %:
-	@:
+        @:
 
 help:
 	@echo "Targets:"
@@ -139,8 +136,6 @@ help:
 	@echo "  bash-image    Build image with Bash as first program"
 	@echo "  systemd-image Build image with systemd"
 	@echo "  examples      Build Rust example servers and clients"
-	@echo "  docker-build  Build project inside Docker container"
-
-.PHONY: setup all build_all clean help docker-build \
+.PHONY: setup all build_all clean help \
 build_images build_fiasco build_l4re bash-image \
 systemd-image examples

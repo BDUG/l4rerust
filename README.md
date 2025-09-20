@@ -88,23 +88,14 @@ All bootable `.elf` outputs—and any generated `.uimage` files—found under
 basename, the most recently built file wins so the latest
 `bootstrap_hello_arm_virt.elf` remains available without manual intervention.
 
-**Fallback**, to cross-compile inside a container, run:
-
-```bash
-scripts/docker_build.sh   # cross-compiles and places artifacts in out/
-```
-
 After building, boot the image on your host with:
 
 ```bash
 scripts/runqemu.sh        # launches bootstrap_hello_arm_virt.elf or the newest .elf image
 ```
 
-In case of issues with the Docker build container, run:
-
-```bash
-docker image rm l4rerust-builder
-```
+If you need a fresh rebuild, rerun the script with `--clean` to remove previous
+outputs before starting.
 
 ## CMake build
 
