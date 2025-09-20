@@ -70,6 +70,16 @@ Pass `--clean` (the default) to force removal of previous build directories or
 `--no-clean` to reuse them for incremental builds. Build artifacts are placed
 under `out/`.
 
+When `dialog` is available the script shows an interactive checklist of
+external components (Bash, libcap, systemd, etc.) to build. Choose the desired
+entries or pass `--no-menu` (and optionally `--components=foo,bar`) to skip the
+prompt in automation.
+
+At the end of the run the script prints a summary table enumerating each
+external component as `success`, `skipped`, or `failed`. A non-zero exit status
+is returned if any selected component fails so CI jobs can halt before invoking
+later stages.
+
 All bootable `.elf` outputs—and any generated `.uimage` files—found under
 `obj/l4/*/images/` (including nested entry-point directories created from
 `.imagebuilds`) are staged into `out/images/`. When multiple images share a
