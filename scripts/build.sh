@@ -147,36 +147,6 @@ run_component_build() {
   return 0
 }
 
-run_make_target() {
-  local target="$1"
-  local previous_errexit
-  local status
-
-  if ! should_run_target "$target"; then
-    TARGET_RESULTS["$target"]="skipped"
-    TARGET_NOTES["$target"]="not selected"
-    return 0
-  fi
-
-  echo "Running 'gmake $target'"
-  previous_errexit=$(set +o | grep errexit)
-  set +e
-  gmake "$target"
-  status=$?
-  eval "$previous_errexit"
-
-  if [ $status -eq 0 ]; then
-    TARGET_RESULTS["$target"]="success"
-    TARGET_NOTES["$target"]="completed"
-    return 0
-  fi
-
-  TARGET_RESULTS["$target"]="failed"
-  TARGET_NOTES["$target"]="exit status $status"
-  BUILD_FAILURE_COUNT=$((BUILD_FAILURE_COUNT + 1))
-  return $status
-}
-
 usage() {
   cat <<EOF
 Usage: $0 [options]
@@ -1196,7 +1166,7 @@ else
       if ! should_run_target "$target"; then
         continue
       fi
-      run_make_target "$target"
+      
       if (( BUILD_FAILURE_COUNT > 0 )); then
         echo "Make target '$target' failed; skipping remaining make targets."
         for (( remaining_index=target_index+1; remaining_index<${#selected_make_targets[@]}; remaining_index++ )); do
