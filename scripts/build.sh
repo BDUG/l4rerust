@@ -196,9 +196,9 @@ EOF
     printf '    %-14s %s\n' "$target" "${MAKE_TARGET_LABELS[$target]}"
   done
   echo
-  echo "  The interactive menu offers checklists for external components and"
-  echo "  make targets along with an option to clean the build directories"
-  echo "  before starting."
+  echo "  The interactive menu offers a checklist for external components and"
+  echo "  the systemd-image make target along with an option to clean the build"
+  echo "  directories before starting."
 }
 
 is_valid_component() {
@@ -276,8 +276,11 @@ prompt_component_selection() {
     menu_args+=("$component" "${BUILD_COMPONENT_LABELS[$component]}" on)
   done
 
+  menu_args+=("systemd-image" "${MAKE_TARGET_LABELS[systemd-image]}" on)
+  local menu_height=$(( ${#BUILD_COMPONENT_IDS[@]} + 1 ))
+
   if ! dialog --clear \
-      --checklist "Select components to build:" 20 70 ${#BUILD_COMPONENT_IDS[@]} \
+      --checklist "Select components to build:" 20 70 "$menu_height" \
       "${menu_args[@]}" 2>"$tmpfile"; then
     dialog_status=$?
   fi
@@ -295,6 +298,7 @@ prompt_component_selection() {
   fi
 
   local entry
+  local systemd_image_selected=false
   for entry in $result; do
     if [[ ${entry:0:1} != '"' ]]; then
       entry="\"$entry\""
@@ -302,7 +306,11 @@ prompt_component_selection() {
     entry="${entry%\"}"
     entry="${entry#\"}"
     if [ -n "$entry" ]; then
-      _component_result+=("$entry")
+      if [ "$entry" = "systemd-image" ]; then
+        systemd_image_selected=true
+      else
+        _component_result+=("$entry")
+      fi
     fi
   done
 
@@ -310,49 +318,8 @@ prompt_component_selection() {
     return 1
   fi
 
-  tmpfile=$(mktemp)
-  dialog_status=0
-  local target_menu_args=()
-  local target
-  local default_state
-  for target in "${MAKE_TARGET_IDS[@]}"; do
-    default_state="off"
-    if [ "$target" = "systemd-image" ]; then
-      default_state="on"
-    fi
-    target_menu_args+=("$target" "${MAKE_TARGET_LABELS[$target]}" "$default_state")
-  done
-
-  if ! dialog --clear \
-      --checklist "Select make targets to invoke:" 18 70 ${#MAKE_TARGET_IDS[@]} \
-      "${target_menu_args[@]}" 2>"$tmpfile"; then
-    dialog_status=$?
-  fi
-
-  result=$(<"$tmpfile")
-  rm -f "$tmpfile"
-
-  if [ $dialog_status -ne 0 ]; then
-    return 1
-  fi
-
-  if [ -z "$result" ]; then
-    return 1
-  fi
-
-  for entry in $result; do
-    if [[ ${entry:0:1} != '"' ]]; then
-      entry="\"$entry\""
-    fi
-    entry="${entry%\"}"
-    entry="${entry#\"}"
-    if [ -n "$entry" ]; then
-      _target_result+=("$entry")
-    fi
-  done
-
-  if [ ${#_target_result[@]} -eq 0 ]; then
-    return 1
+  if [ "$systemd_image_selected" = true ]; then
+    _target_result+=(systemd-image)
   fi
 
   return 0
