@@ -83,84 +83,6 @@ export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 BASH_VERSION=5.2.21
 BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 
-build_libcap() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  local microkernel=false
-  if [[ "$triple" == *-linux-* ]]; then
-    microkernel=false
-  elif [[ "$triple" == *-elf-* || "$triple" == *-elf ]]; then
-    microkernel=true
-  else
-    echo "${cross}g++ targets '$triple', but libcap requires a Linux or L4Re ELF toolchain" >&2
-    exit 1
-  fi
-  if component_override_used "libcap" "$arch"; then
-    echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
-    return
-  fi
-  local install_prefix
-  install_prefix="$(component_prefix_path "libcap" "$arch")"
-  if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$expected_version"; then
-    echo "libcap for $arch already current, skipping"
-    return
-  fi
-  rm -rf "$install_prefix"
-  mkdir -p "$install_prefix"
-  local -a make_args=(
-    "BUILD_CC=gcc"
-    "CC=${cross}gcc"
-    "AR=${cross}ar"
-    "RANLIB=${cross}ranlib"
-    "prefix=$install_prefix"
-    "lib=lib"
-  )
-  if [ "$microkernel" = true ]; then
-    make_args+=(
-      "KERNEL_HEADERS=$REPO_ROOT/pkg/include"
-      "PTHREADS=no"
-      "SHARED=no"
-    )
-  fi
-  (
-    cd "$libcap_src_dir"
-    gmake -C libcap "${make_args[@]}" distclean >/dev/null 2>&1 || true
-    gmake -C libcap "${make_args[@]}" clean >/dev/null 2>&1 || true
-    gmake -C libcap "${make_args[@]}" install
-  )
-  if [ "$microkernel" = true ]; then
-    local shim_header="$REPO_ROOT/pkg/include/linux/capability.h"
-    if [ ! -f "$shim_header" ]; then
-      echo "Missing capability shim header at $shim_header" >&2
-      exit 1
-    fi
-    mkdir -p "$install_prefix/include/linux"
-    cp "$shim_header" "$install_prefix/include/linux/"
-  fi
-  local pkgconfig_file="$install_prefix/lib/pkgconfig/libcap.pc"
-  if [ -f "$pkgconfig_file" ]; then
-    local tmp_pc
-    tmp_pc=$(mktemp)
-    sed "s/^Version:.*/Version: $expected_version/" "$pkgconfig_file" >"$tmp_pc"
-    mv "$tmp_pc" "$pkgconfig_file"
-  else
-    mkdir -p "$install_prefix/lib/pkgconfig"
-    cat >"$pkgconfig_file" <<EOF
-prefix=$install_prefix
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-
-Name: libcap
-Description: POSIX capabilities library
-Version: $expected_version
-Libs: -L\${libdir} -lcap
-Cflags: -I\${includedir}
-EOF
-  fi
-  echo "$expected_version" > "$install_prefix/VERSION"
-}
-
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
 
@@ -508,8 +430,31 @@ done
 if [ "$need_libcap" = true ]; then
   libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
   curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
-  build_libcap arm "$CROSS_COMPILE_ARM" "$LIBCAP_VERSION"
-  build_libcap arm64 "$CROSS_COMPILE_ARM64" "$LIBCAP_VERSION"
+  for arch in arm arm64; do
+    cross=""
+    case "$arch" in
+      arm)
+        cross="$CROSS_COMPILE_ARM"
+        ;;
+      arm64)
+        cross="$CROSS_COMPILE_ARM64"
+        ;;
+      *)
+        echo "Unsupported architecture '$arch' for libcap build" >&2
+        exit 1
+        ;;
+    esac
+    if component_override_used "libcap" "$arch"; then
+      echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
+      continue
+    fi
+    if component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
+      echo "libcap for $arch already current, skipping"
+      continue
+    fi
+    install_prefix="$(component_prefix_path "libcap" "$arch")"
+    "$SCRIPT_DIR/build_libcap.sh" "$arch" "$cross" "$LIBCAP_VERSION" "$libcap_src_dir" "$install_prefix"
+  done
   rm -rf "$libcap_src_dir"
 else
   if component_override_used "libcap" arm || component_override_used "libcap" arm64; then
