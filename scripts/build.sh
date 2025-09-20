@@ -80,35 +80,6 @@ cargo build -p l4re-libc --release
 # Ensure Rust crates pick up the freshly built static libc
 export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 
-# Build a statically linked Bash for ARM and ARM64
-build_bash() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* && "$triple" != *-elf* ]]; then
-    echo "${cross}g++ targets '$triple', which is neither a Linux nor ELF target" >&2
-    exit 1
-  fi
-  local host="$triple"
-  local cpu="${triple%%-*}"
-  local out_dir="$ARTIFACTS_DIR/bash/$arch"
-  if component_is_current "bash" "$arch" "bash" "$expected_version"; then
-    echo "bash for $arch already current, skipping"
-    return
-  fi
-  mkdir -p "$out_dir"
-  (
-    cd "$bash_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
-      ./configure --host="$host" --without-bash-malloc
-    gmake clean
-    CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
-      gmake STATIC_LDFLAGS=-static
-    cp bash "$REPO_ROOT/$out_dir/"
-  )
-  echo "$expected_version" > "$out_dir/VERSION"
-}
-
 BASH_VERSION=5.2.21
 BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 
@@ -516,8 +487,8 @@ if [ "$need_bash" = true ]; then
       done
     )
   fi
-  build_bash arm "$CROSS_COMPILE_ARM" "$BASH_VERSION"
-  build_bash arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION"
+  "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
+  "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
   rm -rf "$bash_src_dir"
 else
   echo "bash for arm and arm64 already current, skipping"
