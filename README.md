@@ -79,9 +79,11 @@ automation. Build artifacts are placed under `out/`.
 
 When `dialog` is available the script shows interactive checklists covering the
 external components (Bash, libcap, systemd, etc.) to build and the make target
-to invoke, followed by a cleanup prompt. The make-target list is now limited to
-the systemd image and defaults to that selection. Choose the desired entries or
-pass `--no-menu` (and optionally `--components=foo,bar`) to skip the prompts in
+to invoke, followed by a cleanup prompt. An accompanying input box captures the
+`CROSS_COMPILE` prefix so the selection is stored alongside the other
+configuration switches. The make-target list is now limited to the systemd
+image and defaults to that selection. Choose the desired entries or pass
+`--no-menu` (and optionally `--components=foo,bar`) to skip the prompts in
 automation. To invoke other make targets, call `gmake <target>` directly after
 the script completes or run the desired target via `gmake` without using the
 menu.
