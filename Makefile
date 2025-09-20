@@ -60,14 +60,22 @@ BASH_ARCHES := arm arm64
 bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_images
 
 obj/bash/%/bash:
-	@scripts/build.sh --no-clean
+	@if [ -z "$$BUILD_SH_INVOKED" ]; then \
+		scripts/build.sh --no-clean; \
+	else \
+		echo "BUILD_SH_INVOKED set; skipping scripts/build.sh for $@"; \
+	fi
 
 SYSTEMD_ARCHES := arm arm64
 
 systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
 
 obj/systemd/%/systemd:
-	@scripts/build.sh --no-clean
+	@if [ -z "$$BUILD_SH_INVOKED" ]; then \
+		scripts/build.sh --no-clean; \
+	else \
+		echo "BUILD_SH_INVOKED set; skipping scripts/build.sh for $@"; \
+	fi
 
 EXAMPLE_CRATES := \
 src/fs_server \
