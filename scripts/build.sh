@@ -1136,6 +1136,8 @@ else
   echo "systemd for arm and arm64 already current, skipping"
 fi
 
+echo "######### EXTERNAL BUILD DONE ###############"
+
 # Build the tree including libc, Leo, and Rust crates
 gmake
 
