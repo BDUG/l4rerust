@@ -20,12 +20,10 @@ if [ "$cmd" = "--non-interactive" ]; then
 fi
 
 if [ "$cmd" != "clean" ]; then
-  # Source the environment helper so that it can export variables (e.g. PERL5LIB)
-  # required by the ham build tool into the current shell.
-  source "$SCRIPT_DIR/setup_l4re_env.sh"
+  "$SCRIPT_DIR/setup_l4re_env.sh"
 
   if ! command -v ham >/dev/null 2>&1; then
-    HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
+    HAM_BIN="$(resolve_path "$SCRIPT_DIR/ham/ham")"
     if [ -x "$HAM_BIN" ]; then
       PATH="$(dirname "$HAM_BIN"):$PATH"
       export PATH
@@ -48,48 +46,22 @@ if [ "$cmd" != "clean" ] && [ ! -d src/l4 ]; then
   exit 1
 fi
 
-if [ -n "${SYSTEM:-}" ]; then
+if [ -n "$SYSTEM" ]; then
   echo "SYSTEM environment variable set, not good"
   exit 1
 fi
 
-if [ "$cmd" != "clean" ]; then
-  CROSS_COMPILE=${CROSS_COMPILE:-arm-linux-gnueabihf-}
-fi
-
 if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
-  if command -v dialog >/dev/null 2>&1 && [ -t 0 ]; then
-    tmpfile=$(mktemp)
-    previous_cross_compile=${CROSS_COMPILE:-}
-    if dialog --no-mouse --visit-items \
-      --inputbox "Cross-compiler prefix (CROSS_COMPILE)" 8 70 "$previous_cross_compile" \
-      2> "$tmpfile"; then
-      dialog_cross_compile=$(cat "$tmpfile")
-      if [ -n "$previous_cross_compile" ]; then
-        CROSS_COMPILE=${dialog_cross_compile:-$previous_cross_compile}
-      else
-        CROSS_COMPILE=$dialog_cross_compile
-      fi
-    fi
-    rm -f "$tmpfile"
+  if [ -n "$CROSS_COMPILE" ]; then
+    read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
+    CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
   else
-    if ! command -v dialog >/dev/null 2>&1; then
-      echo "'dialog' program not found; using default non-interactive configuration." >&2
-      non_interactive=1
-    fi
-    if [ "$non_interactive" -eq 0 ]; then
-      if [ -n "$CROSS_COMPILE" ]; then
-        read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
-        CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
-      else
-        read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
-      fi
-    fi
+    read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
   fi
 fi
 
 export CROSS_COMPILE=${CROSS_COMPILE:-}
-CC=${CC:-${CROSS_COMPILE}gcc}
+CC=${CC:-${CROSS_COMPILE}g++}
 CXX=${CXX:-${CROSS_COMPILE}g++}
 LD=${LD:-${CROSS_COMPILE}ld}
 
@@ -110,7 +82,6 @@ write_config()
            CONF_DO_ARM64_VIRT_EL2 \
            CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
-           CROSS_COMPILE \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
   ; do
@@ -121,65 +92,39 @@ write_config()
   return 0
 }
 
-ensure_cross_compile_setting()
-{
-  local makeconf_file=$1
-  local cross_value=$2
-
-  mkdir -p "$(dirname "$makeconf_file")"
-
-  if [ -f "$makeconf_file" ]; then
-    if grep -q '^CROSS_COMPILE=' "$makeconf_file"; then
-      local tmpfile
-      tmpfile=$(mktemp)
-      sed "s/^CROSS_COMPILE=.*/CROSS_COMPILE=\"$cross_value\"/" "$makeconf_file" > "$tmpfile"
-      mv "$tmpfile" "$makeconf_file"
-    else
-      printf 'CROSS_COMPILE="%s"\n' "$cross_value" >> "$makeconf_file"
-    fi
-  else
-    printf 'CROSS_COMPILE="%s"\n' "$cross_value" > "$makeconf_file"
-  fi
-}
-
 do_clean()
 {
   # same as in Makefile
   rm -rf obj
 }
 
-configure_default_targets()
-{
-  CONF_DO_ARM=1
-  CONF_DO_ARM64=1
-
-  CONF_DO_ARM_VIRT_PL2=1
-  CONF_DO_ARM_RPIZ=0
-  CONF_DO_ARM_RPI3=0
-  CONF_DO_ARM_RPI4=0
-  CONF_DO_ARM_IMX6UL_PL1=0
-  CONF_DO_ARM_IMX6UL_PL2=0
-  CONF_DO_ARM64_VIRT_EL2=0
-  CONF_DO_ARM64_RCAR3=0
-  CONF_DO_ARM64_RPI3=0
-  CONF_DO_ARM64_RPI4=0
-  CONF_DO_ARM64_S32=0
-  CONF_DO_ARM64_ZYNQMP=0
-
-  detect_cross_compilers
-
-  write_config
-}
-
 do_config()
 {
-  if [ -n "${SETUP_CONFIG_ALL:-}" ]; then
-    configure_default_targets
+  if [ -n "$SETUP_CONFIG_ALL" ]; then
+    CONF_DO_ARM=1
+    CONF_DO_ARM64=1
+
+    CONF_DO_ARM_VIRT_PL2=1
+    CONF_DO_ARM_RPIZ=0
+    CONF_DO_ARM_RPI3=0
+    CONF_DO_ARM_RPI4=0
+    CONF_DO_ARM_IMX6UL_PL1=0
+    CONF_DO_ARM_IMX6UL_PL2=0
+    CONF_DO_ARM64_VIRT_EL2=0
+    CONF_DO_ARM64_RCAR3=0
+    CONF_DO_ARM64_RPI3=0
+    CONF_DO_ARM64_RPI4=0
+    CONF_DO_ARM64_S32=0
+    CONF_DO_ARM64_ZYNQMP=0
+
+    detect_cross_compilers
+
+    write_config
     return 0;
   fi
 
 
-  if command -v dialog >/dev/null 2>&1; then
+  if command -v dialog; then
 
     tmpfile=$(mktemp)
     trap "rm -f $tmpfile" 0 1 2 5 15
@@ -318,7 +263,7 @@ do_config()
 
     if [ -n "$CONF_DO_ARM64" ]; then
       dialog --no-mouse --visit-items \
-        --inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-linux-gnu-" \
+	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-elf-" \
 	2> $tmpfile
       CROSS_COMPILE_ARM64=$(cat $tmpfile)
     fi
@@ -350,9 +295,9 @@ do_config()
     fi
 
   else
-    echo "'dialog' program not found; falling back to default ARM/ARM64 configuration." >&2
-    configure_default_targets
-    return 0
+    echo "'dialog' program not found, aborting."
+    echo "Install dialog and issue 'gmake setup' again."
+    exit 1
   fi
 
   write_config
@@ -369,7 +314,6 @@ load_config()
   fi
 
   . obj/.config
-  export CROSS_COMPILE=${CROSS_COMPILE:-}
 }
 
 redo_config()
@@ -421,6 +365,13 @@ check_cc()
     echo "Invalid compiler command given"
   fi
   return 1
+}
+
+check_eabi_gxx()
+{
+  # probably half-hearted approach but well
+  [ -z "$1" ] && return 1
+  $1 -E -dD -x c++ /dev/null | grep -qw __ARM_EABI__
 }
 
 check_tool()
@@ -628,6 +579,10 @@ do_setup()
 
   mkdir -p obj/fiasco
   mkdir -p obj/l4
+  mkdir -p obj/l4linux
+
+  [ -e src/l4linux ] && l4lx_avail=1
+
   # Fiasco build dirs
   for b in $fiasco_configs; do
     fiasco_dir=$(get_fiasco_dir "$b") || {
@@ -640,14 +595,8 @@ do_setup()
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
-    fiasco_build_dir="obj/fiasco/$fiasco_dir"
-    fiasco_makefile="$fiasco_build_dir/Makefile"
-    if [ ! -d "$fiasco_build_dir" ] || [ ! -f "$fiasco_makefile" ]; then
-      (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    else
-      echo "  Using existing build directory $fiasco_build_dir"
-    fi
-    ensure_cross_compile_setting "$fiasco_build_dir/Makeconf.local" "$cross_compile"
+    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
   done
 
   # some config tweaking
@@ -708,6 +657,24 @@ do_setup()
     echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
   fi
 
+  # L4Linux build setup
+  [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
+
+  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
+
+    mkdir -p obj/l4linux/arm-up
+
+    if [ "$ARM_L4_DIR_FOR_LX_MP" ]; then
+      mkdir -p obj/l4linux/arm-mp
+    fi
+
+    if ! check_eabi_gxx ${CROSS_COMPILE_ARM}g++; then
+      echo "WARNING: L4Linux has been disabled due to a detected old OABI compiler"
+      echo "WARNING: Please update your compiler to an EABI version"
+      add_to_config SKIP_L4LINUX_ARM_BUILD=1
+    fi
+  fi
+
   common_paths=$(pwd)/config:$(pwd)/config/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
 
   if [ "$CONF_DO_ARM" ]; then
@@ -716,13 +683,15 @@ do_setup()
     mkdir -p $odir/conf
 
     if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$common_paths" >> $Mboot
+      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
       cat<<EOF >> $Mboot
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
 EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
     fi
 
     add_std_qemu_options $Mboot
@@ -746,6 +715,8 @@ EOF
       echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
       echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm64-virt-el2" >> $odir/.imagebuilds
     fi
 
 

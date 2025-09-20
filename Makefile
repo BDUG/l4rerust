@@ -1,8 +1,8 @@
-all:
+all: 
 	@if [ -d obj ]; then                                           \
-	  $(MAKE) systemd-image;                                       \
+	  $(MAKE) build_all;                                           \
 	else                                                           \
-	  echo "Call 'gmake setup' once for initial setup." ;           \
+          echo "Call 'gmake setup' once for initial setup." ;           \
 	  exit 1;                                                      \
 	fi
 
@@ -29,12 +29,13 @@ setup:
 	  echo ;                                                                        \
 	fi
 
-build_all: build_fiasco build_l4re build_images
+build_all: build_fiasco build_l4re build_l4linux build_images
 
-#.NOTPARALLEL: build_fiasco build_l4re build_images build_all
+#.NOTPARALLEL: build_fiasco build_l4re build_l4linux build_images build_all
 
 build_fiasco: $(addsuffix /fiasco,$(wildcard obj/fiasco/*))
 build_l4re: $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*))
+build_l4linux: $(addsuffix /vmlinux,$(wildcard obj/l4linux/*))
 
 $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 	$(MAKE) -C $(@D)
@@ -42,7 +43,26 @@ $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*)):
 	$(MAKE) -C $(@D)
 
-build_images: build_l4re build_fiasco
+obj/l4linux/arm-mp/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
+	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
+	                          O=$(abspath $(@D)) arm-mp_defconfig
+	src/l4linux/scripts/config --file $(@D)/.config \
+	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+
+obj/l4linux/arm-up/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
+	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
+	                          O=$(abspath $(@D)) arm_defconfig
+	src/l4linux/scripts/config --file $(@D)/.config \
+	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+
+obj/l4linux/arm64/vmlinux: obj/l4/arm64/l4defs.mk.inc
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM64
+
+build_images: build_l4linux build_l4re build_fiasco
 	@echo "=============== Building Images ==============================="
 	export PATH=$$(pwd)/bin:$$PATH;                                        \
 	[ -e obj/.config ] && . obj/.config;                                   \
@@ -60,29 +80,14 @@ BASH_ARCHES := arm arm64
 bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_images
 
 obj/bash/%/bash:
-	@if [ -z "$$BUILD_SH_INVOKED" ]; then \
-		scripts/build.sh --no-clean; \
-	else \
-		echo "BUILD_SH_INVOKED set; skipping scripts/build.sh for $@"; \
-	fi
+	@scripts/build.sh --no-clean
 
 SYSTEMD_ARCHES := arm arm64
-SYSTEMD_OUTPUTS := $(addprefix out/systemd/,$(addsuffix /lib/systemd/systemd,$(SYSTEMD_ARCHES)))
 
-systemd-image: systemd-external $(SYSTEMD_OUTPUTS) build_images
+systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
 
-$(SYSTEMD_OUTPUTS): systemd-external
-	@if [ ! -f "$@" ]; then \
-		echo "Missing expected systemd binary $@ after external build"; \
-		exit 1; \
-	fi
-
-systemd-external:
-	@if [ -z "$$BUILD_SH_INVOKED" ]; then \
-		scripts/build.sh --no-clean; \
-	else \
-		echo "BUILD_SH_INVOKED set; skipping scripts/build.sh for $@"; \
-	fi
+obj/systemd/%/systemd:
+	@scripts/build.sh --no-clean
 
 EXAMPLE_CRATES := \
 src/fs_server \
@@ -132,17 +137,22 @@ pre-built-images/l4image:
 	@echo Creating $@
 	@src/l4/tool/bin/l4image --create-l4image-binary $@
 
+docker-build:
+	@scripts/docker_build.sh $(filter-out $@,$(MAKECMDGOALS))
+
 %:
-        @:
+	@:
 
 help:
 	@echo "Targets:"
-	@echo "  systemd-image (default) Build image with systemd"
-	@echo "  all                      Alias for systemd-image"
-	@echo "  setup                    Prepare the source tree"
-	@echo "  gen_prebuilt             Generate pre-built images"
-	@echo "  bash-image               Build image with Bash as first program"
-	@echo "  examples                 Build Rust example servers and clients"
-.PHONY: setup all build_all clean help \
-build_images build_fiasco build_l4re bash-image \
-systemd-image systemd-external examples
+	@echo "  all"
+	@echo "  setup"
+	@echo "  gen_prebuilt"
+	@echo "  bash-image    Build image with Bash as first program"
+	@echo "  systemd-image Build image with systemd"
+	@echo "  examples      Build Rust example servers and clients"
+	@echo "  docker-build  Build project inside Docker container"
+
+.PHONY: setup all build_all clean help docker-build \
+build_images build_fiasco build_l4re build_l4linux bash-image \
+systemd-image examples

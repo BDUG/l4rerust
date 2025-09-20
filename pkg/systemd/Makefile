@@ -2,7 +2,7 @@ PKGDIR ?= .
 L4DIR ?= $(PKGDIR)/../..
 
 TARGET := systemd
-SYSTEMD_BIN := $(PKGDIR)/../../out/systemd/$(L4ARCH)/lib/systemd/systemd
+SYSTEMD_BIN := $(PKGDIR)/../../obj/systemd/$(L4ARCH)/systemd
 
 $(TARGET): $(SYSTEMD_BIN)
 	ln -sf $(SYSTEMD_BIN) $(TARGET)
