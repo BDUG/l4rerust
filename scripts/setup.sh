@@ -113,6 +113,27 @@ write_config()
   return 0
 }
 
+ensure_cross_compile_setting()
+{
+  local makeconf_file=$1
+  local cross_value=$2
+
+  mkdir -p "$(dirname "$makeconf_file")"
+
+  if [ -f "$makeconf_file" ]; then
+    if grep -q '^CROSS_COMPILE=' "$makeconf_file"; then
+      local tmpfile
+      tmpfile=$(mktemp)
+      sed "s/^CROSS_COMPILE=.*/CROSS_COMPILE=\"$cross_value\"/" "$makeconf_file" > "$tmpfile"
+      mv "$tmpfile" "$makeconf_file"
+    else
+      printf 'CROSS_COMPILE="%s"\n' "$cross_value" >> "$makeconf_file"
+    fi
+  else
+    printf 'CROSS_COMPILE="%s"\n' "$cross_value" > "$makeconf_file"
+  fi
+}
+
 do_clean()
 {
   # same as in Makefile
@@ -606,8 +627,14 @@ do_setup()
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
-    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
+    fiasco_build_dir="obj/fiasco/$fiasco_dir"
+    fiasco_makefile="$fiasco_build_dir/Makefile"
+    if [ ! -d "$fiasco_build_dir" ] || [ ! -f "$fiasco_makefile" ]; then
+      (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+    else
+      echo "  Using existing build directory $fiasco_build_dir"
+    fi
+    ensure_cross_compile_setting "$fiasco_build_dir/Makeconf.local" "$cross_compile"
   done
 
   # some config tweaking
