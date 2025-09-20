@@ -89,82 +89,6 @@ LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libca
 LIBXCRYPT_VERSION=4.4.36
 LIBXCRYPT_URL="https://github.com/besser82/libxcrypt/releases/download/v${LIBXCRYPT_VERSION}/libxcrypt-${LIBXCRYPT_VERSION}.tar.xz"
 
-build_libblkid() {
-  local arch="$1" cross="$2" expected_version="$3"
-  local triple="$(${cross}g++ -dumpmachine)"
-  if [[ "$triple" != *-linux-* ]]; then
-    echo "${cross}g++ targets '$triple', but libblkid requires a Linux-targeted toolchain" >&2
-    exit 1
-  fi
-
-  if component_override_used "libblkid" "$arch"; then
-    echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
-    return
-  fi
-
-  local install_prefix
-  install_prefix="$(component_prefix_path "libblkid" "$arch")"
-  if component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$expected_version"; then
-    echo "libblkid for $arch already current, skipping"
-    return
-  fi
-
-  rm -rf "$install_prefix"
-  mkdir -p "$install_prefix"
-
-  local build_triple
-  build_triple="$(gcc -dumpmachine)"
-
-  (
-    cd "$util_linux_src_dir"
-    gmake distclean >/dev/null 2>&1 || true
-    gmake clean >/dev/null 2>&1 || true
-
-    export CC="${cross}gcc"
-    export CXX="${cross}g++"
-    export AR="${cross}ar"
-    export RANLIB="${cross}ranlib"
-    export STRIP="${cross}strip"
-
-    local -a configure_args=(
-      "--build=$build_triple"
-      "--host=$triple"
-      "--prefix=$install_prefix"
-      "--disable-all-programs"
-      "--enable-libblkid"
-      "--disable-libfdisk"
-      "--disable-libmount"
-      "--disable-libsmartcols"
-      "--without-python"
-      "--without-readline"
-      "--without-systemd"
-    )
-
-    ./configure "${configure_args[@]}"
-    gmake
-    gmake install
-  )
-
-  local pkgconfig_file="$install_prefix/lib/pkgconfig/blkid.pc"
-  if [ ! -f "$pkgconfig_file" ]; then
-    mkdir -p "$install_prefix/lib/pkgconfig"
-    cat >"$pkgconfig_file" <<EOF
-prefix=$install_prefix
-exec_prefix=\${prefix}
-libdir=\${prefix}/lib
-includedir=\${prefix}/include
-
-Name: blkid
-Description: Block device id library
-Version: $expected_version
-Libs: -L\${libdir} -lblkid
-Cflags: -I\${includedir}
-EOF
-  fi
-
-  echo "$expected_version" > "$install_prefix/VERSION"
-}
-
 UTIL_LINUX_VERSION=2.39.3
 UTIL_LINUX_MAJOR_MINOR="${UTIL_LINUX_VERSION%.*}"
 UTIL_LINUX_URL="https://cdn.kernel.org/pub/linux/utils/util-linux/v${UTIL_LINUX_MAJOR_MINOR}/util-linux-${UTIL_LINUX_VERSION}.tar.xz"
@@ -465,8 +389,33 @@ done
 if [ "$need_libblkid" = true ]; then
   util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
   curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
-  build_libblkid arm "$CROSS_COMPILE_ARM" "$UTIL_LINUX_VERSION"
-  build_libblkid arm64 "$CROSS_COMPILE_ARM64" "$UTIL_LINUX_VERSION"
+  for arch in arm arm64; do
+    if component_override_used "libblkid" "$arch"; then
+      echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
+      continue
+    fi
+    if component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
+      echo "libblkid for $arch already current, skipping"
+      continue
+    fi
+
+    cross=""
+    case "$arch" in
+      arm)
+        cross="$CROSS_COMPILE_ARM"
+        ;;
+      arm64)
+        cross="$CROSS_COMPILE_ARM64"
+        ;;
+      *)
+        echo "Unsupported architecture '$arch' for libblkid build" >&2
+        exit 1
+        ;;
+    esac
+
+    install_prefix="$(component_prefix_path "libblkid" "$arch")"
+    "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
+  done
   rm -rf "$util_linux_src_dir"
 else
   if component_override_used "libblkid" arm || component_override_used "libblkid" arm64; then
