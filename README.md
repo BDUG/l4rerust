@@ -35,6 +35,10 @@ gmake targets remain available—run them explicitly (for example,
 
 On a host with the necessary prerequisites installed, run:
 
+```bash
+gmake setup
+```
+
 **Linux:**
 ```bash
 gmake
