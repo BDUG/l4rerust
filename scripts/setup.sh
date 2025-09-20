@@ -20,7 +20,9 @@ if [ "$cmd" = "--non-interactive" ]; then
 fi
 
 if [ "$cmd" != "clean" ]; then
-  "$SCRIPT_DIR/setup_l4re_env.sh"
+  # Source the environment helper so that it can export variables (e.g. PERL5LIB)
+  # required by the ham build tool into the current shell.
+  source "$SCRIPT_DIR/setup_l4re_env.sh"
 
   if ! command -v ham >/dev/null 2>&1; then
     HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
@@ -46,7 +48,7 @@ if [ "$cmd" != "clean" ] && [ ! -d src/l4 ]; then
   exit 1
 fi
 
-if [ -n "$SYSTEM" ]; then
+if [ -n "${SYSTEM:-}" ]; then
   echo "SYSTEM environment variable set, not good"
   exit 1
 fi
@@ -71,11 +73,17 @@ if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
     fi
     rm -f "$tmpfile"
   else
-    if [ -n "$CROSS_COMPILE" ]; then
-      read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
-      CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
-    else
-      read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+    if ! command -v dialog >/dev/null 2>&1; then
+      echo "'dialog' program not found; using default non-interactive configuration." >&2
+      non_interactive=1
+    fi
+    if [ "$non_interactive" -eq 0 ]; then
+      if [ -n "$CROSS_COMPILE" ]; then
+        read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
+        CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
+      else
+        read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+      fi
     fi
   fi
 fi
@@ -140,33 +148,38 @@ do_clean()
   rm -rf obj
 }
 
+configure_default_targets()
+{
+  CONF_DO_ARM=1
+  CONF_DO_ARM64=1
+
+  CONF_DO_ARM_VIRT_PL2=1
+  CONF_DO_ARM_RPIZ=0
+  CONF_DO_ARM_RPI3=0
+  CONF_DO_ARM_RPI4=0
+  CONF_DO_ARM_IMX6UL_PL1=0
+  CONF_DO_ARM_IMX6UL_PL2=0
+  CONF_DO_ARM64_VIRT_EL2=0
+  CONF_DO_ARM64_RCAR3=0
+  CONF_DO_ARM64_RPI3=0
+  CONF_DO_ARM64_RPI4=0
+  CONF_DO_ARM64_S32=0
+  CONF_DO_ARM64_ZYNQMP=0
+
+  detect_cross_compilers
+
+  write_config
+}
+
 do_config()
 {
-  if [ -n "$SETUP_CONFIG_ALL" ]; then
-    CONF_DO_ARM=1
-    CONF_DO_ARM64=1
-
-    CONF_DO_ARM_VIRT_PL2=1
-    CONF_DO_ARM_RPIZ=0
-    CONF_DO_ARM_RPI3=0
-    CONF_DO_ARM_RPI4=0
-    CONF_DO_ARM_IMX6UL_PL1=0
-    CONF_DO_ARM_IMX6UL_PL2=0
-    CONF_DO_ARM64_VIRT_EL2=0
-    CONF_DO_ARM64_RCAR3=0
-    CONF_DO_ARM64_RPI3=0
-    CONF_DO_ARM64_RPI4=0
-    CONF_DO_ARM64_S32=0
-    CONF_DO_ARM64_ZYNQMP=0
-
-    detect_cross_compilers
-
-    write_config
+  if [ -n "${SETUP_CONFIG_ALL:-}" ]; then
+    configure_default_targets
     return 0;
   fi
 
 
-  if command -v dialog; then
+  if command -v dialog >/dev/null 2>&1; then
 
     tmpfile=$(mktemp)
     trap "rm -f $tmpfile" 0 1 2 5 15
@@ -337,9 +350,9 @@ do_config()
     fi
 
   else
-    echo "'dialog' program not found, aborting."
-    echo "Install dialog and issue 'gmake setup' again."
-    exit 1
+    echo "'dialog' program not found; falling back to default ARM/ARM64 configuration." >&2
+    configure_default_targets
+    return 0
   fi
 
   write_config
