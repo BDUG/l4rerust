@@ -67,10 +67,17 @@ obj/bash/%/bash:
 	fi
 
 SYSTEMD_ARCHES := arm arm64
+SYSTEMD_OUTPUTS := $(addprefix out/systemd/,$(addsuffix /lib/systemd/systemd,$(SYSTEMD_ARCHES)))
 
-systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
+systemd-image: systemd-external $(SYSTEMD_OUTPUTS) build_images
 
-obj/systemd/%/systemd:
+$(SYSTEMD_OUTPUTS): systemd-external
+	@if [ ! -f "$@" ]; then \
+		echo "Missing expected systemd binary $@ after external build"; \
+		exit 1; \
+	fi
+
+systemd-external:
 	@if [ -z "$$BUILD_SH_INVOKED" ]; then \
 		scripts/build.sh --no-clean; \
 	else \
@@ -138,4 +145,4 @@ help:
 	@echo "  examples                 Build Rust example servers and clients"
 .PHONY: setup all build_all clean help \
 build_images build_fiasco build_l4re bash-image \
-systemd-image examples
+systemd-image systemd-external examples
