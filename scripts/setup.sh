@@ -52,11 +52,27 @@ if [ -n "$SYSTEM" ]; then
 fi
 
 if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
-  if [ -n "$CROSS_COMPILE" ]; then
-    read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
-    CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
+  if command -v dialog >/dev/null 2>&1 && [ -t 0 ]; then
+    tmpfile=$(mktemp)
+    previous_cross_compile=${CROSS_COMPILE:-}
+    if dialog --no-mouse --visit-items \
+      --inputbox "Cross-compiler prefix (CROSS_COMPILE)" 8 70 "$previous_cross_compile" \
+      2> "$tmpfile"; then
+      dialog_cross_compile=$(cat "$tmpfile")
+      if [ -n "$previous_cross_compile" ]; then
+        CROSS_COMPILE=${dialog_cross_compile:-$previous_cross_compile}
+      else
+        CROSS_COMPILE=$dialog_cross_compile
+      fi
+    fi
+    rm -f "$tmpfile"
   else
-    read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+    if [ -n "$CROSS_COMPILE" ]; then
+      read -p "Cross-compiler prefix (CROSS_COMPILE) [$CROSS_COMPILE]: " tmp
+      CROSS_COMPILE=${tmp:-$CROSS_COMPILE}
+    else
+      read -p "Cross-compiler prefix (CROSS_COMPILE): " CROSS_COMPILE
+    fi
   fi
 fi
 
@@ -82,6 +98,7 @@ write_config()
            CONF_DO_ARM64_VIRT_EL2 \
            CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
+           CROSS_COMPILE \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
   ; do
@@ -314,6 +331,7 @@ load_config()
   fi
 
   . obj/.config
+  export CROSS_COMPILE=${CROSS_COMPILE:-}
 }
 
 redo_config()
