@@ -1,8 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+declare -A SHOULD_BUILD=()
+declare -A BUILD_RESULTS=()
+declare -A BUILD_NOTES=()
+declare -a FAILED_COMPONENTS=()
+BUILD_FAILURE_COUNT=0
+COMPONENT_BUILD_NOTE=""
+
+print_component_summary() {
+  local component
+  local result
+  local note
+
+  echo
+  echo "External component build summary:"
+  printf '  %-12s | %-8s | %s\n' "Component" "Result" "Details"
+  printf '  %-12s-+-%-8s-+-%s\n' "------------" "--------" "------------------------------"
+  for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    result="${BUILD_RESULTS[$component]:-not run}"
+    note="${BUILD_NOTES[$component]:-}"
+    printf '  %-12s | %-8s | %s\n' "$component" "$result" "$note"
+  done
+}
+
+on_exit() {
+  local exit_status=$?
+  trap - EXIT
+  print_component_summary
+  echo "Leaving build container"
+  if (( BUILD_FAILURE_COUNT > 0 )); then
+    exit 1
+  fi
+  exit $exit_status
+}
+
 echo "Entering build container"
-trap 'echo "Leaving build container"' EXIT
+trap on_exit EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -39,7 +73,48 @@ declare -A BUILD_COMPONENT_LABELS=(
   [systemd]="systemd"
 )
 
-declare -A SHOULD_BUILD=()
+run_component_build() {
+  local component="$1"
+  local func="$2"
+  local previous_errexit
+  local status
+  local note=""
+
+  if ! should_build_component "$component"; then
+    echo "Skipping ${component} build (component disabled)"
+    BUILD_RESULTS["$component"]="skipped"
+    BUILD_NOTES["$component"]="not selected"
+    return 0
+  fi
+
+  previous_errexit=$(set +o | grep errexit)
+  set +e
+  COMPONENT_BUILD_NOTE=""
+  "$func"
+  status=$?
+  eval "$previous_errexit"
+
+  note="${COMPONENT_BUILD_NOTE:-}"
+
+  case $status in
+    0)
+      BUILD_RESULTS["$component"]="success"
+      BUILD_NOTES["$component"]="${note:-built}"
+      ;;
+    2)
+      BUILD_RESULTS["$component"]="skipped"
+      BUILD_NOTES["$component"]="${note:-skipped}"
+      ;;
+    *)
+      BUILD_RESULTS["$component"]="failed"
+      BUILD_NOTES["$component"]="${note:-error}"
+      FAILED_COMPONENTS+=("$component")
+      BUILD_FAILURE_COUNT=$((BUILD_FAILURE_COUNT + 1))
+      ;;
+  esac
+
+  return 0
+}
 
 usage() {
   cat <<EOF
@@ -315,8 +390,14 @@ LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERS
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
 
-if should_build_component "bash"; then
-  need_bash=false
+build_bash_component() {
+  set -e
+  local arch
+  local need_bash=false
+  local bash_src_dir=""
+  local bash_patch_dir=""
+  local patch_file
+
   for arch in arm arm64; do
     if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
       need_bash=true
@@ -340,17 +421,27 @@ if should_build_component "bash"; then
     "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     rm -rf "$bash_src_dir"
-  else
-    echo "bash for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping bash build (component disabled)"
-fi
 
-if should_build_component "libcap"; then
-  need_libcap=false
+  echo "bash for arm and arm64 already current, skipping"
+  COMPONENT_BUILD_NOTE="already current"
+  return 2
+}
+
+build_libcap_component() {
+  set -e
+  local arch
+  local need_libcap=false
+  local override_used=false
+  local libcap_src_dir=""
+  local cross=""
+  local install_prefix=""
+
   for arch in arm arm64; do
     if component_override_used "libcap" "$arch"; then
+      override_used=true
       continue
     fi
     if ! component_is_current "libcap" "$arch" "lib/pkgconfig/libcap.pc" "$LIBCAP_VERSION"; then
@@ -363,7 +454,6 @@ if should_build_component "libcap"; then
     libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
     curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
     for arch in arm arm64; do
-      cross=""
       case "$arch" in
         arm)
           cross="$CROSS_COMPILE_ARM"
@@ -373,7 +463,9 @@ if should_build_component "libcap"; then
           ;;
         *)
           echo "Unsupported architecture '$arch' for libcap build" >&2
-          exit 1
+          rm -rf "$libcap_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
           ;;
       esac
       if component_override_used "libcap" "$arch"; then
@@ -388,22 +480,32 @@ if should_build_component "libcap"; then
       "$SCRIPT_DIR/build_libcap.sh" "$arch" "$cross" "$LIBCAP_VERSION" "$libcap_src_dir" "$install_prefix"
     done
     rm -rf "$libcap_src_dir"
-  else
-    if component_override_used "libcap" arm || component_override_used "libcap" arm64; then
-      echo "libcap builds provided by environment overrides"
-    else
-      echo "libcap for arm and arm64 already current, skipping"
-    fi
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping libcap build (component disabled)"
-fi
 
-# Build libcrypt (libxcrypt) for ARM and ARM64
-if should_build_component "libcrypt"; then
-  need_libcrypt=false
+  if [ "$override_used" = true ]; then
+    echo "libcap builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "libcap for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
+
+build_libcrypt_component() {
+  set -e
+  local arch
+  local need_libcrypt=false
+  local override_used=false
+  local libxcrypt_src_dir=""
+  local cross=""
+  local install_prefix=""
+
   for arch in arm arm64; do
     if component_override_used "libcrypt" "$arch"; then
+      override_used=true
       continue
     fi
     if ! component_is_current "libcrypt" "$arch" "lib/pkgconfig/libcrypt.pc" "$LIBXCRYPT_VERSION"; then
@@ -424,7 +526,6 @@ if should_build_component "libcrypt"; then
         echo "libcrypt for $arch already current, skipping"
         continue
       fi
-      cross=""
       case "$arch" in
         arm)
           cross="$CROSS_COMPILE_ARM"
@@ -434,29 +535,41 @@ if should_build_component "libcrypt"; then
           ;;
         *)
           echo "Unsupported architecture '$arch' for libcrypt build" >&2
-          exit 1
+          rm -rf "$libxcrypt_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
           ;;
       esac
       install_prefix="$(component_prefix_path "libcrypt" "$arch")"
       "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
     done
     rm -rf "$libxcrypt_src_dir"
-  else
-    if component_override_used "libcrypt" arm || component_override_used "libcrypt" arm64; then
-      echo "libcrypt builds provided by environment overrides"
-    else
-      echo "libcrypt for arm and arm64 already current, skipping"
-    fi
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping libcrypt build (component disabled)"
-fi
 
-# Build libblkid (util-linux) for ARM and ARM64
-if should_build_component "libblkid"; then
-  need_libblkid=false
+  if [ "$override_used" = true ]; then
+    echo "libcrypt builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "libcrypt for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
+
+build_libblkid_component() {
+  set -e
+  local arch
+  local need_libblkid=false
+  local override_used=false
+  local util_linux_src_dir=""
+  local cross=""
+  local install_prefix=""
+
   for arch in arm arm64; do
     if component_override_used "libblkid" "$arch"; then
+      override_used=true
       continue
     fi
     if ! component_is_current "libblkid" "$arch" "lib/pkgconfig/blkid.pc" "$UTIL_LINUX_VERSION"; then
@@ -478,7 +591,6 @@ if should_build_component "libblkid"; then
         continue
       fi
 
-      cross=""
       case "$arch" in
         arm)
           cross="$CROSS_COMPILE_ARM"
@@ -488,7 +600,9 @@ if should_build_component "libblkid"; then
           ;;
         *)
           echo "Unsupported architecture '$arch' for libblkid build" >&2
-          exit 1
+          rm -rf "$util_linux_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
           ;;
       esac
 
@@ -496,22 +610,33 @@ if should_build_component "libblkid"; then
       "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
     done
     rm -rf "$util_linux_src_dir"
-  else
-    if component_override_used "libblkid" arm || component_override_used "libblkid" arm64; then
-      echo "libblkid builds provided by environment overrides"
-    else
-      echo "libblkid for arm and arm64 already current, skipping"
-    fi
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping libblkid build (component disabled)"
-fi
 
-# Build libgcrypt (and libgpg-error) for ARM and ARM64
-if should_build_component "libgcrypt"; then
-  need_libgcrypt=false
+  if [ "$override_used" = true ]; then
+    echo "libblkid builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "libblkid for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
+
+build_libgcrypt_component() {
+  set -e
+  local arch
+  local need_libgcrypt=false
+  local override_used=false
+  local libgpg_error_src_dir=""
+  local libgcrypt_src_dir=""
+  local cross=""
+  local install_prefix=""
+
   for arch in arm arm64; do
     if component_override_used "libgcrypt" "$arch"; then
+      override_used=true
       continue
     fi
     if ! component_is_current "libgcrypt" "$arch" "lib/pkgconfig/libgcrypt.pc" "$LIBGCRYPT_VERSION_MARKER"; then
@@ -526,7 +651,6 @@ if should_build_component "libgcrypt"; then
     libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
     curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
     for arch in arm arm64; do
-      cross=""
       case "$arch" in
         arm)
           cross="$CROSS_COMPILE_ARM"
@@ -536,7 +660,9 @@ if should_build_component "libgcrypt"; then
           ;;
         *)
           echo "Unsupported architecture '$arch' for libgcrypt build" >&2
-          exit 1
+          rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
           ;;
       esac
       if component_override_used "libgcrypt" "$arch"; then
@@ -552,22 +678,32 @@ if should_build_component "libgcrypt"; then
         "$libgpg_error_src_dir" "$libgcrypt_src_dir" "$install_prefix" "$LIBGPG_ERROR_VERSION"
     done
     rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
-  else
-    if component_override_used "libgcrypt" arm || component_override_used "libgcrypt" arm64; then
-      echo "libgcrypt builds provided by environment overrides"
-    else
-      echo "libgcrypt for arm and arm64 already current, skipping"
-    fi
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping libgcrypt build (component disabled)"
-fi
 
-# Build libzstd for ARM and ARM64
-if should_build_component "libzstd"; then
-  need_libzstd=false
+  if [ "$override_used" = true ]; then
+    echo "libgcrypt builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "libgcrypt for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
+
+build_libzstd_component() {
+  set -e
+  local arch
+  local need_libzstd=false
+  local override_used=false
+  local zstd_src_dir=""
+  local cross=""
+  local install_prefix=""
+
   for arch in arm arm64; do
     if component_override_used "libzstd" "$arch"; then
+      override_used=true
       continue
     fi
     if ! component_is_current "libzstd" "$arch" "lib/pkgconfig/libzstd.pc" "$LIBZSTD_VERSION"; then
@@ -590,7 +726,6 @@ if should_build_component "libzstd"; then
         continue
       fi
 
-      cross=""
       case "$arch" in
         arm)
           cross="$CROSS_COMPILE_ARM"
@@ -600,7 +735,9 @@ if should_build_component "libzstd"; then
           ;;
         *)
           echo "Unsupported architecture '$arch' for libzstd build" >&2
-          exit 1
+          rm -rf "$zstd_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
           ;;
       esac
 
@@ -608,24 +745,33 @@ if should_build_component "libzstd"; then
       "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
     done
     rm -rf "$zstd_src_dir"
-  else
-    if component_override_used "libzstd" arm || component_override_used "libzstd" arm64; then
-      echo "libzstd builds provided by environment overrides"
-    else
-      echo "libzstd for arm and arm64 already current, skipping"
-    fi
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
-else
-  echo "Skipping libzstd build (component disabled)"
-fi
+
+  if [ "$override_used" = true ]; then
+    echo "libzstd builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "libzstd for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
 
 # Build systemd for ARM and ARM64
 
 SYSTEMD_VERSION=255.4
 SYSTEMD_URL="https://github.com/systemd/systemd-stable/archive/refs/tags/v${SYSTEMD_VERSION}.tar.gz"
 
-if should_build_component "systemd"; then
-  need_systemd=false
+build_systemd_component() {
+  set -e
+  local arch
+  local need_systemd=false
+  local systemd_src_dir=""
+  local systemd_patch_dir=""
+  local patch_file
+
   for arch in arm arm64; do
     if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
       need_systemd=true
@@ -649,263 +795,277 @@ if should_build_component "systemd"; then
     "$SCRIPT_DIR/build_systemd.sh" arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION" "$systemd_src_dir"
     "$SCRIPT_DIR/build_systemd.sh" arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION" "$systemd_src_dir"
     rm -rf "$systemd_src_dir"
-  else
-    echo "systemd for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="built"
+    return 0
   fi
+
+  echo "systemd for arm and arm64 already current, skipping"
+  COMPONENT_BUILD_NOTE="already current"
+  return 2
+}
+
+run_component_build "bash" build_bash_component
+run_component_build "libcap" build_libcap_component
+run_component_build "libcrypt" build_libcrypt_component
+run_component_build "libblkid" build_libblkid_component
+run_component_build "libgcrypt" build_libgcrypt_component
+run_component_build "libzstd" build_libzstd_component
+run_component_build "systemd" build_systemd_component
+
+if (( BUILD_FAILURE_COUNT > 0 )); then
+  echo "One or more external component builds failed; skipping remaining build steps."
 else
-  echo "Skipping systemd build (component disabled)"
-fi
+  echo "######### EXTERNAL BUILD DONE ###############"
 
-echo "######### EXTERNAL BUILD DONE ###############"
+  # Build the tree including libc, Leo, and Rust crates
+  gmake
 
-# Build the tree including libc, Leo, and Rust crates
-gmake
-
-# Create a minimal LSB root filesystem image
-lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
-rm -f "$lsb_img"
-mkdir -p "$(dirname "$lsb_img")"
-dd if=/dev/zero of="$lsb_img" bs=1M count=8
-mke2fs -F "$lsb_img" >/dev/null
-for d in /bin /etc /usr /usr/bin; do
-  debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
-done
-tmpfile=$(mktemp)
-cat <<'EOF' > "$tmpfile"
+  # Create a minimal LSB root filesystem image
+  lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
+  rm -f "$lsb_img"
+  mkdir -p "$(dirname "$lsb_img")"
+  dd if=/dev/zero of="$lsb_img" bs=1M count=8
+  mke2fs -F "$lsb_img" >/dev/null
+  for d in /bin /etc /usr /usr/bin; do
+    debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
+  done
+  tmpfile=$(mktemp)
+  cat <<'EOF' > "$tmpfile"
 DISTRIB_ID=L4Re
 DISTRIB_RELEASE=1.0
 DISTRIB_DESCRIPTION="L4Re root image"
 EOF
-debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
-rm "$tmpfile"
-debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
-debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
-debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
-debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+  debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
+  rm "$tmpfile"
+  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+  debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+  debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
-# Install systemd into the root filesystem image and staging area
-if should_build_component "systemd"; then
-  sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
-  if [ -d "$sys_root" ]; then
-    mkdir -p config/lsb_root/usr/lib/systemd
-    mkdir -p config/lsb_root/lib/systemd
-    if [ -d "$sys_root/usr/lib/systemd" ]; then
-      cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
-    fi
-    if [ -f "$sys_root/lib/systemd/systemd" ]; then
-      cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
-      cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
-      debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
-      debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
-      debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
-      debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+  # Install systemd into the root filesystem image and staging area
+  if should_build_component "systemd"; then
+    sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
+    if [ -d "$sys_root" ]; then
+      mkdir -p config/lsb_root/usr/lib/systemd
+      mkdir -p config/lsb_root/lib/systemd
       if [ -d "$sys_root/usr/lib/systemd" ]; then
-        find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
-          rel="${d#$sys_root}"
-          debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
-        done
-        find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
-          rel="${f#$sys_root}"
-          debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
-          debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
-        done
+        cp "$sys_root/usr/lib/systemd/" config/lsb_root/usr/lib/systemd/ 2>/dev/null || true
       fi
-    fi
-    if [ -f "$sys_root/usr/bin/systemctl" ]; then
-      mkdir -p config/lsb_root/usr/bin
-      cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
-      chmod 0755 config/lsb_root/usr/bin/systemctl
-      debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
-    fi
-    if [ -L "$sys_root/bin/systemctl" ]; then
-      mkdir -p config/lsb_root/bin
-      symlink_target="$(readlink "$sys_root/bin/systemctl")"
-      ln -snf "$symlink_target" config/lsb_root/bin/systemctl
-      debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
-    fi
-  fi
-fi
-
-# Stage runtime libraries from staged components in the root filesystem image
-stage_component_runtime_libraries() {
-  local component="$1"
-  local arch="$2"
-  shift 2
-  local -a patterns=("$@")
-  if [ ${#patterns[@]} -eq 0 ]; then
-    patterns=("$component.so*")
-  fi
-
-  local runtime_prefix
-  runtime_prefix="$(component_prefix_path "$component" "$arch")"
-  local -a stage_dirs=()
-  local candidate
-  for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
-    if [ -d "$candidate" ]; then
-      stage_dirs+=("$candidate")
-    fi
-  done
-
-  if [ ${#stage_dirs[@]} -eq 0 ]; then
-    return
-  fi
-
-  declare -A staged_files=()
-  declare -A staged_links=()
-  local pattern stage_dir
-  for stage_dir in "${stage_dirs[@]}"; do
-    for pattern in "${patterns[@]}"; do
-      while IFS= read -r -d '' sofile; do
-        staged_files["$sofile"]=1
-      done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
-      while IFS= read -r -d '' solink; do
-        staged_links["$solink"]=1
-      done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
-    done
-  done
-
-  if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
-    return
-  fi
-
-  echo "Staging $component shared libraries for $arch"
-  mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
-  debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
-  debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
-
-  local -a sorted_files=()
-  mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
-  local sofile base
-  for sofile in "${sorted_files[@]}"; do
-    [ -n "$sofile" ] || continue
-    base="$(basename "$sofile")"
-    cp "$sofile" "config/lsb_root/lib/$base"
-    chmod 0644 "config/lsb_root/lib/$base"
-    debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-    debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
-    debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
-    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-    debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done
-
-  local -a sorted_links=()
-  mapfile -t sorted_links < <(printf '%s\n' "${!staged_links[@]}" | sort)
-  local solink target
-  for solink in "${sorted_links[@]}"; do
-    [ -n "$solink" ] || continue
-    base="$(basename "$solink")"
-    target="$(readlink "$solink")"
-    ln -sf "$target" "config/lsb_root/lib/$base"
-    debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-    debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
-    ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-    debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-    debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
-  done
-}
-
-for component in "${SYSTEMD_COMPONENTS[@]}"; do
-  if ! should_build_component "$component"; then
-    continue
-  fi
-  case "$component" in
-    libcap)
-      stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
-      ;;
-    libgcrypt)
-      stage_component_runtime_libraries "$component" "arm64" "libgcrypt.so*" "libgpg-error.so*"
-      ;;
-    *)
-      stage_component_runtime_libraries "$component" "arm64" "$component.so*"
-      ;;
-  esac
-done
-
-# Install systemd unit files into the image
-if should_build_component "systemd"; then
-  units_dir="config/systemd"
-  if [ -d "$units_dir" ]; then
-    mkdir -p config/lsb_root/lib/systemd/system
-    debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-    for unit in "$units_dir"/*.service; do
-      [ -f "$unit" ] || continue
-      base="$(basename "$unit")"
-      cp "$unit" config/lsb_root/lib/systemd/system/
-      debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
-    done
-  fi
-fi
-
-# Enable services
-enable_service() {
-  local name="$1"
-  local unit="config/systemd/${name}.service"
-  if [ -f "$unit" ]; then
-    mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
-    ln -sf ../../../../lib/systemd/system/${name}.service \
-      config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
-    debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
-    debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
-    debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
-    debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
-  fi
-}
-
-if should_build_component "systemd"; then
-  enable_service bash
-fi
-
-# Collect key build artifacts
-stage_bootable_images() {
-  local source_root="obj/l4"
-  local distribution_dir="distribution"
-  local distribution_images_dir="$distribution_dir/images"
-
-  mkdir -p "$distribution_images_dir"
-
-  if [ ! -d "$source_root" ]; then
-    return
-  fi
-
-  local -a images=()
-  while IFS= read -r -d '' image; do
-    images+=("$image")
-  done < <(find "$source_root" -type f \
-    \( -name '*.elf' -o -name '*.uimage' \) \
-    -path '*/images/*' -print0 2>/dev/null)
-
-  if (( ${#images[@]} == 0 )); then
-    return
-  fi
-
-  local image mtime
-  local -a sorted_entries=()
-  mapfile -t sorted_entries < <(
-    for image in "${images[@]}"; do
-      if ! mtime=$(stat -c %Y "$image" 2>/dev/null); then
-        if ! mtime=$(stat -f %m "$image" 2>/dev/null); then
-          mtime=0
+      if [ -f "$sys_root/lib/systemd/systemd" ]; then
+        cp "$sys_root/lib/systemd/systemd" config/lsb_root/lib/systemd/systemd
+        cp "$sys_root/lib/systemd/systemd" config/lsb_root/usr/lib/systemd/systemd
+        debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "write $sys_root/lib/systemd/systemd /lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "write $sys_lib/systemd/systemd /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+        if [ -d "$sys_root/usr/lib/systemd" ]; then
+          find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
+            rel="${d#$sys_root}"
+            debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
+          done
+          find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
+            rel="${f#$sys_root}"
+            debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+            debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
+          done
         fi
       fi
-      printf '%011d\t%s\n' "$mtime" "$image"
-    done | sort -n -k1,1 -k2
-  )
+      if [ -f "$sys_root/usr/bin/systemctl" ]; then
+        mkdir -p config/lsb_root/usr/bin
+        cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
+        chmod 0755 config/lsb_root/usr/bin/systemctl
+        debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
+      fi
+      if [ -L "$sys_root/bin/systemctl" ]; then
+        mkdir -p config/lsb_root/bin
+        symlink_target="$(readlink "$sys_root/bin/systemctl")"
+        ln -snf "$symlink_target" config/lsb_root/bin/systemctl
+        debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
+      fi
+    fi
+  fi
 
-  local entry file base dest_path
-  for entry in "${sorted_entries[@]}"; do
-    file="${entry#*$'\t'}"
-    [ -n "$file" ] || continue
-    base="$(basename "$file")"
-    dest_path="$distribution_images_dir/$base"
+  # Stage runtime libraries from staged components in the root filesystem image
+  stage_component_runtime_libraries() {
+    local component="$1"
+    local arch="$2"
+    shift 2
+    local -a patterns=("$@")
+    if [ ${#patterns[@]} -eq 0 ]; then
+      patterns=("$component.so*")
+    fi
 
-    echo "Staging image $base from $file into $distribution_images_dir"
-    cp -f "$file" "$dest_path"
+    local runtime_prefix
+    runtime_prefix="$(component_prefix_path "$component" "$arch")"
+    local -a stage_dirs=()
+    local candidate
+    for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
+      if [ -d "$candidate" ]; then
+        stage_dirs+=("$candidate")
+      fi
+    done
+
+    if [ ${#stage_dirs[@]} -eq 0 ]; then
+      return
+    fi
+
+    declare -A staged_files=()
+    declare -A staged_links=()
+    local pattern stage_dir
+    for stage_dir in "${stage_dirs[@]}"; do
+      for pattern in "${patterns[@]}"; do
+        while IFS= read -r -d '' sofile; do
+          staged_files["$sofile"]=1
+        done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
+        while IFS= read -r -d '' solink; do
+          staged_links["$solink"]=1
+        done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
+      done
+    done
+
+    if [ ${#staged_files[@]} -eq 0 ] && [ ${#staged_links[@]} -eq 0 ]; then
+      return
+    fi
+
+    echo "Staging $component shared libraries for $arch"
+    mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
+    debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
+    debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
+
+    local -a sorted_files=()
+    mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
+    local sofile base
+    for sofile in "${sorted_files[@]}"; do
+      [ -n "$sofile" ] || continue
+      base="$(basename "$sofile")"
+      cp "$sofile" "config/lsb_root/lib/$base"
+      chmod 0644 "config/lsb_root/lib/$base"
+      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+    done
+
+    local -a sorted_links=()
+    mapfile -t sorted_links < <(printf '%s\n' "${!staged_links[@]}" | sort)
+    local solink target
+    for solink in "${sorted_links[@]}"; do
+      [ -n "$solink" ] || continue
+      base="$(basename "$solink")"
+      target="$(readlink "$solink")"
+      ln -sf "$target" "config/lsb_root/lib/$base"
+      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
+      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+    done
+  }
+
+  for component in "${SYSTEMD_COMPONENTS[@]}"; do
+    if ! should_build_component "$component"; then
+      continue
+    fi
+    case "$component" in
+      libcap)
+        stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
+        ;;
+      libgcrypt)
+        stage_component_runtime_libraries "$component" "arm64" "libgcrypt.so*" "libgpg-error.so*"
+        ;;
+      *)
+        stage_component_runtime_libraries "$component" "arm64" "$component.so*"
+        ;;
+    esac
   done
-}
 
-stage_bootable_images
+  # Install systemd unit files into the image
+  if should_build_component "systemd"; then
+    units_dir="config/systemd"
+    if [ -d "$units_dir" ]; then
+      mkdir -p config/lsb_root/lib/systemd/system
+      debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+      for unit in "$units_dir"/*.service; do
+        [ -f "$unit" ] || continue
+        base="$(basename "$unit")"
+        cp "$unit" config/lsb_root/lib/systemd/system/
+        debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+      done
+    fi
+  fi
+
+  # Enable services
+  enable_service() {
+    local name="$1"
+    local unit="config/systemd/${name}.service"
+    if [ -f "$unit" ]; then
+      mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
+      ln -sf ../../../../lib/systemd/system/${name}.service \
+        config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
+      debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
+      debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
+      debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
+      debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
+    fi
+  }
+
+  if should_build_component "systemd"; then
+    enable_service bash
+  fi
+
+  # Collect key build artifacts
+  stage_bootable_images() {
+    local source_root="obj/l4"
+    local distribution_dir="distribution"
+    local distribution_images_dir="$distribution_dir/images"
+
+    mkdir -p "$distribution_images_dir"
+
+    if [ ! -d "$source_root" ]; then
+      return
+    fi
+
+    local -a images=()
+    while IFS= read -r -d '' image; do
+      images+=("$image")
+    done < <(find "$source_root" -type f \
+      \( -name '*.elf' -o -name '*.uimage' \) \
+      -path '*/images/*' -print0 2>/dev/null)
+
+    if (( ${#images[@]} == 0 )); then
+      return
+    fi
+
+    local image mtime
+    local -a sorted_entries=()
+    mapfile -t sorted_entries < <(
+      for image in "${images[@]}"; do
+        if ! mtime=$(stat -c %Y "$image" 2>/dev/null); then
+          if ! mtime=$(stat -f %m "$image" 2>/dev/null); then
+            mtime=0
+          fi
+        fi
+        printf '%011d\t%s\n' "$mtime" "$image"
+      done | sort -n -k1,1 -k2
+    )
+
+    local entry file base dest_path
+    for entry in "${sorted_entries[@]}"; do
+      file="${entry#*$'\t'}"
+      [ -n "$file" ] || continue
+      base="$(basename "$file")"
+      dest_path="$distribution_images_dir/$base"
+
+      echo "Staging image $base from $file into $distribution_images_dir"
+      cp -f "$file" "$dest_path"
+    done
+  }
+
+  stage_bootable_images
+fi
