@@ -7,6 +7,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=common_build.sh
 source "$SCRIPT_DIR/common_build.sh"
 
+GLIBC_BUILD_TMPDIR=""
+
+cleanup_tmpdir() {
+  if [[ -n "${GLIBC_BUILD_TMPDIR:-}" && -d "$GLIBC_BUILD_TMPDIR" ]]; then
+    rm -rf "$GLIBC_BUILD_TMPDIR"
+  fi
+}
+
+trap cleanup_tmpdir EXIT
+
 usage() {
   echo "Usage: $0 <arch> <cross-prefix> <expected-version> <install-prefix> <osv-url> <osv-commit> <musl-submodule> <musl-commit>" >&2
   exit 1
@@ -19,7 +29,7 @@ clone_osv_tree() {
   git -C "$dest_dir" remote add origin "$url" >/dev/null
   git -C "$dest_dir" fetch --depth 1 origin "$commit" >/dev/null
   git -C "$dest_dir" checkout FETCH_HEAD >/dev/null
-  git -C "$dest_dir" submodule update --init --depth 1 "$submodule" >/dev/null
+  git -C "$dest_dir" submodule update --init --recursive --depth 1 >/dev/null
 
   if [ ! -d "$dest_dir/$submodule" ]; then
     echo "Expected submodule $submodule not present after checkout" >&2
@@ -95,6 +105,39 @@ PC
   ln -sfn osv-glibc.pc "$pc_dir/glibc.pc"
 }
 
+ensure_osv_dependencies() {
+  local osv_dir="$1" arch="$2"
+
+  case "$arch" in
+    arm64)
+      local packages_root="$osv_dir/build/downloaded_packages/aarch64"
+      local boost_install="$packages_root/boost/install"
+      local gcc_install="$packages_root/gcc/install"
+      if [ -d "$boost_install" ] && [ -d "$gcc_install" ]; then
+        return 0
+      fi
+
+      local download_script="$osv_dir/scripts/download_aarch64_packages.py"
+      if [ ! -f "$download_script" ]; then
+        echo "Required download script not found: $download_script" >&2
+        return 1
+      fi
+
+      if ! python3 -c 'import distro' >/dev/null 2>&1; then
+        echo "Python module 'distro' is required to download OSv aarch64 packages. Install python3-distro." >&2
+        return 1
+      fi
+
+      echo "Fetching OSv aarch64 dependency packages..."
+      if ! python3 "$download_script"; then
+        echo "Failed to download OSv aarch64 dependency packages." >&2
+        echo "Ensure python3-distro, wget, and the aarch64 cross compiler toolchain are installed." >&2
+        return 1
+      fi
+      ;;
+  esac
+}
+
 main() {
   if [ "$#" -ne 8 ]; then
     usage
@@ -108,11 +151,9 @@ main() {
   fi
   install_prefix="$(resolve_path "$install_prefix")"
 
-  local tmpdir
-  tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
+  GLIBC_BUILD_TMPDIR=$(mktemp -d)
 
-  local osv_dir="$tmpdir/osv"
+  local osv_dir="$GLIBC_BUILD_TMPDIR/osv"
   mkdir -p "$osv_dir"
   clone_osv_tree "$osv_dir" "$osv_url" "$osv_commit" "$musl_submodule" "$musl_commit"
 
@@ -139,6 +180,8 @@ main() {
     echo "OSv sources missing required directories" >&2
     exit 1
   fi
+
+  ensure_osv_dependencies "$osv_dir" "$arch"
 
   local make_mode="release"
   (
