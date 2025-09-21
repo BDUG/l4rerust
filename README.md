@@ -37,7 +37,11 @@ CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Override any aarch64-elf- d
 ```
 
 Pass `--clean` (or select “Clean out directory before build” in the interactive
-menu) to remove previous build directories. 
+menu) to remove previous build directories.
 existing directories for incremental builds; `--no-clean` enforces this reuse in
 automation. Build artifacts are placed under `out/`.
+
+The interactive `dialog` menu also lets you review and edit the cross-compiler
+prefixes before building. Leave a field blank to fall back to the detected
+defaults or mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
 

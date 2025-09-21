@@ -468,6 +468,121 @@ prompt_clean_before_build() {
   return 0
 }
 
+prompt_cross_compile_prefixes() {
+  if [ ! -t 0 ]; then
+    return 1
+  fi
+
+  if ! command -v dialog >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local host_os
+  host_os=$(uname -s 2>/dev/null || echo "")
+
+  local default_general="${CROSS_COMPILE:-}"
+  local default_arm="${CROSS_COMPILE_ARM:-}"
+  local default_arm64="${CROSS_COMPILE_ARM64:-}"
+
+  if [ -z "$default_arm" ] || [ -z "$default_arm64" ] || [ -z "$default_general" ]; then
+    case "$host_os" in
+      Darwin)
+        if declare -f setup_macos_paths >/dev/null 2>&1; then
+          setup_macos_paths
+        fi
+        if [ -z "$default_arm" ] && declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
+          local prefix
+          if prefix=$(find_gpp_cross_prefix arm-linux-gnueabihf-g++ 2>/dev/null); then
+            default_arm="$prefix"
+          fi
+        fi
+        if [ -z "$default_arm64" ] && declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
+          local prefix
+          if prefix=$(find_gpp_cross_prefix \
+              aarch64-elf-g++ \
+              aarch64-none-elf-g++ \
+              aarch64-linux-gnu-g++ \
+              aarch64-unknown-linux-gnu-g++ 2>/dev/null); then
+            default_arm64="$prefix"
+          fi
+        fi
+        ;;
+      *)
+        :
+        ;;
+    esac
+  fi
+
+  if [ -z "$default_arm" ]; then
+    default_arm="arm-linux-gnueabihf-"
+  fi
+  if [ -z "$default_arm64" ]; then
+    case "$host_os" in
+      Darwin)
+        default_arm64="aarch64-elf-"
+        ;;
+      *)
+        default_arm64="aarch64-linux-gnu-"
+        ;;
+    esac
+  fi
+  if [ -z "$default_general" ]; then
+    if [ -n "$default_arm64" ]; then
+      default_general="$default_arm64"
+    else
+      default_general="$default_arm"
+    fi
+  fi
+
+  local tmpfile
+  tmpfile=$(mktemp)
+  local dialog_status=0
+  if ! dialog --clear \
+      --backtitle "L4Re external components" \
+      --form "Edit cross-compiler prefixes used for external component builds." \
+      16 80 0 \
+      "General (CROSS_COMPILE)" 1 2 "$default_general" 1 34 60 0 \
+      "ARM (CROSS_COMPILE_ARM)" 3 2 "$default_arm" 3 34 60 0 \
+      "ARM64 (CROSS_COMPILE_ARM64)" 5 2 "$default_arm64" 5 34 60 0 \
+      2>"$tmpfile"; then
+    dialog_status=$?
+  fi
+
+  if [ $dialog_status -ne 0 ]; then
+    rm -f "$tmpfile"
+    return 1
+  fi
+
+  local -a _cross_values=()
+  mapfile -t _cross_values <"$tmpfile"
+  rm -f "$tmpfile"
+
+  local new_general="${_cross_values[0]:-}"
+  local new_arm="${_cross_values[1]:-}"
+  local new_arm64="${_cross_values[2]:-}"
+
+  new_general="${new_general//$'\r'/}"
+  new_arm="${new_arm//$'\r'/}"
+  new_arm64="${new_arm64//$'\r'/}"
+
+  CROSS_COMPILE="$new_general"
+  CROSS_COMPILE_ARM="$new_arm"
+  CROSS_COMPILE_ARM64="$new_arm64"
+
+  if [ -z "$CROSS_COMPILE" ] && [ -n "$CROSS_COMPILE_ARM64" ]; then
+    CROSS_COMPILE="$CROSS_COMPILE_ARM64"
+  fi
+
+  export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
+
+  echo "Cross-compiler prefixes configured via dialog:"
+  echo "  CROSS_COMPILE=${CROSS_COMPILE:-"(empty)"}"
+  echo "  CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-"(empty)"}"
+  echo "  CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-"(empty)"}"
+
+  return 0
+}
+
 clean=false
 component_arg=""
 component_arg_set=false
@@ -596,6 +711,15 @@ elif [ "$menu_clean_requested" = true ]; then
   clean=true
 else
   clean=false
+fi
+
+if [ "${used_dialog_menu:-false}" = true ] && command -v dialog >/dev/null 2>&1; then
+  if prompt_cross_compile_prefixes; then
+    :
+  else
+    echo "Cross-compiler prefix selection cancelled; exiting." >&2
+    exit 1
+  fi
 fi
 
 if [ "$clean" = true ]; then
