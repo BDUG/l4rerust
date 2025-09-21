@@ -11,6 +11,7 @@ LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$LIB_DIR/../common_build.sh"
 
 readonly -a SYSTEMD_COMPONENTS=(
+  glibc
   libcap
   libcrypt
   libblkid
