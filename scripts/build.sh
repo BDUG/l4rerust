@@ -8,6 +8,28 @@ declare -a FAILED_COMPONENTS=()
 BUILD_FAILURE_COUNT=0
 COMPONENT_BUILD_NOTE=""
 
+DEBUG_MODE=false
+CURRENT_COMPONENT=""
+
+log_debug() {
+  if [ "$DEBUG_MODE" != true ]; then
+    return
+  fi
+
+  local component="${1:-global}"
+  if [ "$#" -gt 0 ]; then
+    shift
+  fi
+  local command="$*"
+  local timestamp
+  timestamp=$(date +"%Y-%m-%dT%H:%M:%S%z")
+  if [ -n "$command" ]; then
+    printf '[%s] [%s] %s\n' "$timestamp" "$component" "$command" >&2
+  else
+    printf '[%s] [%s]\n' "$timestamp" "$component" >&2
+  fi
+}
+
 print_component_summary() {
   local component
   local result
@@ -157,11 +179,64 @@ prepare_rust_glibc_environment() {
   export LIBRARY_PATH LD_LIBRARY_PATH
 }
 
+print_debug_environment() {
+  if [ "$DEBUG_MODE" != true ]; then
+    return
+  }
+
+  local rust_triple="(unavailable)"
+  if rust_triple=$(determine_rust_target_triple 2>/dev/null); then
+    :
+  else
+    rust_triple="(unavailable)"
+  fi
+
+  local rust_arch="(unavailable)"
+  if rust_arch=$(determine_rust_target_arch 2>/dev/null); then
+    :
+  else
+    rust_arch="(unavailable)"
+  fi
+
+  log_debug "env" "Rust target triple: $rust_triple"
+  log_debug "env" "Rust target arch: $rust_arch"
+  log_debug "env" "CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-}"
+  log_debug "env" "CARGO_TARGET=${CARGO_TARGET:-}"
+  log_debug "env" "RUST_TARGET=${RUST_TARGET:-}"
+  log_debug "env" "TARGET=${TARGET:-}"
+  log_debug "env" "CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-}"
+  log_debug "env" "CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-}"
+  log_debug "env" "HAM_BIN=${HAM_BIN:-}"
+  log_debug "env" "ARTIFACTS_DIR=${ARTIFACTS_DIR:-}"
+
+  if declare -f component_prefix_path >/dev/null 2>&1; then
+    local glibc_arm_prefix="(unavailable)"
+    local glibc_arm64_prefix="(unavailable)"
+    if glibc_arm_prefix=$(component_prefix_path "glibc" "arm" 2>/dev/null); then
+      :
+    else
+      glibc_arm_prefix="(unavailable)"
+    fi
+    if glibc_arm64_prefix=$(component_prefix_path "glibc" "arm64" 2>/dev/null); then
+      :
+    else
+      glibc_arm64_prefix="(unavailable)"
+    fi
+    log_debug "env" "glibc arm prefix: $glibc_arm_prefix"
+    log_debug "env" "glibc arm64 prefix: $glibc_arm64_prefix"
+  fi
+
+  if [ -n "${L4RE_LIBC_GLIBC_PREFIX:-}" ]; then
+    log_debug "env" "L4RE_LIBC_GLIBC_PREFIX=${L4RE_LIBC_GLIBC_PREFIX}"
+  fi
+}
+
 # Usage: build.sh [options]
 #   --clean                    Remove previous build directories before building
 #   --no-clean                 Skip removal of build directories (default)
 #   --components=name1,name2   Limit builds to the specified components
 #   --no-menu                  Skip the interactive component selection menu
+#   --debug                    Enable verbose debug logging for component builds
 #   --help                     Show usage information and exit
 
 readonly -a BUILD_COMPONENT_IDS=(
@@ -194,8 +269,14 @@ run_component_build() {
   local previous_errexit
   local status
   local note=""
+  local xtrace_was_on=false
+  local previous_ps4="${PS4-+ }"
+  local previous_current_component="$CURRENT_COMPONENT"
 
   if ! should_build_component "$component"; then
+    if [ "$DEBUG_MODE" = true ]; then
+      log_debug "$component" "Skipping build (component disabled)"
+    fi
     echo "Skipping ${component} build (component disabled)"
     BUILD_RESULTS["$component"]="skipped"
     BUILD_NOTES["$component"]="not selected"
@@ -205,8 +286,27 @@ run_component_build() {
   previous_errexit=$(set +o | grep errexit)
   set +e
   COMPONENT_BUILD_NOTE=""
+
+  if [ "$DEBUG_MODE" = true ]; then
+    log_debug "$component" "Executing build function '$func'"
+    CURRENT_COMPONENT="$component"
+    PS4='+ [$(date "+%Y-%m-%dT%H:%M:%S%z")] [$CURRENT_COMPONENT] '
+    if [[ $- == *x* ]]; then
+      xtrace_was_on=true
+    else
+      xtrace_was_on=false
+      set -x
+    fi
+  fi
   "$func"
   status=$?
+  if [ "$DEBUG_MODE" = true ]; then
+    if [ "$xtrace_was_on" = false ]; then
+      set +x
+    fi
+    PS4="$previous_ps4"
+    CURRENT_COMPONENT="$previous_current_component"
+  fi
   eval "$previous_errexit"
 
   note="${COMPONENT_BUILD_NOTE:-}"
@@ -238,6 +338,7 @@ Usage: $0 [options]
   --no-clean                 Skip removal of build directories (default)
   --components=name1,name2   Limit builds to the specified components
   --no-menu                  Skip the interactive component selection menu
+  --debug                    Enable verbose debug logging for component builds
   --help                     Show this message and exit
 EOF
   local components_list
@@ -385,6 +486,10 @@ while [[ $# -gt 0 ]]; do
       clean_cli_override="no-clean"
       shift
       ;;
+    --debug)
+      DEBUG_MODE=true
+      shift
+      ;;
     --components=*)
       component_arg="${1#--components=}"
       component_arg_set=true
@@ -416,6 +521,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$DEBUG_MODE" = true ]; then
+  log_debug "global" "Debug mode enabled"
+fi
 
 if [ "$component_arg_set" = true ]; then
   IFS=',' read -ra selected_components <<< "$component_arg"
@@ -525,6 +634,10 @@ fi
 mkdir -p "$ARTIFACTS_DIR"
 
 initialize_component_prefixes
+
+if [ "$DEBUG_MODE" = true ]; then
+  print_debug_environment
+fi
 
 # Configure for ARM using setup script
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
