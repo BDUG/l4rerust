@@ -1,4 +1,6 @@
-all: 
+.DEFAULT_GOAL := all
+
+all:
 	@if [ -d obj ]; then                                           \
 	  $(MAKE) build_all;                                           \
 	else                                                           \
