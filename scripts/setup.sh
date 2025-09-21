@@ -44,7 +44,39 @@ if [ "$cmd" != "clean" ]; then
       l4_dir="l4"
       l4re_core_dir="l4re-core"
       if [ -d "$fiasco_dir" ] && { [ -d "$l4_dir" ] || [ -d "$l4re_core_dir" ]; }; then
-        echo "ham sync reported failure but components already installed, skipping."
+        missing_artifacts=()
+
+        if [ ! -f "$fiasco_dir/Makefile" ]; then
+          missing_artifacts+=("src/$fiasco_dir/Makefile")
+        fi
+
+        l4_root=""
+        if [ -d "$l4_dir" ]; then
+          l4_root="$l4_dir"
+        elif [ -d "$l4re_core_dir/src/l4" ]; then
+          l4_root="$l4re_core_dir/src/l4"
+        fi
+
+        if [ -n "$l4_root" ]; then
+          for artifact in Makefile conf/Makeconf mk/Makeconf; do
+            if [ ! -e "$l4_root/$artifact" ]; then
+              missing_artifacts+=("src/$l4_root/$artifact")
+            fi
+          done
+        else
+          missing_artifacts+=("src/$l4_dir")
+        fi
+
+        if [ ${#missing_artifacts[@]} -eq 0 ]; then
+          echo "ham sync reported failure but components already installed, skipping."
+        else
+          echo "ERROR: ham sync failed and required artifacts are missing:" >&2
+          for artifact in "${missing_artifacts[@]}"; do
+            echo "  - $artifact" >&2
+          done
+          echo "The previous ham run did not finish successfully. Please resolve the sync issue and rerun ham." >&2
+          exit "$sync_status"
+        fi
       else
         exit "$sync_status"
       fi
