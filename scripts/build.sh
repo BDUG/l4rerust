@@ -1059,6 +1059,17 @@ EOF
 
     local runtime_prefix
     runtime_prefix="$(component_prefix_path "$component" "$arch")"
+    if [ "$component" = "glibc" ] && [ -d "pkg/$component" ]; then
+      local pkg_stage_dir="config/pkg_staging/$component/$arch"
+      rm -rf "$pkg_stage_dir"
+      mkdir -p "$pkg_stage_dir"
+      gmake -C "pkg/$component" \
+        install \
+        L4ARCH="$arch" \
+        INSTDIR="$pkg_stage_dir" \
+        GLIBC_STAGE_DIR="$runtime_prefix"
+      runtime_prefix="$pkg_stage_dir"
+    fi
     local -a stage_dirs=()
     local candidate
     declare -A subdirs_present=()
