@@ -182,7 +182,7 @@ prepare_rust_glibc_environment() {
 print_debug_environment() {
   if [ "$DEBUG_MODE" != true ]; then
     return
-  }
+  fi
 
   local rust_triple="(unavailable)"
   if rust_triple=$(determine_rust_target_triple 2>/dev/null); then
