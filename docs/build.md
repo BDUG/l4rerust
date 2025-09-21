@@ -20,36 +20,6 @@ This generates the necessary configuration files and Makefiles using sensible
 defaults. The traditional interactive invocation (`scripts/setup.sh config` followed by
 `scripts/setup.sh setup` or `gmake setup`) remains available for manual configuration.
 
-## Containerized build
-
-If cross-compilers or required GNU utilities are not available on the host,
-the project can be built inside a Docker container. Ensure
-[Docker](https://www.docker.com/) is installed and run:
-
-```bash
-scripts/docker_build.sh
-```
-
-The script builds the image if needed and invokes `scripts/build.sh` inside the
-container. It performs cross-compilation only and places resulting artifacts
-under `out/`. All toolchains and GNU utilities are provided by the container,
-so nothing else needs to be installed on the host.
-
-For non-interactive Docker builds, the scripts look for an existing L4Re
-configuration in `/workspace/.config` or `scripts/l4re.config`. If either file
-is present, it is copied to `obj/.config` before running `scripts/setup.sh`,
-allowing developers to tailor the build by editing `scripts/l4re.config`.
-
-To boot the built image on your host, run:
-
-```bash
-scripts/runqemu.sh
-```
-
-The helper prefers `out/images/bootstrap_hello_arm_virt.elf` when available and
-otherwise launches the most recently updated `.elf` image in `out/images/`. Pass
-an explicit path to boot a different artifact.
-
 ## Building for ARM
 
 Use `scripts/build.sh` to build the project. By default the script reuses
