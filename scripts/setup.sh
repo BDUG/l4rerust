@@ -136,6 +136,51 @@ write_config()
   return 0
 }
 
+clean_directory_except()
+{
+  local dir="$1"
+  shift
+
+  if [ ! -d "$dir" ]; then
+    return 0
+  fi
+
+  local nullglob_was_set=0
+  local dotglob_was_set=0
+  if shopt -q nullglob; then
+    nullglob_was_set=1
+  fi
+  if shopt -q dotglob; then
+    dotglob_was_set=1
+  fi
+  shopt -s nullglob dotglob
+
+  local entry
+  local base
+  local preserve
+  local should_preserve
+  for entry in "$dir"/*; do
+    base="$(basename "$entry")"
+    should_preserve=false
+    for preserve in "$@"; do
+      if [ "$base" = "$preserve" ]; then
+        should_preserve=true
+        break
+      fi
+    done
+    if [ "$should_preserve" = false ]; then
+      rm -rf "$entry"
+    fi
+  done
+
+  if [ "$nullglob_was_set" -eq 0 ]; then
+    shopt -u nullglob
+  fi
+  if [ "$dotglob_was_set" -eq 0 ]; then
+    shopt -u dotglob
+  fi
+}
+
 clean_lsb_root_directory()
 {
   local lsb_root_dir="config/lsb_root"
@@ -146,7 +191,7 @@ clean_lsb_root_directory()
 
   # Remove any top-level entries other than the README placeholder and the
   # tracked lib directory that holds service definitions.
-  find "$lsb_root_dir" -mindepth 1 -maxdepth 1 ! -name README ! -name lib -exec rm -rf {} +
+  clean_directory_except "$lsb_root_dir" README lib
 
   local lib_dir="$lsb_root_dir/lib"
   if [ ! -d "$lib_dir" ]; then
@@ -155,7 +200,7 @@ clean_lsb_root_directory()
 
   # Drop everything under lib/ except for the systemd hierarchy we keep under
   # version control.
-  find "$lib_dir" -mindepth 1 -maxdepth 1 ! -name systemd -exec rm -rf {} +
+  clean_directory_except "$lib_dir" systemd
 
   local systemd_dir="$lib_dir/systemd"
   if [ ! -d "$systemd_dir" ]; then
@@ -164,7 +209,7 @@ clean_lsb_root_directory()
 
   # Prune entries under lib/systemd that are not part of the tracked
   # lib/systemd/system subtree.
-  find "$systemd_dir" -mindepth 1 -maxdepth 1 ! -name system -exec rm -rf {} +
+  clean_directory_except "$systemd_dir" system
 
   local systemd_units_dir="$systemd_dir/system"
   if [ ! -d "$systemd_units_dir" ]; then
@@ -173,20 +218,47 @@ clean_lsb_root_directory()
 
   local -a preserved_units=()
   if [ -d "config/systemd" ]; then
-    local unit
-    for unit in config/systemd/*.service; do
-      [ -e "$unit" ] || continue
-      preserved_units+=("$(basename "$unit")")
+    local unit_path
+    local unit_name
+    for unit_path in config/systemd/*; do
+      [ -e "$unit_path" ] || continue
+      unit_name="$(basename "$unit_path")"
+      local already_present=false
+      local existing
+      for existing in "${preserved_units[@]}"; do
+        if [ "$existing" = "$unit_name" ]; then
+          already_present=true
+          break
+        fi
+      done
+      if [ "$already_present" = false ]; then
+        preserved_units+=("$unit_name")
+      fi
     done
   fi
 
-  local -a find_args=("$systemd_units_dir" -mindepth 1 -maxdepth 1)
-  local unit_name
-  for unit_name in "${preserved_units[@]}"; do
-    find_args+=( '!' -name "$unit_name" )
-  done
+  if command -v git >/dev/null 2>&1 &&
+     git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local tracked_path
+    local tracked_name
+    while IFS= read -r tracked_path; do
+      [ -n "$tracked_path" ] || continue
+      tracked_name="$(basename "$tracked_path")"
+      local already_present=false
+      local existing
+      for existing in "${preserved_units[@]}"; do
+        if [ "$existing" = "$tracked_name" ]; then
+          already_present=true
+          break
+        fi
+      done
+      if [ "$already_present" = false ]; then
+        preserved_units+=("$tracked_name")
+      fi
+    done < <(git ls-files -- "$systemd_units_dir" 2>/dev/null || true)
+  fi
 
-  find "${find_args[@]}" -exec rm -rf {} +
+  clean_directory_except "$systemd_units_dir" "${preserved_units[@]}"
 }
 
 do_clean()
