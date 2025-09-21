@@ -901,9 +901,9 @@ EOF
   rm "$tmpfile"
 
   debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
-  debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+  debugfs -w -R "set_inode_field /bin/sh mode 0100755" "$lsb_img" >/dev/null
   debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
-  debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
+  debugfs -w -R "set_inode_field /bin/bash mode 0100755" "$lsb_img" >/dev/null
 
   if should_build_component "systemd"; then
     sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
@@ -920,9 +920,9 @@ EOF
         debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "write $systemd_bin /lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "set_inode_field /lib/systemd/systemd mode 0100755" "$lsb_img" >/dev/null
         debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+        debugfs -w -R "set_inode_field /usr/lib/systemd/systemd mode 0100755" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
           find "$sys_root/usr/lib/systemd" -type d | while read -r subdir; do
             local rel
@@ -933,7 +933,7 @@ EOF
             local rel
             rel="${file#$sys_root}"
             debugfs -w -R "write $file $rel" "$lsb_img" >/dev/null
-            debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
+            debugfs -w -R "set_inode_field $rel mode 0100644" "$lsb_img" >/dev/null
           done
         fi
       fi
@@ -942,7 +942,7 @@ EOF
         cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
         chmod 0755 config/lsb_root/usr/bin/systemctl
         debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
+        debugfs -w -R "set_inode_field /usr/bin/systemctl mode 0100755" "$lsb_img" >/dev/null
       fi
       if [ -L "$sys_root/bin/systemctl" ]; then
         mkdir -p config/lsb_root/bin
@@ -1009,7 +1009,7 @@ EOF
       chmod 0644 "config/lsb_root/lib/$base"
       debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
       debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
-      debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+      debugfs -w -R "set_inode_field /lib/$base mode 0100644" "$lsb_img" >/dev/null
       ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
       debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
       debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
@@ -1059,7 +1059,7 @@ EOF
         base="$(basename "$unit")"
         cp "$unit" config/lsb_root/lib/systemd/system/
         debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+        debugfs -w -R "set_inode_field /lib/systemd/system/$base mode 0100644" "$lsb_img" >/dev/null
       done
     fi
   fi
