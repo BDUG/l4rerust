@@ -1113,6 +1113,66 @@ else
 
   run_component_build "lsb_root" build_lsb_root_component
 
+  resolve_realpath_portable() {
+    local path="$1"
+
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+      return 1
+    fi
+
+    local resolved
+    if command -v realpath >/dev/null 2>&1; then
+      if resolved=$(realpath "$path" 2>/dev/null); then
+        printf '%s\n' "$resolved"
+        return 0
+      fi
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+      if resolved=$(python3 - "$path" <<'PY' 2>/dev/null); then
+import os
+import sys
+
+try:
+    print(os.path.realpath(sys.argv[1]))
+except OSError:
+    sys.exit(1)
+PY
+        printf '%s\n' "$resolved"
+        return 0
+      fi
+    fi
+
+    if command -v readlink >/dev/null 2>&1; then
+      local current="$path"
+      local dir
+      local link
+
+      if [[ "$current" != /* ]]; then
+        dir=$(cd "$(dirname "$current")" && pwd -P) || return 1
+        current="$dir/$(basename "$current")"
+      fi
+
+      while [ -L "$current" ]; do
+        link=$(readlink "$current") || return 1
+        if [[ "$link" == /* ]]; then
+          current="$link"
+        else
+          current="$(dirname "$current")/$link"
+        fi
+        if [[ "$current" != /* ]]; then
+          dir=$(cd "$(dirname "$current")" && pwd -P) || return 1
+          current="$dir/$(basename "$current")"
+        fi
+      done
+
+      printf '%s\n' "$current"
+      return 0
+    fi
+
+    return 1
+  }
+
   # Collect key build artifacts
   stage_bootable_images() {
     local source_root="obj/l4"
@@ -1128,9 +1188,11 @@ else
     local -a images=()
     while IFS= read -r -d '' image; do
       images+=("$image")
-    done < <(find "$source_root" -type f \
+    done < <(find "$source_root" \
+      -path '*/images/*' \
       \( -name '*.elf' -o -name '*.uimage' \) \
-      -path '*/images/*' -print0 2>/dev/null)
+      \( -type f -o -type l \) \
+      -print0 2>/dev/null)
 
     if (( ${#images[@]} == 0 )); then
       return
@@ -1149,15 +1211,29 @@ else
       done | sort -n -k1,1 -k2
     )
 
-    local entry file base dest_path
+    local entry file source_path resolved base dest_path
     for entry in "${sorted_entries[@]}"; do
       file="${entry#*$'\t'}"
       [ -n "$file" ] || continue
-      base="$(basename "$file")"
+      source_path="$file"
+      if [ -L "$file" ]; then
+        if resolved=$(resolve_realpath_portable "$file" 2>/dev/null); then
+          source_path="$resolved"
+        else
+          echo "Warning: unable to resolve symlink $file; skipping"
+          continue
+        fi
+      fi
+
+      base="$(basename "$source_path")"
       dest_path="$distribution_images_dir/$base"
 
-      echo "Staging image $base from $file into $distribution_images_dir"
-      cp -f "$file" "$dest_path"
+      if [ "$source_path" != "$file" ]; then
+        echo "Staging image $base from $source_path (via $file) into $distribution_images_dir"
+      else
+        echo "Staging image $base from $source_path into $distribution_images_dir"
+      fi
+      cp -f "$source_path" "$dest_path"
     done
   }
 
