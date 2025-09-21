@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "$0")"
 REPO_ROOT="$SCRIPT_DIR/.."
 DEFAULT_IMAGE_DIR="$REPO_ROOT/distribution"
-DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/images/bootstrap_bash_arm_virt.elf"
+DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/images/bootstrap_vm-basic.uimage"
 
 IMAGE_PATH="${1:-}"
 
