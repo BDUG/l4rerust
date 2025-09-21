@@ -639,8 +639,11 @@ do_setup()
   mkdir -p obj/l4
   mkdir -p obj/l4linux
 
+  echo "Linux directory"
+  
   [ -e src/l4linux ] && l4lx_avail=1
 
+  echo "Fiasco build dirs"
   # Fiasco build dirs
   for b in $fiasco_configs; do
     fiasco_dir=$(get_fiasco_dir "$b") || {
@@ -657,14 +660,8 @@ do_setup()
     echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
   done
 
-  # some config tweaking
-  #if [ "$CONF_DO_MIPS32R2" ]; then
-  #  echo '# CONFIG_MP is not set' >> obj/fiasco/mips32-malta/globalconfig.out
-  #fi
-
-
-
-
+  echo "Default dirs"
+  
   # L4Re build dirs with default configs
   if [ "$CONF_DO_ARM" ]; then
     gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
