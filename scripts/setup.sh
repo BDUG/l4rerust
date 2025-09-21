@@ -463,12 +463,26 @@ add_gen()
   Makeconf_added_gen+=("$1")
 }
 
+append_qemu_option()
+{
+  local file="$1"
+  local option="$2"
+
+  if [ -f "$file" ] && grep -F -q -- "$option" "$file"; then
+    return
+  fi
+
+  echo "QEMU_OPTIONS += $option" >> "$file"
+}
+
 add_std_qemu_options()
 {
   for f in "${Makeconf_added_qemu_std[@]}"; do
     [ "$f" = "$1" ] && { add_gen "$1"; return; }
   done
-  echo "QEMU_OPTIONS += -nographic" >> "$1"
+  append_qemu_option "$1" "-display none"
+  append_qemu_option "$1" "-serial stdio"
+  append_qemu_option "$1" "-monitor none"
   Makeconf_added_qemu_std+=("$1")
 
   add_gen "$1"
