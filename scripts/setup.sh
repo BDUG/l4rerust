@@ -36,7 +36,19 @@ if [ "$cmd" != "clean" ]; then
   (
     cd "$SCRIPT_DIR/../src" &&
     ham init -u https://github.com/kernkonzept/manifest.git &&
-    ham sync l4re-core fiasco
+    if ham sync l4re-core fiasco; then
+      :
+    else
+      sync_status=$?
+      fiasco_dir="fiasco"
+      l4_dir="l4"
+      l4re_core_dir="l4re-core"
+      if [ -d "$fiasco_dir" ] && { [ -d "$l4_dir" ] || [ -d "$l4re_core_dir" ]; }; then
+        echo "ham sync reported failure but components already installed, skipping."
+      else
+        exit "$sync_status"
+      fi
+    fi
   )
 fi
 
