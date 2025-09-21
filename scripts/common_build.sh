@@ -104,6 +104,8 @@ validate_tools() {
     git
     gmake
     curl
+    rustc
+    cargo
     "${CROSS_COMPILE_ARM}g++"
     "${CROSS_COMPILE_ARM64}g++"
     mke2fs
@@ -137,6 +139,10 @@ validate_tools() {
           echo "Required tool $tool not found (CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM})" >&2
         elif [[ "$tool" == "${CROSS_COMPILE_ARM64}g++" ]]; then
           echo "Required tool $tool not found (CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64})" >&2
+        elif [[ "$tool" == rustc ]]; then
+          echo "Required tool rustc not found. Install a Rust toolchain (e.g., via https://rustup.rs/)." >&2
+        elif [[ "$tool" == cargo ]]; then
+          echo "Required tool cargo not found. Install a Rust toolchain (e.g., via https://rustup.rs/)." >&2
         elif [[ "$tool" == ham ]]; then
           echo "Required tool ham not found. Install ham and ensure it is in your PATH" >&2
         else
