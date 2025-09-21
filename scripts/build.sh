@@ -46,6 +46,117 @@ source "$SCRIPT_DIR/common_build.sh"
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
+determine_rust_target_triple() {
+  if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
+    printf '%s' "$CARGO_BUILD_TARGET"
+    return 0
+  fi
+  if [ -n "${CARGO_TARGET:-}" ]; then
+    printf '%s' "$CARGO_TARGET"
+    return 0
+  fi
+  if [ -n "${RUST_TARGET:-}" ]; then
+    printf '%s' "$RUST_TARGET"
+    return 0
+  fi
+  if [ -n "${TARGET:-}" ]; then
+    printf '%s' "$TARGET"
+    return 0
+  fi
+
+  if ! command -v rustc >/dev/null 2>&1; then
+    echo "rustc is required to determine the default Rust target" >&2
+    return 1
+  fi
+
+  rustc -vV | awk '/^host: / { print $2; exit }'
+}
+
+determine_rust_target_arch() {
+  local triple
+  triple=$(determine_rust_target_triple) || return 1
+  if [ -z "$triple" ]; then
+    return 1
+  fi
+
+  printf '%s' "${triple%%-*}"
+}
+
+prepare_rust_glibc_environment() {
+  local target_arch
+  target_arch=$(determine_rust_target_arch) || {
+    echo "Unable to determine Rust target architecture" >&2
+    exit 1
+  }
+
+  if [ -z "$target_arch" ]; then
+    echo "Rust target architecture is empty" >&2
+    exit 1
+  fi
+
+  local stage_arch
+  case "$target_arch" in
+    arm)
+      stage_arch="arm"
+      ;;
+    aarch64)
+      stage_arch="arm64"
+      ;;
+    *)
+      stage_arch=""
+      ;;
+  esac
+
+  local glibc_prefix=""
+  if [ -n "$stage_arch" ]; then
+    glibc_prefix="$(component_prefix_path "glibc" "$stage_arch")"
+  fi
+
+  if [ -z "$glibc_prefix" ] && [ -n "${L4RE_LIBC_GLIBC_PREFIX:-}" ]; then
+    glibc_prefix="$L4RE_LIBC_GLIBC_PREFIX"
+  fi
+
+  if [ -z "$glibc_prefix" ]; then
+    echo "No staged glibc prefix found for Rust target architecture '$target_arch'" >&2
+    echo "Set L4RE_LIBC_GLIBC_PREFIX_<ARCH> or L4RE_LIBC_GLIBC_PREFIX to point to the staged glibc." >&2
+    exit 1
+  fi
+
+  local glibc_lib_dir="$glibc_prefix/lib"
+  if [ ! -d "$glibc_lib_dir" ]; then
+    echo "glibc library directory not found: $glibc_lib_dir" >&2
+    echo "Ensure the glibc component has been built or an override prefix is provided." >&2
+    exit 1
+  fi
+
+  local target_upper
+  target_upper=$(printf '%s' "$target_arch" | tr '[:lower:]' '[:upper:]')
+  local stage_upper
+  if [ -n "$stage_arch" ]; then
+    stage_upper=$(printf '%s' "$stage_arch" | tr '[:lower:]' '[:upper:]')
+  else
+    stage_upper="$target_upper"
+  fi
+
+  export L4RE_LIBC_GLIBC_PREFIX="$glibc_prefix"
+  export "L4RE_LIBC_GLIBC_PREFIX_${target_upper}"="$glibc_prefix"
+  if [ "$stage_upper" != "$target_upper" ]; then
+    export "L4RE_LIBC_GLIBC_PREFIX_${stage_upper}"="$glibc_prefix"
+  fi
+
+  if [ -n "${LIBRARY_PATH:-}" ]; then
+    LIBRARY_PATH="$glibc_lib_dir:${LIBRARY_PATH}"
+  else
+    LIBRARY_PATH="$glibc_lib_dir"
+  fi
+  if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+    LD_LIBRARY_PATH="$glibc_lib_dir:${LD_LIBRARY_PATH}"
+  else
+    LD_LIBRARY_PATH="$glibc_lib_dir"
+  fi
+  export LIBRARY_PATH LD_LIBRARY_PATH
+}
+
 # Usage: build.sh [options]
 #   --clean                    Remove previous build directories before building
 #   --no-clean                 Skip removal of build directories (default)
@@ -427,11 +538,6 @@ else
   "$SCRIPT_DIR/setup.sh" config
 fi
 "$SCRIPT_DIR/setup.sh" --non-interactive
-
-# Build the Rust libc crate so other crates can link against it
-cargo build -p l4re-libc --release
-# Ensure Rust crates pick up the freshly built static libc
-export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 
 BASH_VERSION=5.2.21
 BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
@@ -1222,8 +1328,24 @@ EOF
   return 0
 }
 
-run_component_build "bash" build_bash_component
 run_component_build "glibc" build_glibc_component
+
+if (( BUILD_FAILURE_COUNT == 0 )); then
+  prepare_rust_glibc_environment
+
+  # Build the Rust libc crate so other crates can link against it
+  cargo build -p l4re-libc --release
+
+  # Ensure Rust crates pick up the freshly built static libc
+  if [ -n "${LIBRARY_PATH:-}" ]; then
+    LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH}"
+  else
+    LIBRARY_PATH="$(pwd)/target/release"
+  fi
+  export LIBRARY_PATH
+fi
+
+run_component_build "bash" build_bash_component
 run_component_build "libcap" build_libcap_component
 run_component_build "libcrypt" build_libcrypt_component
 run_component_build "libblkid" build_libblkid_component

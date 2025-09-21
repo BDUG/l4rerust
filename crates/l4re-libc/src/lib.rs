@@ -1,6 +1,8 @@
 #![allow(non_camel_case_types)]
 
-use libc::{c_char, c_int, c_uint, c_void, sigset_t, clockid_t, itimerspec, size_t};
+use libc::{c_char, c_int, c_void, sigset_t, size_t};
+#[cfg(feature = "syscall-fallbacks")]
+use libc::{c_uint, clockid_t, itimerspec};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -56,9 +58,18 @@ pub const IN_EXCL_UNLINK: u32 = 0x04000000;
 pub const IN_MASK_ADD: u32 = 0x20000000;
 pub const IN_ISDIR: u32 = 0x40000000;
 pub const IN_ONESHOT: u32 = 0x80000000;
-pub const IN_ALL_EVENTS: u32 = IN_ACCESS | IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE |
-    IN_CLOSE_NOWRITE | IN_OPEN | IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE |
-    IN_DELETE_SELF | IN_MOVE_SELF;
+pub const IN_ALL_EVENTS: u32 = IN_ACCESS
+    | IN_MODIFY
+    | IN_ATTRIB
+    | IN_CLOSE_WRITE
+    | IN_CLOSE_NOWRITE
+    | IN_OPEN
+    | IN_MOVED_FROM
+    | IN_MOVED_TO
+    | IN_CREATE
+    | IN_DELETE
+    | IN_DELETE_SELF
+    | IN_MOVE_SELF;
 
 pub const EPOLLIN: u32 = 0x001;
 pub const EPOLLPRI: u32 = 0x002;
@@ -117,6 +128,7 @@ pub struct inotify_event {
     pub name: [c_char; 0],
 }
 
+#[cfg(feature = "syscall-fallbacks")]
 extern "C" {
     pub fn eventfd(initval: c_uint, flags: c_int) -> c_int;
     pub fn eventfd_read(fd: c_int, value: *mut eventfd_t) -> c_int;
@@ -125,19 +137,91 @@ extern "C" {
     pub fn epoll_create(size: c_int) -> c_int;
     pub fn epoll_create1(flags: c_int) -> c_int;
     pub fn epoll_ctl(epfd: c_int, op: c_int, fd: c_int, event: *mut epoll_event) -> c_int;
-    pub fn epoll_wait(epfd: c_int, events: *mut epoll_event, maxevents: c_int, timeout: c_int) -> c_int;
-    pub fn epoll_pwait(epfd: c_int, events: *mut epoll_event, maxevents: c_int, timeout: c_int,
-        sigmask: *const sigset_t) -> c_int;
+    pub fn epoll_wait(
+        epfd: c_int,
+        events: *mut epoll_event,
+        maxevents: c_int,
+        timeout: c_int,
+    ) -> c_int;
+    pub fn epoll_pwait(
+        epfd: c_int,
+        events: *mut epoll_event,
+        maxevents: c_int,
+        timeout: c_int,
+        sigmask: *const sigset_t,
+    ) -> c_int;
 
     pub fn timerfd_create(clockid: clockid_t, flags: c_int) -> c_int;
-    pub fn timerfd_settime(fd: c_int, flags: c_int, new_value: *const itimerspec,
-        old_value: *mut itimerspec) -> c_int;
-      pub fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
+    pub fn timerfd_settime(
+        fd: c_int,
+        flags: c_int,
+        new_value: *const itimerspec,
+        old_value: *mut itimerspec,
+    ) -> c_int;
+    pub fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
 
-      pub fn signalfd(fd: c_int, mask: *const sigset_t, flags: c_int) -> c_int;
-      pub fn signalfd4(fd: c_int, mask: *const sigset_t, size: size_t, flags: c_int) -> c_int;
+    pub fn signalfd(fd: c_int, mask: *const sigset_t, flags: c_int) -> c_int;
+    pub fn signalfd4(fd: c_int, mask: *const sigset_t, size: size_t, flags: c_int) -> c_int;
 
-      pub fn inotify_init1(flags: c_int) -> c_int;
-      pub fn inotify_add_watch(fd: c_int, pathname: *const c_char, mask: u32) -> c_int;
-      pub fn inotify_rm_watch(fd: c_int, wd: c_int) -> c_int;
-  }
+    pub fn inotify_init1(flags: c_int) -> c_int;
+    pub fn inotify_add_watch(fd: c_int, pathname: *const c_char, mask: u32) -> c_int;
+    pub fn inotify_rm_watch(fd: c_int, wd: c_int) -> c_int;
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+pub use libc::{
+    eventfd, eventfd_read, eventfd_write, inotify_add_watch, inotify_init1, inotify_rm_watch,
+    signalfd, timerfd_create, timerfd_gettime, timerfd_settime,
+};
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+#[inline]
+pub unsafe fn epoll_create(size: c_int) -> c_int {
+    libc::epoll_create(size)
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+#[inline]
+pub unsafe fn epoll_create1(flags: c_int) -> c_int {
+    libc::epoll_create1(flags)
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+#[inline]
+pub unsafe fn epoll_ctl(epfd: c_int, op: c_int, fd: c_int, event: *mut epoll_event) -> c_int {
+    libc::epoll_ctl(epfd, op, fd, event.cast::<libc::epoll_event>())
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+#[inline]
+pub unsafe fn epoll_wait(
+    epfd: c_int,
+    events: *mut epoll_event,
+    maxevents: c_int,
+    timeout: c_int,
+) -> c_int {
+    libc::epoll_wait(epfd, events.cast::<libc::epoll_event>(), maxevents, timeout)
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+#[inline]
+pub unsafe fn epoll_pwait(
+    epfd: c_int,
+    events: *mut epoll_event,
+    maxevents: c_int,
+    timeout: c_int,
+    sigmask: *const sigset_t,
+) -> c_int {
+    libc::epoll_pwait(
+        epfd,
+        events.cast::<libc::epoll_event>(),
+        maxevents,
+        timeout,
+        sigmask,
+    )
+}
+
+#[cfg(not(feature = "syscall-fallbacks"))]
+extern "C" {
+    pub fn signalfd4(fd: c_int, mask: *const sigset_t, size: size_t, flags: c_int) -> c_int;
+}
