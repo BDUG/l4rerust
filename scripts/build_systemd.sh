@@ -68,7 +68,7 @@ out_dir_rel="$ARTIFACTS_DIR/systemd/$arch"
 out_dir="$REPO_ROOT/$out_dir_rel"
 
 systemd_stage_prefixes=()
-for component in "${SYSTEMD_COMPONENTS[@]}"; do
+for component in "${STAGED_COMPONENTS[@]}"; do
   systemd_stage_prefixes+=("$(component_prefix_path "$component" "$arch")")
 done
 
@@ -90,7 +90,7 @@ mkdir -p "$out_dir"
 
   new_pkg_config_path="$old_pkg_config_path"
   staged_pkgconfig_dirs=()
-  for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
+  for idx in "${!STAGED_COMPONENTS[@]}"; do
     prefix="${systemd_stage_prefixes[$idx]}"
     for pc_dir in "$prefix/lib/pkgconfig" "$prefix/lib64/pkgconfig"; do
       if [ -d "$pc_dir" ]; then
@@ -196,7 +196,7 @@ mkdir -p "$out_dir"
 
   staged_lib_dirs=()
   staged_include_dirs=()
-  for idx in "${!SYSTEMD_COMPONENTS[@]}"; do
+  for idx in "${!STAGED_COMPONENTS[@]}"; do
     prefix="${systemd_stage_prefixes[$idx]}"
     for lib_dir in "$prefix/lib" "$prefix/lib64"; do
       if [ -d "$lib_dir" ]; then

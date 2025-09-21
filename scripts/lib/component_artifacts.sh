@@ -10,7 +10,7 @@ LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../common_build.sh
 source "$LIB_DIR/../common_build.sh"
 
-readonly -a SYSTEMD_COMPONENTS=(
+readonly -a STAGED_COMPONENTS=(
   glibc
   libcap
   libcrypt
@@ -105,7 +105,7 @@ initialize_component_prefixes() {
     exit 1
   fi
   local component arch key env_var prefix
-  for component in "${SYSTEMD_COMPONENTS[@]}"; do
+  for component in "${STAGED_COMPONENTS[@]}"; do
     for arch in arm arm64; do
       key="$component:$arch"
       if env_var=$(component_override_env_var_name "$component" "$arch"); then
