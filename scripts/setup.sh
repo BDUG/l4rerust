@@ -468,7 +468,7 @@ add_std_qemu_options()
   for f in "${Makeconf_added_qemu_std[@]}"; do
     [ "$f" = "$1" ] && { add_gen "$1"; return; }
   done
-  echo "QEMU_OPTIONS += -serial stdio" >> "$1"
+  echo "QEMU_OPTIONS += -nographic" >> "$1"
   Makeconf_added_qemu_std+=("$1")
 
   add_gen "$1"
