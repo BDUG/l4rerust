@@ -61,6 +61,7 @@ readonly -a BUILD_COMPONENT_IDS=(
   libgcrypt
   libzstd
   systemd
+  lsb_root
 )
 
 declare -A BUILD_COMPONENT_LABELS=(
@@ -71,6 +72,7 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
+  [lsb_root]="LSB root filesystem creation"
 )
 
 run_component_build() {
@@ -865,31 +867,30 @@ build_systemd_component() {
   return 2
 }
 
-run_component_build "bash" build_bash_component
-run_component_build "libcap" build_libcap_component
-run_component_build "libcrypt" build_libcrypt_component
-run_component_build "libblkid" build_libblkid_component
-run_component_build "libgcrypt" build_libgcrypt_component
-run_component_build "libzstd" build_libzstd_component
-run_component_build "systemd" build_systemd_component
+build_lsb_root_component() {
+  set -e
 
-if (( BUILD_FAILURE_COUNT > 0 )); then
-  echo "One or more external component builds failed; skipping remaining build steps."
-else
-  echo "######### EXTERNAL BUILD DONE ###############"
+  local lsb_img
+  local tmpfile
+  local sys_root
+  local systemd_bin
+  local symlink_target
+  local units_dir
+  local component
 
-  # Build the tree including libc, Leo, and Rust crates
-  gmake
+  mkdir -p config/lsb_root
 
-  # Create a minimal LSB root filesystem image
   lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
   rm -f "$lsb_img"
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=8
   mke2fs -F "$lsb_img" >/dev/null
+
+  local d
   for d in /bin /etc /usr /usr/bin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
   done
+
   tmpfile=$(mktemp)
   cat <<'EOF' > "$tmpfile"
 DISTRIB_ID=L4Re
@@ -898,12 +899,12 @@ DISTRIB_DESCRIPTION="L4Re root image"
 EOF
   debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
   rm "$tmpfile"
+
   debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
   debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
   debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
   debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
-  # Install systemd into the root filesystem image and staging area
   if should_build_component "systemd"; then
     sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
     if [ -d "$sys_root" ]; then
@@ -923,13 +924,15 @@ EOF
         debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
-          find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
-            rel="${d#$sys_root}"
+          find "$sys_root/usr/lib/systemd" -type d | while read -r subdir; do
+            local rel
+            rel="${subdir#$sys_root}"
             debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
           done
-          find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
-            rel="${f#$sys_root}"
-            debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+          find "$sys_root/usr/lib/systemd" -type f | while read -r file; do
+            local rel
+            rel="${file#$sys_root}"
+            debugfs -w -R "write $file $rel" "$lsb_img" >/dev/null
             debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
           done
         fi
@@ -950,7 +953,6 @@ EOF
     fi
   fi
 
-  # Stage runtime libraries from staged components in the root filesystem image
   stage_component_runtime_libraries() {
     local component="$1"
     local arch="$2"
@@ -1046,12 +1048,12 @@ EOF
     esac
   done
 
-  # Install systemd unit files into the image
   if should_build_component "systemd"; then
     units_dir="config/systemd"
     if [ -d "$units_dir" ]; then
       mkdir -p config/lsb_root/lib/systemd/system
       debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+      local unit base
       for unit in "$units_dir"/*.service; do
         [ -f "$unit" ] || continue
         base="$(basename "$unit")"
@@ -1062,7 +1064,6 @@ EOF
     fi
   fi
 
-  # Enable services
   enable_service() {
     local name="$1"
     local unit="config/systemd/${name}.service"
@@ -1080,6 +1081,37 @@ EOF
   if should_build_component "systemd"; then
     enable_service bash
   fi
+
+  COMPONENT_BUILD_NOTE="created"
+  return 0
+}
+
+run_component_build "bash" build_bash_component
+run_component_build "libcap" build_libcap_component
+run_component_build "libcrypt" build_libcrypt_component
+run_component_build "libblkid" build_libblkid_component
+run_component_build "libgcrypt" build_libgcrypt_component
+run_component_build "libzstd" build_libzstd_component
+run_component_build "systemd" build_systemd_component
+
+if (( BUILD_FAILURE_COUNT > 0 )); then
+  echo "One or more external component builds failed; skipping remaining build steps."
+  if [[ -z "${BUILD_RESULTS[lsb_root]+set}" ]]; then
+    if should_build_component "lsb_root"; then
+      BUILD_RESULTS["lsb_root"]="skipped"
+      BUILD_NOTES["lsb_root"]="skipped (previous failures)"
+    else
+      BUILD_RESULTS["lsb_root"]="skipped"
+      BUILD_NOTES["lsb_root"]="not selected"
+    fi
+  fi
+else
+  echo "######### EXTERNAL BUILD DONE ###############"
+
+  # Build the tree including libc, Leo, and Rust crates
+  gmake
+
+  run_component_build "lsb_root" build_lsb_root_component
 
   # Collect key build artifacts
   stage_bootable_images() {
