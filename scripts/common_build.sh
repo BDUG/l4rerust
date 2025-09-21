@@ -110,6 +110,9 @@ validate_tools() {
     "${CROSS_COMPILE_ARM64}g++"
     mke2fs
     debugfs
+    flex
+    bison
+    wget
     cmake
     meson
     ninja
