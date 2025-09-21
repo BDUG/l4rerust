@@ -13,11 +13,11 @@ if [[ -z "$IMAGE_PATH" ]]; then
     IMAGE_PATH="$DEFAULT_IMAGE_CANDIDATE"
   else
     shopt -s nullglob
-    images=("$DEFAULT_IMAGE_DIR"/images/*.elf)
+    images=("$DEFAULT_IMAGE_DIR"/images/*.elf "$DEFAULT_IMAGE_DIR"/images/*.uimage)
     shopt -u nullglob
 
     if (( ${#images[@]} == 0 )); then
-      echo "No bootable ELF image found under $DEFAULT_IMAGE_DIR/images." >&2
+      echo "No bootable ELF or U-Boot image (.elf or .uimage) found under $DEFAULT_IMAGE_DIR/images." >&2
       echo "Build the project first (e.g. run scripts/build.sh) or provide an image path." >&2
       exit 1
     fi
@@ -38,7 +38,7 @@ if [[ -z "$IMAGE_PATH" ]]; then
     done
 
     if [[ -z "$latest_image" ]]; then
-      echo "Unable to determine a bootable ELF image under $DEFAULT_IMAGE_DIR/images." >&2
+      echo "Unable to determine a bootable ELF or U-Boot image under $DEFAULT_IMAGE_DIR/images." >&2
       echo "Build the project first (e.g. run scripts/build.sh) or provide an image path." >&2
       exit 1
     fi
