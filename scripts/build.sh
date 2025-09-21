@@ -55,6 +55,7 @@ cd "$REPO_ROOT"
 
 readonly -a BUILD_COMPONENT_IDS=(
   bash
+  glibc
   libcap
   libcrypt
   libblkid
@@ -66,6 +67,7 @@ readonly -a BUILD_COMPONENT_IDS=(
 
 declare -A BUILD_COMPONENT_LABELS=(
   [bash]="GNU Bash shell"
+  [glibc]="OSv glibc compatibility layer"
   [libcap]="libcap (POSIX capabilities)"
   [libcrypt]="libxcrypt (libcrypt)"
   [libblkid]="util-linux libblkid"
@@ -452,6 +454,99 @@ LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERS
 
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
+
+GLIBC_OSV_COMMIT=fe48bcd9065ac625a54aef7b6c46fe70db8fcf7f
+GLIBC_OSV_URL="https://github.com/cloudius-systems/osv.git"
+GLIBC_MUSL_SUBMODULE="musl_1.1.24"
+GLIBC_MUSL_COMMIT=ea9525c8bcf6170df59364c4bcd616de1acf8703
+GLIBC_VERSION="$GLIBC_OSV_COMMIT"
+
+build_glibc_component() {
+  set -e
+  local arch
+  local need_glibc=false
+  local override_used=false
+  local cross=""
+  local install_prefix=""
+  local build_status=0
+  local unsupported_arches=()
+
+  for arch in arm arm64; do
+    if component_override_used "glibc" "$arch"; then
+      override_used=true
+      continue
+    fi
+    if ! component_is_current "glibc" "$arch" "lib/libc.so" "$GLIBC_VERSION"; then
+      need_glibc=true
+      break
+    fi
+  done
+
+  if [ "$need_glibc" = true ]; then
+    for arch in arm arm64; do
+      if component_override_used "glibc" "$arch"; then
+        echo "Skipping glibc build for $arch; using prebuilt artifacts from $(component_prefix_path "glibc" "$arch")"
+        continue
+      fi
+      if component_is_current "glibc" "$arch" "lib/libc.so" "$GLIBC_VERSION"; then
+        echo "glibc for $arch already current, skipping"
+        continue
+      fi
+
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for glibc build" >&2
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
+
+      install_prefix="$(component_prefix_path "glibc" "$arch")"
+
+      if ! "$SCRIPT_DIR/build_glibc.sh" \
+          "$arch" \
+          "$cross" \
+          "$GLIBC_VERSION" \
+          "$install_prefix" \
+          "$GLIBC_OSV_URL" \
+          "$GLIBC_OSV_COMMIT" \
+          "$GLIBC_MUSL_SUBMODULE" \
+          "$GLIBC_MUSL_COMMIT"; then
+        build_status=$?
+        if [ $build_status -eq 3 ]; then
+          unsupported_arches+=("$arch")
+          continue
+        fi
+        COMPONENT_BUILD_NOTE="build failed"
+        return 1
+      fi
+    done
+
+    if [ ${#unsupported_arches[@]} -gt 0 ]; then
+      echo "glibc build unsupported for: ${unsupported_arches[*]}" >&2
+      COMPONENT_BUILD_NOTE="unsupported: ${unsupported_arches[*]}"
+      return 1
+    fi
+
+    COMPONENT_BUILD_NOTE="built"
+    return 0
+  fi
+
+  if [ "$override_used" = true ]; then
+    echo "glibc builds provided by environment overrides"
+    COMPONENT_BUILD_NOTE="overridden"
+  else
+    echo "glibc for arm and arm64 already current, skipping"
+    COMPONENT_BUILD_NOTE="already current"
+  fi
+  return 2
+}
 
 build_bash_component() {
   set -e
@@ -1087,6 +1182,7 @@ EOF
 }
 
 run_component_build "bash" build_bash_component
+run_component_build "glibc" build_glibc_component
 run_component_build "libcap" build_libcap_component
 run_component_build "libcrypt" build_libcrypt_component
 run_component_build "libblkid" build_libblkid_component
