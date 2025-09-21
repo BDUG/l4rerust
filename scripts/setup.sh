@@ -136,10 +136,66 @@ write_config()
   return 0
 }
 
+clean_lsb_root_directory()
+{
+  local lsb_root_dir="config/lsb_root"
+
+  if [ ! -d "$lsb_root_dir" ]; then
+    return
+  fi
+
+  # Remove any top-level entries other than the README placeholder and the
+  # tracked lib directory that holds service definitions.
+  find "$lsb_root_dir" -mindepth 1 -maxdepth 1 ! -name README ! -name lib -exec rm -rf {} +
+
+  local lib_dir="$lsb_root_dir/lib"
+  if [ ! -d "$lib_dir" ]; then
+    return
+  fi
+
+  # Drop everything under lib/ except for the systemd hierarchy we keep under
+  # version control.
+  find "$lib_dir" -mindepth 1 -maxdepth 1 ! -name systemd -exec rm -rf {} +
+
+  local systemd_dir="$lib_dir/systemd"
+  if [ ! -d "$systemd_dir" ]; then
+    return
+  fi
+
+  # Prune entries under lib/systemd that are not part of the tracked
+  # lib/systemd/system subtree.
+  find "$systemd_dir" -mindepth 1 -maxdepth 1 ! -name system -exec rm -rf {} +
+
+  local systemd_units_dir="$systemd_dir/system"
+  if [ ! -d "$systemd_units_dir" ]; then
+    return
+  fi
+
+  local -a preserved_units=()
+  if [ -d "config/systemd" ]; then
+    local unit
+    for unit in config/systemd/*.service; do
+      [ -e "$unit" ] || continue
+      preserved_units+=("$(basename "$unit")")
+    done
+  fi
+
+  local -a find_args=("$systemd_units_dir" -mindepth 1 -maxdepth 1)
+  local unit_name
+  for unit_name in "${preserved_units[@]}"; do
+    find_args+=( '!' -name "$unit_name" )
+  done
+
+  find "${find_args[@]}" -exec rm -rf {} +
+}
+
 do_clean()
 {
-  # same as in Makefile
+  # Remove build artifacts and staged directories created by the build scripts
   rm -rf obj
+  rm -rf out distribution
+  rm -rf config/pkg_staging
+  clean_lsb_root_directory
 }
 
 do_config()
@@ -767,7 +823,6 @@ case "$cmd" in
      ;;
   clean)
      do_clean
-     rm -rf out distribution
      ;;
   *)
      echo "Call $0 [config|setup|clean|--non-interactive]"
