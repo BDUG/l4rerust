@@ -81,14 +81,14 @@ BASH_ARCHES := arm arm64
 bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_images
 
 obj/bash/%/bash:
-	@scripts/build.sh --no-clean
+	@echo "NOT RUN @scripts/build.sh --no-clean"
 
 SYSTEMD_ARCHES := arm arm64
 
 systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
 
 obj/systemd/%/systemd:
-	@scripts/build.sh --no-clean
+	@echo "NOT RUN @scripts/build.sh --no-clean"
 
 EXAMPLE_CRATES := \
 src/fs_server \
