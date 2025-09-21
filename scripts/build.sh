@@ -415,11 +415,7 @@ initialize_component_prefixes
 export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
-if [ -f /workspace/.config ]; then
-  echo "Using configuration from /workspace/.config"
-  mkdir -p obj
-  cp /workspace/.config obj/.config
-elif [ -f "$SCRIPT_DIR/l4re.config" ]; then
+if [ -f "$SCRIPT_DIR/l4re.config" ]; then
   echo "Using configuration from scripts/l4re.config"
   mkdir -p obj
   cp "$SCRIPT_DIR/l4re.config" obj/.config
