@@ -2,6 +2,14 @@
 
 L4ReRust brings Linux LSB and the Rust programming language to the L4 Runtime Environment (L4Re) microkernel.
 
+## Host prerequisites
+
+Install the following tools before invoking `scripts/build.sh`:
+
+- A Rust toolchain that provides both `cargo` and `rustc` (for example, via [`rustup`](https://rustup.rs/)).
+
+The sections below describe additional tooling required by specific parts of the build.
+
 ## Installing tool 'ham'
 
 The build scripts rely on the [`ham`](https://github.com/kernkonzept/ham)
