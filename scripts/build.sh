@@ -1061,9 +1061,11 @@ EOF
     runtime_prefix="$(component_prefix_path "$component" "$arch")"
     local -a stage_dirs=()
     local candidate
+    declare -A subdirs_present=()
     for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
       if [ -d "$candidate" ]; then
         stage_dirs+=("$candidate")
+        subdirs_present["$(basename "$candidate")"]=1
       fi
     done
 
@@ -1073,14 +1075,19 @@ EOF
 
     declare -A staged_files=()
     declare -A staged_links=()
-    local pattern stage_dir
+    declare -A staged_file_subdirs=()
+    declare -A staged_link_subdirs=()
+    local pattern stage_dir subdir
     for stage_dir in "${stage_dirs[@]}"; do
+      subdir="$(basename "$stage_dir")"
       for pattern in "${patterns[@]}"; do
         while IFS= read -r -d '' sofile; do
           staged_files["$sofile"]=1
+          staged_file_subdirs["$sofile"]="$subdir"
         done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
         while IFS= read -r -d '' solink; do
           staged_links["$solink"]=1
+          staged_link_subdirs["$solink"]="$subdir"
         done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
       done
     done
@@ -1090,24 +1097,33 @@ EOF
     fi
 
     echo "Staging $component shared libraries for $arch"
-    mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
-    debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
-    debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
+
+    local -a sorted_subdirs=()
+    mapfile -t sorted_subdirs < <(printf '%s\n' "${!subdirs_present[@]}" | sort)
+    local dest_subdir
+    for dest_subdir in "${sorted_subdirs[@]}"; do
+      mkdir -p "config/lsb_root/$dest_subdir" "config/lsb_root/usr/$dest_subdir"
+      debugfs -w -R "mkdir /$dest_subdir" "$lsb_img" >/dev/null || true
+      debugfs -w -R "mkdir /usr/$dest_subdir" "$lsb_img" >/dev/null || true
+    done
 
     local -a sorted_files=()
     mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
-    local sofile base
+    local sofile base subdir_path dest_dir usr_dest_dir
     for sofile in "${sorted_files[@]}"; do
       [ -n "$sofile" ] || continue
       base="$(basename "$sofile")"
-      cp "$sofile" "config/lsb_root/lib/$base"
-      chmod 0644 "config/lsb_root/lib/$base"
-      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
-      debugfs -w -R "set_inode_field /lib/$base mode 0100644" "$lsb_img" >/dev/null
-      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+      subdir_path="${staged_file_subdirs[$sofile]}"
+      dest_dir="config/lsb_root/$subdir_path"
+      usr_dest_dir="config/lsb_root/usr/$subdir_path"
+      cp "$sofile" "$dest_dir/$base"
+      chmod 0644 "$dest_dir/$base"
+      debugfs -w -R "rm /$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "write $sofile /$subdir_path/$base" "$lsb_img" >/dev/null
+      debugfs -w -R "set_inode_field /$subdir_path/$base mode 0100644" "$lsb_img" >/dev/null
+      ln -sf "../$subdir_path/$base" "$usr_dest_dir/$base"
+      debugfs -w -R "rm /usr/$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../$subdir_path/$base /usr/$subdir_path/$base" "$lsb_img" >/dev/null || true
     done
 
     local -a sorted_links=()
@@ -1117,20 +1133,34 @@ EOF
       [ -n "$solink" ] || continue
       base="$(basename "$solink")"
       target="$(readlink "$solink")"
-      ln -sf "$target" "config/lsb_root/lib/$base"
-      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
-      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
-      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
+      subdir_path="${staged_link_subdirs[$solink]}"
+      dest_dir="config/lsb_root/$subdir_path"
+      usr_dest_dir="config/lsb_root/usr/$subdir_path"
+      ln -sf "$target" "$dest_dir/$base"
+      debugfs -w -R "rm /$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink $target /$subdir_path/$base" "$lsb_img" >/dev/null || true
+      ln -sf "../$subdir_path/$base" "$usr_dest_dir/$base"
+      debugfs -w -R "rm /usr/$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../$subdir_path/$base /usr/$subdir_path/$base" "$lsb_img" >/dev/null || true
     done
   }
 
-  for component in "${SYSTEMD_COMPONENTS[@]}"; do
+  for component in "${STAGED_COMPONENTS[@]}"; do
     if ! should_build_component "$component"; then
       continue
     fi
     case "$component" in
+      glibc)
+        stage_component_runtime_libraries "$component" "arm64" \
+          "ld-linux-*.so*" \
+          "libc.so*" \
+          "libpthread.so*" \
+          "libm.so*" \
+          "libdl.so*" \
+          "librt.so*" \
+          "libresolv.so*" \
+          "libnss_*.so*"
+        ;;
       libcap)
         stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
         ;;
