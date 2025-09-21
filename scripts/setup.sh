@@ -658,9 +658,9 @@ do_setup()
   done
 
   # some config tweaking
-  if [ "$CONF_DO_MIPS32R2" ]; then
-    echo '# CONFIG_MP is not set' >> obj/fiasco/mips32-malta/globalconfig.out
-  fi
+  #if [ "$CONF_DO_MIPS32R2" ]; then
+  #  echo '# CONFIG_MP is not set' >> obj/fiasco/mips32-malta/globalconfig.out
+  #fi
 
 
 
@@ -678,42 +678,6 @@ do_setup()
     gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
   fi
 
-  if [ "$CONF_DO_MIPS32R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS32R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
-  fi
 
   # L4Linux build setup
   [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
@@ -757,7 +721,7 @@ EOF
   fi # ARM
 
 
-
+  echo "ABC ##############"
 
   if [ "$CONF_DO_ARM64" ]; then
     local odir=obj/l4/arm64
