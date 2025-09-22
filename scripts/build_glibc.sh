@@ -157,6 +157,30 @@ main() {
   mkdir -p "$osv_dir"
   clone_osv_tree "$osv_dir" "$osv_url" "$osv_commit" "$musl_submodule" "$musl_commit"
 
+  # Apply optional glibc patches before building; the directory may be empty.
+  local patch_dir="$SCRIPT_DIR/patches/glibc"
+  local -a glibc_patches=()
+  if [ -d "$patch_dir" ]; then
+    while IFS= read -r patch_file; do
+      glibc_patches+=("$patch_file")
+    done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' -print | sort)
+  fi
+
+  if [ ${#glibc_patches[@]} -gt 0 ]; then
+    echo "Applying glibc patches from $patch_dir"
+    (
+      cd "$osv_dir"
+      local patch_file
+      for patch_file in "${glibc_patches[@]}"; do
+        echo "Applying $(basename "$patch_file")"
+        if ! patch -p1 -N < "$patch_file"; then
+          echo "Failed to apply patch $patch_file" >&2
+          exit 1
+        fi
+      done
+    )
+  fi
+
   local osv_arch
   case "$arch" in
     arm)
