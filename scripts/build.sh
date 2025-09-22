@@ -1403,6 +1403,18 @@ EOF
     local runtime_prefix
     runtime_prefix="$(component_prefix_path "$component" "$arch")"
     if [ "$component" = "glibc" ] && [ -d "pkg/$component" ]; then
+      local l4_root=""
+      local primary_l4_root="$REPO_ROOT/src/l4"
+      local fallback_l4_root="$REPO_ROOT/src/l4re-core/src/l4"
+      if [ -f "$primary_l4_root/mk/subdir.mk" ]; then
+        l4_root="$primary_l4_root"
+      elif [ -f "$fallback_l4_root/mk/subdir.mk" ]; then
+        l4_root="$fallback_l4_root"
+      else
+        echo "Unable to locate the L4Re source tree. Expected to find 'mk/subdir.mk' in either" \
+          " '$primary_l4_root' or '$fallback_l4_root'." >&2
+        exit 1
+      fi
       local pkg_stage_dir="config/pkg_staging/$component/$arch"
       rm -rf "$pkg_stage_dir"
       mkdir -p "$pkg_stage_dir"
@@ -1410,7 +1422,8 @@ EOF
         install \
         L4ARCH="$arch" \
         INSTDIR="$pkg_stage_dir" \
-        GLIBC_STAGE_DIR="$runtime_prefix"
+        GLIBC_STAGE_DIR="$runtime_prefix" \
+        L4DIR="$l4_root"
       runtime_prefix="$pkg_stage_dir"
     fi
     local -a stage_dirs=()
