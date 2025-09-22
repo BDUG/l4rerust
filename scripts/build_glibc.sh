@@ -44,6 +44,18 @@ clone_osv_tree() {
   fi
 }
 
+normalize_join_path() {
+  local base="$1" rel="$2"
+  python3 - "$base" "$rel" <<'PY'
+import os
+import sys
+
+base = os.path.abspath(sys.argv[1])
+rel = sys.argv[2]
+print(os.path.normpath(os.path.join(base, rel)))
+PY
+}
+
 stage_headers() {
   local osv_dir="$1" dest_prefix="$2"
 
@@ -60,17 +72,73 @@ stage_libraries() {
   local -a libs_to_copy=()
   while IFS= read -r -d '' libfile; do
     libs_to_copy+=("$libfile")
-  done < <(find "$build_out" -maxdepth 2 -type f \( -name 'lib*.so' -o -name 'lib*.so.*' -o -name 'ld-*.so*' \) -print0)
+  done < <(find "$build_out" -maxdepth 2 \( -type f -o -type l \) \( -name 'lib*.so' -o -name 'lib*.so.*' -o -name 'ld-*.so*' \) -print0)
 
   if [ ${#libs_to_copy[@]} -eq 0 ]; then
     echo "No shared libraries were produced in $build_out" >&2
     return 1
   fi
 
+  local -a regular_libs=()
+  local -a symlink_libs=()
   local libfile
   for libfile in "${libs_to_copy[@]}"; do
+    if [ -L "$libfile" ]; then
+      symlink_libs+=("$libfile")
+    else
+      regular_libs+=("$libfile")
+    fi
+  done
+
+  for libfile in "${regular_libs[@]}"; do
     cp -a "$libfile" "$dest_prefix/lib/"
   done
+
+  local dest_lib
+  dest_lib="$(cd "$dest_prefix/lib" && pwd -P)"
+  local build_out_real
+  build_out_real="$(cd "$build_out" && pwd -P)"
+  local symlink_file target target_source dest_target_path dest_target_dir
+  for symlink_file in "${symlink_libs[@]}"; do
+    cp -a "$symlink_file" "$dest_prefix/lib/"
+    target="$(readlink "$symlink_file")"
+    if [[ "$target" == */* && "$target" != /* ]]; then
+      target_source="$(normalize_join_path "$(dirname "$symlink_file")" "$target")"
+      if [[ -e "$target_source" && "$target_source" == "$build_out_real"* ]]; then
+        dest_target_path="$(normalize_join_path "$dest_lib" "$target")"
+        if [[ "$dest_target_path" == "$dest_prefix"* ]]; then
+          dest_target_dir="$(dirname "$dest_target_path")"
+          mkdir -p "$dest_target_dir"
+          if [ ! -e "$dest_target_path" ]; then
+            cp -a "$target_source" "$dest_target_dir/"
+          fi
+        fi
+      fi
+    fi
+  done
+}
+
+verify_staged_sonames() {
+  local dest_prefix="$1" libdir="$1/lib"
+
+  if [ ! -d "$libdir" ]; then
+    echo "Library directory $libdir not found after staging" >&2
+    return 1
+  fi
+
+  local -a required_patterns=("libc.so." "libpthread.so.")
+  local missing=()
+  local pattern
+  for pattern in "${required_patterns[@]}"; do
+    if ! compgen -G "$libdir/${pattern}*" >/dev/null; then
+      missing+=("${pattern}*")
+    fi
+  done
+
+  if [ ${#missing[@]} -ne 0 ]; then
+    echo "Missing expected SONAME entries in $libdir: ${missing[*]}" >&2
+    return 1
+  fi
 }
 
 ensure_library_symlink() {
@@ -226,6 +294,7 @@ main() {
 
   stage_headers "$osv_dir" "$install_prefix"
   stage_libraries "$build_out" "$install_prefix"
+  verify_staged_sonames "$install_prefix"
   local libdir="$install_prefix/lib"
   if [ -d "$libdir" ]; then
     ensure_library_symlink "$libdir" "libc.so"
