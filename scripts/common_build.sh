@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 
 # Resolve a path using realpath if available, otherwise fall back to Python.
+# We capture the output of realpath first so that a failure (for example when
+# the final component does not exist yet) does not trigger `set -e`; instead we
+# fall back to Python, which handles such cases portably.
 resolve_path() {
   if command -v realpath >/dev/null 2>&1; then
-    realpath "$1"
-  else
-    python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1"
+    local resolved
+    if resolved=$(realpath "$1" 2>/dev/null); then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
   fi
+
+  python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
 # Discover Homebrew tool prefixes on macOS and prepend their bin directories to
