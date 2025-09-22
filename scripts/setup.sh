@@ -784,8 +784,32 @@ do_setup()
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
-    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
+
+    build_dir="obj/fiasco/$fiasco_dir"
+    makeconf_local="$build_dir/Makeconf.local"
+
+    if [ -d "$build_dir" ]; then
+      if [ -f "$build_dir/Makefile" ]; then
+        echo "Fiasco build dir '$build_dir' already exists, skipping creation."
+      else
+        echo "Fiasco build dir '$build_dir' exists but is incomplete, recreating it."
+        rm -rf "$build_dir"
+      fi
+    fi
+
+    if [ ! -d "$build_dir" ]; then
+      (cd src/fiasco && gmake B=../../"$build_dir" T="$b")
+    fi
+
+    if [ ! -d "$build_dir" ]; then
+      echo "ERROR: Failed to prepare Fiasco build directory '$build_dir'" >&2
+      exit 1
+    fi
+
+    if [ -f "$makeconf_local" ]; then
+      sed -i '/^CROSS_COMPILE=/d' "$makeconf_local"
+    fi
+    printf 'CROSS_COMPILE="%s"\n' "$cross_compile" >> "$makeconf_local"
   done
 
   echo "Default dirs"
