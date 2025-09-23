@@ -1,4 +1,0 @@
-Package: glibc
-Section: libs
-Architecture: any
-Description: OSv glibc compatibility layer staged from out/glibc/<arch>
