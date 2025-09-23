@@ -1,0 +1,4 @@
+Package: musl
+Section: libs
+Architecture: any
+Description: musl libc runtime staged from out/musl/<arch>

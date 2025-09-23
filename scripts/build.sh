@@ -104,7 +104,7 @@ determine_rust_target_arch() {
   printf '%s' "${triple%%-*}"
 }
 
-prepare_rust_glibc_environment() {
+prepare_rust_musl_environment() {
   local target_arch
   target_arch=$(determine_rust_target_arch) || {
     echo "Unable to determine Rust target architecture" >&2
@@ -129,25 +129,25 @@ prepare_rust_glibc_environment() {
       ;;
   esac
 
-  local glibc_prefix=""
+  local musl_prefix=""
   if [ -n "$stage_arch" ]; then
-    glibc_prefix="$(component_prefix_path "glibc" "$stage_arch")"
+    musl_prefix="$(component_prefix_path "musl" "$stage_arch")"
   fi
 
-  if [ -z "$glibc_prefix" ] && [ -n "${L4RE_LIBC_GLIBC_PREFIX:-}" ]; then
-    glibc_prefix="$L4RE_LIBC_GLIBC_PREFIX"
+  if [ -z "$musl_prefix" ] && [ -n "${L4RE_LIBC_MUSL_PREFIX:-}" ]; then
+    musl_prefix="$L4RE_LIBC_MUSL_PREFIX"
   fi
 
-  if [ -z "$glibc_prefix" ]; then
-    echo "No staged glibc prefix found for Rust target architecture '$target_arch'" >&2
-    echo "Set L4RE_LIBC_GLIBC_PREFIX_<ARCH> or L4RE_LIBC_GLIBC_PREFIX to point to the staged glibc." >&2
+  if [ -z "$musl_prefix" ]; then
+    echo "No staged musl prefix found for Rust target architecture '$target_arch'" >&2
+    echo "Set L4RE_LIBC_MUSL_PREFIX_<ARCH> or L4RE_LIBC_MUSL_PREFIX to point to the staged musl build." >&2
     exit 1
   fi
 
-  local glibc_lib_dir="$glibc_prefix/lib"
-  if [ ! -d "$glibc_lib_dir" ]; then
-    echo "glibc library directory not found: $glibc_lib_dir" >&2
-    echo "Ensure the glibc component has been built or an override prefix is provided." >&2
+  local musl_lib_dir="$musl_prefix/lib"
+  if [ ! -d "$musl_lib_dir" ]; then
+    echo "musl library directory not found: $musl_lib_dir" >&2
+    echo "Ensure the musl component has been built or an override prefix is provided." >&2
     exit 1
   fi
 
@@ -160,21 +160,21 @@ prepare_rust_glibc_environment() {
     stage_upper="$target_upper"
   fi
 
-  export L4RE_LIBC_GLIBC_PREFIX="$glibc_prefix"
-  export "L4RE_LIBC_GLIBC_PREFIX_${target_upper}"="$glibc_prefix"
+  export L4RE_LIBC_MUSL_PREFIX="$musl_prefix"
+  export "L4RE_LIBC_MUSL_PREFIX_${target_upper}"="$musl_prefix"
   if [ "$stage_upper" != "$target_upper" ]; then
-    export "L4RE_LIBC_GLIBC_PREFIX_${stage_upper}"="$glibc_prefix"
+    export "L4RE_LIBC_MUSL_PREFIX_${stage_upper}"="$musl_prefix"
   fi
 
   if [ -n "${LIBRARY_PATH:-}" ]; then
-    LIBRARY_PATH="$glibc_lib_dir:${LIBRARY_PATH}"
+    LIBRARY_PATH="$musl_lib_dir:${LIBRARY_PATH}"
   else
-    LIBRARY_PATH="$glibc_lib_dir"
+    LIBRARY_PATH="$musl_lib_dir"
   fi
   if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-    LD_LIBRARY_PATH="$glibc_lib_dir:${LD_LIBRARY_PATH}"
+    LD_LIBRARY_PATH="$musl_lib_dir:${LD_LIBRARY_PATH}"
   else
-    LD_LIBRARY_PATH="$glibc_lib_dir"
+    LD_LIBRARY_PATH="$musl_lib_dir"
   fi
   export LIBRARY_PATH LD_LIBRARY_PATH
 }
@@ -210,24 +210,24 @@ print_debug_environment() {
   log_debug "env" "ARTIFACTS_DIR=${ARTIFACTS_DIR:-}"
 
   if declare -f component_prefix_path >/dev/null 2>&1; then
-    local glibc_arm_prefix="(unavailable)"
-    local glibc_arm64_prefix="(unavailable)"
-    if glibc_arm_prefix=$(component_prefix_path "glibc" "arm" 2>/dev/null); then
+    local musl_arm_prefix="(unavailable)"
+    local musl_arm64_prefix="(unavailable)"
+    if musl_arm_prefix=$(component_prefix_path "musl" "arm" 2>/dev/null); then
       :
     else
-      glibc_arm_prefix="(unavailable)"
+      musl_arm_prefix="(unavailable)"
     fi
-    if glibc_arm64_prefix=$(component_prefix_path "glibc" "arm64" 2>/dev/null); then
+    if musl_arm64_prefix=$(component_prefix_path "musl" "arm64" 2>/dev/null); then
       :
     else
-      glibc_arm64_prefix="(unavailable)"
+      musl_arm64_prefix="(unavailable)"
     fi
-    log_debug "env" "glibc arm prefix: $glibc_arm_prefix"
-    log_debug "env" "glibc arm64 prefix: $glibc_arm64_prefix"
+    log_debug "env" "musl arm prefix: $musl_arm_prefix"
+    log_debug "env" "musl arm64 prefix: $musl_arm64_prefix"
   fi
 
-  if [ -n "${L4RE_LIBC_GLIBC_PREFIX:-}" ]; then
-    log_debug "env" "L4RE_LIBC_GLIBC_PREFIX=${L4RE_LIBC_GLIBC_PREFIX}"
+  if [ -n "${L4RE_LIBC_MUSL_PREFIX:-}" ]; then
+    log_debug "env" "L4RE_LIBC_MUSL_PREFIX=${L4RE_LIBC_MUSL_PREFIX}"
   fi
 }
 
@@ -241,7 +241,7 @@ print_debug_environment() {
 
 readonly -a BUILD_COMPONENT_IDS=(
   bash
-  glibc
+  musl
   libcap
   libcrypt
   libblkid
@@ -253,7 +253,7 @@ readonly -a BUILD_COMPONENT_IDS=(
 
 declare -A BUILD_COMPONENT_LABELS=(
   [bash]="GNU Bash shell"
-  [glibc]="OSv glibc compatibility layer"
+  [musl]="musl libc runtime"
   [libcap]="libcap (POSIX capabilities)"
   [libcrypt]="libxcrypt (libcrypt)"
   [libblkid]="util-linux libblkid"
@@ -798,41 +798,51 @@ LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERS
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
 
-GLIBC_OSV_COMMIT=fe48bcd9065ac625a54aef7b6c46fe70db8fcf7f
-GLIBC_OSV_URL="https://github.com/cloudius-systems/osv.git"
-GLIBC_MUSL_SUBMODULE="musl_1.1.24"
-GLIBC_MUSL_COMMIT=ea9525c8bcf6170df59364c4bcd616de1acf8703
-GLIBC_VERSION="$GLIBC_OSV_COMMIT"
+MUSL_VERSION=1.2.5
+MUSL_URL="https://musl.libc.org/releases/musl-${MUSL_VERSION}.tar.gz"
 
-build_glibc_component() {
+build_musl_component() {
   set -e
   local arch
-  local need_glibc=false
+  local need_musl=false
   local override_used=false
   local cross=""
   local install_prefix=""
-  local build_status=0
-  local unsupported_arches=()
+  local musl_src_dir=""
 
   for arch in arm arm64; do
-    if component_override_used "glibc" "$arch"; then
+    if component_override_used "musl" "$arch"; then
       override_used=true
       continue
     fi
-    if ! component_is_current "glibc" "$arch" "lib/libc.so" "$GLIBC_VERSION"; then
-      need_glibc=true
+    if ! component_is_current "musl" "$arch" "lib/libc.so" "$MUSL_VERSION"; then
+      need_musl=true
       break
     fi
   done
 
-  if [ "$need_glibc" = true ]; then
+  if [ "$need_musl" = true ]; then
+    musl_src_dir=$(mktemp -d src/musl-XXXXXX)
+    curl -L "$MUSL_URL" | tar -xz -C "$musl_src_dir" --strip-components=1
+
+    local patch_dir="$SCRIPT_DIR/patches/musl"
+    if [ -d "$patch_dir" ]; then
+      (
+        cd "$musl_src_dir"
+        for patch_file in "$patch_dir"/*.patch; do
+          [ -e "$patch_file" ] || continue
+          patch -p1 -N <"$patch_file"
+        done
+      )
+    fi
+
     for arch in arm arm64; do
-      if component_override_used "glibc" "$arch"; then
-        echo "Skipping glibc build for $arch; using prebuilt artifacts from $(component_prefix_path "glibc" "$arch")"
+      if component_override_used "musl" "$arch"; then
+        echo "Skipping musl build for $arch; using prebuilt artifacts from $(component_prefix_path "musl" "$arch")"
         continue
       fi
-      if component_is_current "glibc" "$arch" "lib/libc.so" "$GLIBC_VERSION"; then
-        echo "glibc for $arch already current, skipping"
+      if component_is_current "musl" "$arch" "lib/libc.so" "$MUSL_VERSION"; then
+        echo "musl for $arch already current, skipping"
         continue
       fi
 
@@ -844,73 +854,37 @@ build_glibc_component() {
           cross="$CROSS_COMPILE_ARM64"
           ;;
         *)
-          echo "Unsupported architecture '$arch' for glibc build" >&2
+          echo "Unsupported architecture '$arch' for musl build" >&2
           COMPONENT_BUILD_NOTE="unsupported architecture"
+          rm -rf "$musl_src_dir"
           return 1
           ;;
       esac
 
-      install_prefix="$(component_prefix_path "glibc" "$arch")"
+      install_prefix="$(component_prefix_path "musl" "$arch")"
 
-      if ! "$SCRIPT_DIR/build_glibc.sh" \
+      if ! "$SCRIPT_DIR/build_musl.sh" \
           "$arch" \
           "$cross" \
-          "$GLIBC_VERSION" \
+          "$MUSL_VERSION" \
           "$install_prefix" \
-          "$GLIBC_OSV_URL" \
-          "$GLIBC_OSV_COMMIT" \
-          "$GLIBC_MUSL_SUBMODULE" \
-          "$GLIBC_MUSL_COMMIT"; then
-        build_status=$?
-        if [ $build_status -eq 3 ]; then
-          unsupported_arches+=("$arch")
-          continue
-        fi
+          "$musl_src_dir"; then
         COMPONENT_BUILD_NOTE="build failed"
+        rm -rf "$musl_src_dir"
         return 1
       fi
     done
 
-    if [ ${#unsupported_arches[@]} -gt 0 ]; then
-      local -a fatal_arches=()
-      local -a skipped_arches=()
-      local unsupported
-      for unsupported in "${unsupported_arches[@]}"; do
-        case "$unsupported" in
-          arm)
-            skipped_arches+=("$unsupported")
-            ;;
-          *)
-            fatal_arches+=("$unsupported")
-            ;;
-        esac
-      done
-
-      if [ ${#fatal_arches[@]} -gt 0 ]; then
-        echo "glibc build unsupported for: ${fatal_arches[*]}" >&2
-        if [ ${#skipped_arches[@]} -gt 0 ]; then
-          echo "glibc build also skipped for: ${skipped_arches[*]}" >&2
-        fi
-        COMPONENT_BUILD_NOTE="unsupported: ${fatal_arches[*]}"
-        return 1
-      fi
-
-      if [ ${#skipped_arches[@]} -gt 0 ]; then
-        echo "Skipping glibc build for unsupported architecture(s): ${skipped_arches[*]}"
-        COMPONENT_BUILD_NOTE="built (missing ${skipped_arches[*]})"
-        return 0
-      fi
-    fi
-
+    rm -rf "$musl_src_dir"
     COMPONENT_BUILD_NOTE="built"
     return 0
   fi
 
   if [ "$override_used" = true ]; then
-    echo "glibc builds provided by environment overrides"
+    echo "musl builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "glibc for arm and arm64 already current, skipping"
+    echo "musl for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1427,7 +1401,7 @@ EOF
 
     local runtime_prefix
     runtime_prefix="$(component_prefix_path "$component" "$arch")"
-    if [ "$component" = "glibc" ] && [ -d "pkg/$component" ]; then
+    if [ "$component" = "musl" ] && [ -d "pkg/$component" ]; then
       local l4_root=""
       local primary_l4_root="$REPO_ROOT/src/l4"
       local fallback_l4_root="$REPO_ROOT/src/l4re-core/src/l4"
@@ -1447,7 +1421,7 @@ EOF
         install \
         L4ARCH="$arch" \
         INSTDIR="$pkg_stage_dir" \
-        GLIBC_STAGE_DIR="$runtime_prefix" \
+        MUSL_STAGE_DIR="$runtime_prefix" \
         L4DIR="$l4_root"
       runtime_prefix="$pkg_stage_dir"
     fi
@@ -1542,16 +1516,16 @@ EOF
       continue
     fi
     case "$component" in
-      glibc)
+      musl)
         stage_component_runtime_libraries "$component" "arm64" \
-          "ld-linux-*.so*" \
+          "ld-musl-*.so*" \
           "libc.so*" \
           "libpthread.so*" \
           "libm.so*" \
           "libdl.so*" \
           "librt.so*" \
           "libresolv.so*" \
-          "libnss_*.so*"
+          "libutil.so*"
         ;;
       libcap)
         stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
@@ -1603,10 +1577,10 @@ EOF
   return 0
 }
 
-run_component_build "glibc" build_glibc_component
+run_component_build "musl" build_musl_component
 
 if (( BUILD_FAILURE_COUNT == 0 )); then
-  prepare_rust_glibc_environment
+  prepare_rust_musl_environment
 
   # Build the Rust libc crate so other crates can link against it
   cargo build -p l4re-libc --release

@@ -3,14 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const GLIBC_LIBS: &[&str] = &["c", "pthread", "dl", "m", "rt", "resolv", "crypt", "util"];
+const MUSL_LIBS: &[&str] = &["c", "pthread", "dl", "m", "rt", "resolv"];
 
 fn main() {
     if env::var_os("CARGO_FEATURE_SYSCALL_FALLBACKS").is_some() {
         compile_syscall_wrappers();
     }
 
-    configure_glibc_linkage();
+    configure_musl_linkage();
 }
 
 fn compile_syscall_wrappers() {
@@ -24,36 +24,36 @@ fn compile_syscall_wrappers() {
     build.compile("l4re_libc_c");
 }
 
-fn configure_glibc_linkage() {
-    let prefix = resolve_glibc_prefix();
+fn configure_musl_linkage() {
+    let prefix = resolve_musl_prefix();
     let lib_dir = prefix.join("lib");
     if !lib_dir.is_dir() {
         panic!(
-            "glibc prefix '{}' does not contain a 'lib' directory",
+            "musl prefix '{}' does not contain a 'lib' directory",
             prefix.display()
         );
     }
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    for lib in GLIBC_LIBS {
+    for lib in MUSL_LIBS {
         println!("cargo:rustc-link-lib={}", lib);
     }
 }
 
-fn resolve_glibc_prefix() -> PathBuf {
+fn resolve_musl_prefix() -> PathBuf {
     let manifest_dir =
         PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"));
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".to_string());
 
     let mut env_candidates = Vec::new();
     let arch_upper = target_arch.to_uppercase();
-    env_candidates.push(format!("L4RE_LIBC_GLIBC_PREFIX_{}", arch_upper));
+    env_candidates.push(format!("L4RE_LIBC_MUSL_PREFIX_{}", arch_upper));
     match target_arch.as_str() {
-        "aarch64" => env_candidates.push("L4RE_LIBC_GLIBC_PREFIX_ARM64".to_string()),
-        "arm" => env_candidates.push("L4RE_LIBC_GLIBC_PREFIX_ARM".to_string()),
+        "aarch64" => env_candidates.push("L4RE_LIBC_MUSL_PREFIX_ARM64".to_string()),
+        "arm" => env_candidates.push("L4RE_LIBC_MUSL_PREFIX_ARM".to_string()),
         _ => {}
     }
-    env_candidates.push("L4RE_LIBC_GLIBC_PREFIX".to_string());
+    env_candidates.push("L4RE_LIBC_MUSL_PREFIX".to_string());
 
     for var in &env_candidates {
         println!("cargo:rerun-if-env-changed={}", var);
@@ -78,15 +78,15 @@ fn resolve_glibc_prefix() -> PathBuf {
         .join("..")
         .join("..")
         .join("out")
-        .join("glibc")
+        .join("musl")
         .join(stage_arch);
     if default_prefix.exists() {
         return canonicalize(&default_prefix);
     }
 
     panic!(
-        "Unable to locate glibc staging prefix for target arch '{}'. \
-Set L4RE_LIBC_GLIBC_PREFIX or L4RE_LIBC_GLIBC_PREFIX_{} to the staged glibc directory.",
+        "Unable to locate musl staging prefix for target arch '{}'. \
+Set L4RE_LIBC_MUSL_PREFIX or L4RE_LIBC_MUSL_PREFIX_{} to the staged musl directory.",
         target_arch,
         arch_uppercase_fallback(&target_arch)
     );
