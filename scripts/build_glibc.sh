@@ -44,6 +44,28 @@ clone_osv_tree() {
   fi
 }
 
+sanitize_for_filename() {
+  local input="$1"
+  printf '%s' "$input" | tr -c 'A-Za-z0-9._-' '_'
+}
+
+archive_patched_osv_sources() {
+  local osv_dir="$1" dest_dir="$2" archive_name="$3"
+
+  local osv_parent osv_basename archive_tmp dest_path
+
+  osv_parent="$(dirname "$osv_dir")"
+  osv_basename="$(basename "$osv_dir")"
+  archive_tmp="$(mktemp "$GLIBC_BUILD_TMPDIR/osv-src.XXXXXX.tgz")"
+
+  tar --exclude-vcs -czf "$archive_tmp" -C "$osv_parent" "$osv_basename"
+
+  mkdir -p "$dest_dir"
+  dest_path="$dest_dir/$archive_name"
+  mv -f "$archive_tmp" "$dest_path"
+  echo "Archived patched OSv sources to $dest_path"
+}
+
 normalize_join_path() {
   local base="$1" rel="$2"
   python3 - "$base" "$rel" <<'PY'
@@ -248,6 +270,11 @@ main() {
       done
     )
   fi
+
+  local sanitized_commit
+  sanitized_commit="$(sanitize_for_filename "$osv_commit")"
+  local archive_name="osv-glibc-src-${arch}-${sanitized_commit}.tgz"
+  archive_patched_osv_sources "$osv_dir" "$REPO_ROOT/obj" "$archive_name"
 
   local osv_arch
   case "$arch" in
