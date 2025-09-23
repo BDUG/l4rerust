@@ -872,9 +872,34 @@ build_glibc_component() {
     done
 
     if [ ${#unsupported_arches[@]} -gt 0 ]; then
-      echo "glibc build unsupported for: ${unsupported_arches[*]}" >&2
-      COMPONENT_BUILD_NOTE="unsupported: ${unsupported_arches[*]}"
-      return 1
+      local -a fatal_arches=()
+      local -a skipped_arches=()
+      local unsupported
+      for unsupported in "${unsupported_arches[@]}"; do
+        case "$unsupported" in
+          arm)
+            skipped_arches+=("$unsupported")
+            ;;
+          *)
+            fatal_arches+=("$unsupported")
+            ;;
+        esac
+      done
+
+      if [ ${#fatal_arches[@]} -gt 0 ]; then
+        echo "glibc build unsupported for: ${fatal_arches[*]}" >&2
+        if [ ${#skipped_arches[@]} -gt 0 ]; then
+          echo "glibc build also skipped for: ${skipped_arches[*]}" >&2
+        fi
+        COMPONENT_BUILD_NOTE="unsupported: ${fatal_arches[*]}"
+        return 1
+      fi
+
+      if [ ${#skipped_arches[@]} -gt 0 ]; then
+        echo "Skipping glibc build for unsupported architecture(s): ${skipped_arches[*]}"
+        COMPONENT_BUILD_NOTE="built (missing ${skipped_arches[*]})"
+        return 0
+      fi
     fi
 
     COMPONENT_BUILD_NOTE="built"
