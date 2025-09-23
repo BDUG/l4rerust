@@ -34,8 +34,14 @@ if [ "$cmd" != "clean" ]; then
   fi
 
   (
-    cd "$SCRIPT_DIR/../src" &&
-    ham init -u https://github.com/kernkonzept/manifest.git &&
+    cd "$SCRIPT_DIR/../src" || exit 1
+
+    if [ ! -d .ham ] || [ ! -f .ham/manifests_json ]; then
+      ham init -u https://github.com/kernkonzept/manifest.git
+    else
+      echo "ham manifest already initialized, skipping init"
+    fi
+
     if ham sync l4re-core fiasco; then
       :
     else
