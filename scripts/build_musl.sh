@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+build_dir=""
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -10,6 +12,13 @@ source "$SCRIPT_DIR/common_build.sh"
 usage() {
   echo "Usage: $0 <arch> <cross-prefix> <expected-version> <install-prefix> <src-dir>" >&2
   exit 1
+}
+
+cleanup() {
+  local dir="${build_dir:-}"
+  if [ -n "$dir" ]; then
+    rm -rf "$dir"
+  fi
 }
 
 main() {
@@ -54,9 +63,8 @@ main() {
   rm -rf "$install_prefix"
   mkdir -p "$install_prefix"
 
-  local build_dir
   build_dir=$(mktemp -d "$src_dir/build-${arch}.XXXXXX")
-  trap 'rm -rf "$build_dir"' EXIT
+  trap cleanup EXIT
 
   local jobs=1
   if command -v nproc >/dev/null 2>&1; then
