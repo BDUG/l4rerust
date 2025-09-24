@@ -53,6 +53,23 @@ A new smoke test (`musl_smoke.rs`) ensures the staged libc exports core
 symbols such as `eventfd`, verifying that musl is correctly deployed and can be
 loaded via `dlopen`/`dlsym`.
 
+### Code reference across the repository
+
+The integration spans several parts of the tree:
+
+- `scripts/build.sh`: exposes the `musl` component, wires it into the shared
+  component infrastructure, and primes the runtime environment via
+  `prepare_rust_musl_environment` so Rust crates discover the staged runtime.
+- `scripts/build_musl.sh`: performs the out-of-tree musl build using the
+  architecture-specific cross compiler, installs headers and libraries into
+  `out/musl/<arch>`, and emits a `musl.pc` pkg-config file.
+- `pkg/musl/Makefile`: copies the staged headers, libraries, and pkg-config
+  files into the layout expected by L4Re so the kernel can load the runtime.
+- `crates/l4re-libc/build.rs`: discovers the staging prefix, adds the relevant
+  link search paths, and ensures Rust code links against the musl libraries.
+- `crates/l4re-libc/tests/musl_smoke.rs`: verifies that the staged libc exports
+  critical symbols by loading the shared object at runtime.
+
 ### Packaging for L4Re
 
 The packaging layer under `pkg/` has been updated with a `musl` package that
@@ -88,6 +105,31 @@ Rust applications and ancillary components inherit the `LIBRARY_PATH` and
 environment exports `L4RE_LIBC_MUSL_PREFIX` variables so that downstream build
 systems (including cargo build scripts, cmake projects, and pkg-config aware
 consumers) can reference the musl prefix explicitly.
+
+## Reproducing and Verifying the Integration
+
+1. Run `scripts/build.sh --components musl` (or include `musl` in the default
+   component selection) to populate `out/musl/<arch>` with the musl headers,
+   libraries, loader, and pkg-config metadata for both ARM and ARM64.
+2. Inspect the staged runtime under `out/musl/<arch>/lib` and confirm that the
+   architecture-specific loader (for example `ld-musl-aarch64.so.1`) and shared
+   libraries (`libc.so`, `libpthread.so`, `libdl.so`, and friends) are present.
+3. The build script automatically propagates the staging prefix to cargo via
+   `L4RE_LIBC_MUSL_PREFIX_<ARCH>`. To exercise the smoke test directly, run:
+
+   ```bash
+   L4RE_LIBC_MUSL_PREFIX_AARCH64=$PWD/out/musl/arm64 \
+   cargo test -p l4re-libc --test musl_smoke --target aarch64-unknown-linux-musl
+   ```
+
+   Adjust the environment variable and target triple for ARM if desired. The
+   test succeeds once the staged musl runtime is visible to the linker and
+   exports the expected symbols.
+4. Invoke `scripts/build.sh` with additional components (for example
+   `--components musl,systemd,lsb_root`) to produce the bootable root
+   filesystem. Inspect `config/lsb_root` or mount `out/images/lsb_root.img` to
+   confirm that the musl loader and shared libraries have been copied into
+   `/lib` and `/usr/lib`, ready for consumption by the L4Re kernel.
 
 ## Cleanup and Maintenance Benefits
 
