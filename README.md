@@ -53,3 +53,9 @@ The interactive `dialog` menu also lets you review and edit the cross-compiler
 prefixes before building. Leave a field blank to fall back to the detected
 defaults or mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
 
+## Documentation
+
+- [Integrating musl libc with L4Re](docs/musl_integration_whitepaper.md)
+  explains how the musl runtime is built, packaged, and made available to the
+  L4Re kernel and Rust toolchain.
+
