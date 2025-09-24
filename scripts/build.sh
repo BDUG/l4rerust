@@ -1686,11 +1686,24 @@ PY
     local source_root="obj/l4"
     local distribution_dir="distribution"
     local distribution_images_dir="$distribution_dir/images"
+    local staged_rootfs_source="${ARTIFACTS_DIR:-out}/images/lsb_root.img"
+    local staged_rootfs_dest="$distribution_images_dir/lsb_root.img"
 
     mkdir -p "$distribution_images_dir"
 
     if [ ! -d "$source_root" ]; then
       return
+    fi
+
+    if [ -f "$staged_rootfs_source" ]; then
+      if [ "$staged_rootfs_source" -ef "$staged_rootfs_dest" ]; then
+        :
+      else
+        echo "Staging root filesystem $(basename "$staged_rootfs_source") into $distribution_images_dir"
+        cp -f "$staged_rootfs_source" "$staged_rootfs_dest"
+      fi
+    else
+      echo "Warning: root filesystem image not found at $staged_rootfs_source; skipping staging" >&2
     fi
 
     local -a images=()

@@ -53,6 +53,18 @@ The interactive `dialog` menu also lets you review and edit the cross-compiler
 prefixes before building. Leave a field blank to fall back to the detected
 defaults or mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
 
+## Running the QEMU Environment
+
+After a successful build, invoke `scripts/runqemu.sh` to boot the latest
+staged image inside QEMU. The helper automatically copies
+`out/images/lsb_root.img` into `distribution/images/` during the build and
+attaches the resulting root filesystem to QEMU as a virtio-blk device.
+
+Pass `--rootfs /path/to/other.img` to try an alternate filesystem or
+`--no-rootfs` to skip attaching any block device when debugging bare kernels.
+Additional arguments after `--` are forwarded verbatim to the underlying QEMU
+invocation.
+
 ## Documentation
 
 - [Integrating musl libc with L4Re](docs/musl_integration_whitepaper.md)
