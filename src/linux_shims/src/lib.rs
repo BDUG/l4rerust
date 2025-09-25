@@ -3,6 +3,7 @@
 use core::ffi::{c_char, c_void};
 use core::sync::atomic::{AtomicBool, Ordering};
 
+#[link(name = "c")]
 extern "C" {
     fn vprintf(fmt: *const c_char, args: *mut c_void) -> i32;
 }
