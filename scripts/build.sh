@@ -97,6 +97,7 @@ determine_rust_target_triple() {
 determine_rust_target_arch() {
   local triple
   triple=$(determine_rust_target_triple) || return 1
+  echo "RUST TRIPLE $triple"
   if [ -z "$triple" ]; then
     return 1
   fi
