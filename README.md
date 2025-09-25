@@ -52,8 +52,11 @@ automation. Build artifacts are placed under `out/`.
 The interactive `dialog` menu also lets you review and edit the cross-compiler
 prefixes before building. The form now includes the Rust target triple (applied
 to `CARGO_BUILD_TARGET`/`RUST_TARGET_TRIPLE`) so the Rust toolchain follows the
-selected cross-compilers. Leave a field blank to fall back to the detected
-defaults or mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
+selected cross-compilers. A dedicated selection lists the Tier 1 Rust
+cross-compilation targets (e.g. `aarch64-unknown-linux-gnu`,
+`x86_64-pc-windows-msvc`) as quick presets before the manual form appears.
+Leave a field blank to fall back to the detected defaults or mirror the ARM64
+prefix into the general `CROSS_COMPILE` setting.
 
 ## Running the QEMU Environment
 

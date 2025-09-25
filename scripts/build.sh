@@ -585,6 +585,61 @@ prompt_cross_compile_prefixes() {
     fi
   fi
 
+  local manual_desc="Enter custom target / keep current value"
+  if [ -n "$default_rust_target" ]; then
+    manual_desc+=" ($default_rust_target)"
+  fi
+
+  local -a rust_target_menu=(
+    "__manual__" "$manual_desc"
+    "aarch64-apple-darwin" "ARM64 macOS (11.0+, Big Sur+)"
+    "aarch64-pc-windows-msvc" "ARM64 Windows MSVC"
+    "aarch64-unknown-linux-gnu" "ARM64 Linux (kernel 4.1+, glibc 2.17+)"
+    "i686-pc-windows-msvc" "32-bit MSVC (Windows 7+, Windows Server 2008R2+)"
+    "i686-unknown-linux-gnu" "32-bit Linux (kernel 3.2+, glibc 2.17+, Pentium 4)"
+    "x86_64-apple-darwin" "64-bit macOS (10.7+, Lion+)"
+    "x86_64-pc-windows-msvc" "64-bit MSVC (Windows 7+, Windows Server 2008R2+)"
+    "x86_64-unknown-linux-gnu" "64-bit Linux (kernel 3.2+, glibc 2.17+)"
+  )
+
+  local default_menu_item="__manual__"
+  local option_index
+  for ((option_index = 0; option_index < ${#rust_target_menu[@]}; option_index += 2)); do
+    if [ "${rust_target_menu[$option_index]}" = "$default_rust_target" ]; then
+      default_menu_item="$default_rust_target"
+      break
+    fi
+  done
+
+  local rust_target_menu_height=$(( ${#rust_target_menu[@]} / 2 ))
+  if [ $rust_target_menu_height -lt 1 ]; then
+    rust_target_menu_height=1
+  fi
+
+  local tmp_rust_menu
+  tmp_rust_menu=$(mktemp)
+  local rust_menu_status=0
+  if ! dialog --clear \
+      --backtitle "L4Re external components" \
+      --default-item "$default_menu_item" \
+      --menu "Select a Rust cross-compilation target triple" 20 80 $rust_target_menu_height \
+      "${rust_target_menu[@]}" 2>"$tmp_rust_menu"; then
+    rust_menu_status=$?
+  fi
+
+  local selected_rust_target=""
+  if [ $rust_menu_status -ne 0 ]; then
+    rm -f "$tmp_rust_menu"
+    return 1
+  fi
+
+  selected_rust_target=$(<"$tmp_rust_menu")
+  rm -f "$tmp_rust_menu"
+
+  if [ -n "$selected_rust_target" ] && [ "$selected_rust_target" != "__manual__" ]; then
+    default_rust_target="$selected_rust_target"
+  fi
+
   local tmpfile
   tmpfile=$(mktemp)
   local dialog_status=0
