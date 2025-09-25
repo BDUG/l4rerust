@@ -1733,66 +1733,6 @@ else
 
   run_component_build "lsb_root" build_lsb_root_component
 
-  resolve_realpath_portable() {
-    local path="$1"
-
-    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
-      return 1
-    fi
-
-    local resolved
-    if command -v realpath >/dev/null 2>&1; then
-      if resolved=$(realpath "$path" 2>/dev/null); then
-        printf '%s\n' "$resolved"
-        return 0
-      fi
-    fi
-
-    if command -v python3 >/dev/null 2>&1; then
-      if resolved=$(python3 - "$path" <<'PY' 2>/dev/null); then
-import os
-import sys
-
-try:
-    print(os.path.realpath(sys.argv[1]))
-except OSError:
-    sys.exit(1)
-PY
-        printf '%s\n' "$resolved"
-        return 0
-      fi
-    fi
-
-    if command -v readlink >/dev/null 2>&1; then
-      local current="$path"
-      local dir
-      local link
-
-      if [[ "$current" != /* ]]; then
-        dir=$(cd "$(dirname "$current")" && pwd -P) || return 1
-        current="$dir/$(basename "$current")"
-      fi
-
-      while [ -L "$current" ]; do
-        link=$(readlink "$current") || return 1
-        if [[ "$link" == /* ]]; then
-          current="$link"
-        else
-          current="$(dirname "$current")/$link"
-        fi
-        if [[ "$current" != /* ]]; then
-          dir=$(cd "$(dirname "$current")" && pwd -P) || return 1
-          current="$dir/$(basename "$current")"
-        fi
-      done
-
-      printf '%s\n' "$current"
-      return 0
-    fi
-
-    return 1
-  }
-
   # Collect key build artifacts
   stage_bootable_images() {
     local source_root="obj/l4"
@@ -1850,7 +1790,7 @@ PY
       [ -n "$file" ] || continue
       source_path="$file"
       if [ -L "$file" ]; then
-        if resolved=$(resolve_realpath_portable "$file" 2>/dev/null); then
+        if resolved=$(resolve_path "$file" 2>/dev/null); then
           source_path="$resolved"
         else
           echo "Warning: unable to resolve symlink $file; skipping"
