@@ -592,15 +592,23 @@ prompt_cross_compile_prefixes() {
 
   local -a rust_target_menu=(
     "__manual__" "$manual_desc"
-    "aarch64-apple-darwin" "ARM64 macOS (11.0+, Big Sur+)"
-    "aarch64-pc-windows-msvc" "ARM64 Windows MSVC"
-    "aarch64-unknown-linux-gnu" "ARM64 Linux (kernel 4.1+, glibc 2.17+)"
-    "i686-pc-windows-msvc" "32-bit MSVC (Windows 7+, Windows Server 2008R2+)"
-    "i686-unknown-linux-gnu" "32-bit Linux (kernel 3.2+, glibc 2.17+, Pentium 4)"
-    "x86_64-apple-darwin" "64-bit macOS (10.7+, Lion+)"
-    "x86_64-pc-windows-msvc" "64-bit MSVC (Windows 7+, Windows Server 2008R2+)"
-    "x86_64-unknown-linux-gnu" "64-bit Linux (kernel 3.2+, glibc 2.17+)"
   )
+
+  local -a available_rust_targets=()
+  if command -v rustc >/dev/null 2>&1; then
+    if mapfile -t available_rust_targets < <(rustc --print target-list 2>/dev/null); then
+      log_debug "env" "Loaded $((${#available_rust_targets[@]})) rustc targets"
+    else
+      log_debug "env" "Unable to load rustc target list"
+    fi
+  else
+    log_debug "env" "rustc not available to query target list"
+  fi
+
+  local target
+  for target in "${available_rust_targets[@]}"; do
+    rust_target_menu+=("$target" "$target")
+  done
 
   local default_menu_item="__manual__"
   local option_index
@@ -614,6 +622,8 @@ prompt_cross_compile_prefixes() {
   local rust_target_menu_height=$(( ${#rust_target_menu[@]} / 2 ))
   if [ $rust_target_menu_height -lt 1 ]; then
     rust_target_menu_height=1
+  elif [ $rust_target_menu_height -gt 20 ]; then
+    rust_target_menu_height=20
   fi
 
   local tmp_rust_menu
