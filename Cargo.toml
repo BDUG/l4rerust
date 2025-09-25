@@ -12,6 +12,9 @@ members = [
     "crates/l4re-libc",
     "crates/net-client",
 ]
+default-members = [
+    "tools/driver_picker"
+]
 
 [profile.dev]
 panic = "abort"

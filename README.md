@@ -70,6 +70,13 @@ Pass `--rootfs /path/to/other.img` to try an alternate filesystem or
 Additional arguments after `--` are forwarded verbatim to the underlying QEMU
 invocation.
 
+## Running tests
+
+Only the `driver_picker` utility is part of the default workspace test set.
+This avoids fetching L4Re sources from GitHub when running in an offline
+environment. Invoke `cargo test -p <crate>` explicitly if you need to exercise
+other components.
+
 ## Documentation
 
 - [Integrating musl libc with L4Re](docs/musl_integration_whitepaper.md)
