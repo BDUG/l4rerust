@@ -30,6 +30,15 @@ log_debug() {
   fi
 }
 
+format_display_value() {
+  local value="${1:-}"
+  if [ -n "$value" ]; then
+    printf '%s' "$value"
+  else
+    printf '(empty)'
+  fi
+}
+
 print_component_summary() {
   local component
   local result
@@ -69,6 +78,10 @@ source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
 determine_rust_target_triple() {
+  if [ -n "${RUST_TARGET_TRIPLE:-}" ]; then
+    printf '%s' "$RUST_TARGET_TRIPLE"
+    return 0
+  fi
   if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
     printf '%s' "$CARGO_BUILD_TARGET"
     return 0
@@ -97,12 +110,46 @@ determine_rust_target_triple() {
 determine_rust_target_arch() {
   local triple
   triple=$(determine_rust_target_triple) || return 1
-  echo "RUST TRIPLE $triple"
   if [ -z "$triple" ]; then
     return 1
   fi
 
   printf '%s' "${triple%%-*}"
+}
+
+set_rust_cross_compile_target() {
+  local triple="${1:-}"
+
+  if [ -n "$triple" ]; then
+    RUST_TARGET_TRIPLE="$triple"
+    CARGO_BUILD_TARGET="$triple"
+    CARGO_TARGET="$triple"
+    RUST_TARGET="$triple"
+    export RUST_TARGET_TRIPLE CARGO_BUILD_TARGET CARGO_TARGET RUST_TARGET
+  else
+    unset RUST_TARGET_TRIPLE
+    unset CARGO_BUILD_TARGET
+    unset CARGO_TARGET
+    unset RUST_TARGET
+  fi
+}
+
+initialise_rust_target_from_environment() {
+  if [ -n "${RUST_TARGET_TRIPLE:-}" ]; then
+    set_rust_cross_compile_target "$RUST_TARGET_TRIPLE"
+    return
+  fi
+  if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
+    set_rust_cross_compile_target "$CARGO_BUILD_TARGET"
+    return
+  fi
+  if [ -n "${CARGO_TARGET:-}" ]; then
+    set_rust_cross_compile_target "$CARGO_TARGET"
+    return
+  fi
+  if [ -n "${RUST_TARGET:-}" ]; then
+    set_rust_cross_compile_target "$RUST_TARGET"
+  fi
 }
 
 prepare_rust_musl_environment() {
@@ -201,6 +248,7 @@ print_debug_environment() {
 
   log_debug "env" "Rust target triple: $rust_triple"
   log_debug "env" "Rust target arch: $rust_arch"
+  log_debug "env" "RUST_TARGET_TRIPLE=${RUST_TARGET_TRIPLE:-}"
   log_debug "env" "CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-}"
   log_debug "env" "CARGO_TARGET=${CARGO_TARGET:-}"
   log_debug "env" "RUST_TARGET=${RUST_TARGET:-}"
@@ -231,6 +279,8 @@ print_debug_environment() {
     log_debug "env" "L4RE_LIBC_MUSL_PREFIX=${L4RE_LIBC_MUSL_PREFIX}"
   fi
 }
+
+initialise_rust_target_from_environment
 
 # Usage: build.sh [options]
 #   --clean                    Remove previous build directories before building
@@ -484,6 +534,28 @@ prompt_cross_compile_prefixes() {
   local default_general="${CROSS_COMPILE:-}"
   local default_arm="${CROSS_COMPILE_ARM:-}"
   local default_arm64="${CROSS_COMPILE_ARM64:-}"
+  local default_rust_triple="${RUST_TARGET_TRIPLE:-}"
+  local default_cargo_build_target="${CARGO_BUILD_TARGET:-}"
+  local default_cargo_target="${CARGO_TARGET:-}"
+  local default_rust_target="${RUST_TARGET:-}"
+
+  if [ -z "$default_rust_triple" ]; then
+    if default_rust_triple=$(determine_rust_target_triple 2>/dev/null); then
+      :
+    else
+      default_rust_triple=""
+    fi
+  fi
+
+  if [ -z "$default_cargo_build_target" ]; then
+    default_cargo_build_target="$default_rust_triple"
+  fi
+  if [ -z "$default_cargo_target" ]; then
+    default_cargo_target="$default_rust_triple"
+  fi
+  if [ -z "$default_rust_target" ]; then
+    default_rust_target="$default_rust_triple"
+  fi
 
   if [ -z "$default_arm" ] || [ -z "$default_arm64" ] || [ -z "$default_general" ]; then
     case "$host_os" in
@@ -538,13 +610,21 @@ prompt_cross_compile_prefixes() {
   local tmpfile
   tmpfile=$(mktemp)
   local dialog_status=0
+  local rust_dialog_header
+  printf -v rust_dialog_header 'Edit cross-compilation settings used for external component builds.\n\nRust target variables currently resolve to:\n  RUST_TARGET_TRIPLE=%s\n  CARGO_BUILD_TARGET=%s\n  CARGO_TARGET=%s\n  RUST_TARGET=%s' \
+    "$(format_display_value "$default_rust_triple")" \
+    "$(format_display_value "$default_cargo_build_target")" \
+    "$(format_display_value "$default_cargo_target")" \
+    "$(format_display_value "$default_rust_target")"
+
   if ! dialog --clear \
       --backtitle "L4Re external components" \
-      --form "Edit cross-compiler prefixes used for external component builds." \
-      16 80 0 \
-      "General (CROSS_COMPILE)" 1 2 "$default_general" 1 34 60 0 \
-      "ARM (CROSS_COMPILE_ARM)" 3 2 "$default_arm" 3 34 60 0 \
-      "ARM64 (CROSS_COMPILE_ARM64)" 5 2 "$default_arm64" 5 34 60 0 \
+      --form "$rust_dialog_header" \
+      20 90 0 \
+      "General (CROSS_COMPILE)" 1 2 "$default_general" 1 34 70 0 \
+      "ARM (CROSS_COMPILE_ARM)" 4 2 "$default_arm" 4 34 70 0 \
+      "ARM64 (CROSS_COMPILE_ARM64)" 7 2 "$default_arm64" 7 34 70 0 \
+      "Rust target triple (CARGO_BUILD_TARGET)" 10 2 "$default_rust_triple" 10 34 70 0 \
       2>"$tmpfile"; then
     dialog_status=$?
   fi
@@ -561,14 +641,18 @@ prompt_cross_compile_prefixes() {
   local new_general="${_cross_values[0]:-}"
   local new_arm="${_cross_values[1]:-}"
   local new_arm64="${_cross_values[2]:-}"
+  local new_rust_target="${_cross_values[3]:-}"
 
   new_general="${new_general//$'\r'/}"
   new_arm="${new_arm//$'\r'/}"
   new_arm64="${new_arm64//$'\r'/}"
+  new_rust_target="${new_rust_target//$'\r'/}"
 
   CROSS_COMPILE="$new_general"
   CROSS_COMPILE_ARM="$new_arm"
   CROSS_COMPILE_ARM64="$new_arm64"
+
+  set_rust_cross_compile_target "$new_rust_target"
 
   if [ -z "$CROSS_COMPILE" ] && [ -n "$CROSS_COMPILE_ARM64" ]; then
     CROSS_COMPILE="$CROSS_COMPILE_ARM64"
@@ -576,10 +660,14 @@ prompt_cross_compile_prefixes() {
 
   export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 
-  echo "Cross-compiler prefixes configured via dialog:"
-  echo "  CROSS_COMPILE=${CROSS_COMPILE:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-"(empty)"}"
+  echo "Cross-compilation settings configured via dialog:"
+  echo "  CROSS_COMPILE=$(format_display_value "${CROSS_COMPILE:-}")"
+  echo "  CROSS_COMPILE_ARM=$(format_display_value "${CROSS_COMPILE_ARM:-}")"
+  echo "  CROSS_COMPILE_ARM64=$(format_display_value "${CROSS_COMPILE_ARM64:-}")"
+  echo "  RUST_TARGET_TRIPLE=$(format_display_value "${RUST_TARGET_TRIPLE:-}")"
+  echo "  CARGO_BUILD_TARGET=$(format_display_value "${CARGO_BUILD_TARGET:-}")"
+  echo "  CARGO_TARGET=$(format_display_value "${CARGO_TARGET:-}")"
+  echo "  RUST_TARGET=$(format_display_value "${RUST_TARGET:-}")"
 
   return 0
 }

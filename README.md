@@ -50,8 +50,11 @@ existing directories for incremental builds; `--no-clean` enforces this reuse in
 automation. Build artifacts are placed under `out/`.
 
 The interactive `dialog` menu also lets you review and edit the cross-compiler
-prefixes before building. Leave a field blank to fall back to the detected
-defaults or mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
+prefixes before building. The form now includes the Rust target triple and
+shows the resolved defaults for `RUST_TARGET_TRIPLE`, `CARGO_BUILD_TARGET`,
+`CARGO_TARGET`, and `RUST_TARGET` so the Rust toolchain follows the selected
+cross-compilers. Leave a field blank to fall back to the detected defaults or
+mirror the ARM64 prefix into the general `CROSS_COMPILE` setting.
 
 ## Running the QEMU Environment
 
