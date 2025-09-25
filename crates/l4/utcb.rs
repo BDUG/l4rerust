@@ -3,6 +3,7 @@ use core::{
     marker::PhantomData,
     mem::{align_of, size_of},
     ops::{Deref, DerefMut},
+    ptr,
 };
 
 use l4_sys::{
@@ -124,7 +125,6 @@ impl From<*mut l4_utcb_t> for Utcb {
     }
 }
 
-
 /// Flex page types
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
@@ -245,7 +245,11 @@ impl<U: UtcbRegSize> Registers<U> {
     /// The pointer must be valid.
     pub unsafe fn from_raw(buf: *mut u64) -> Self {
         let base = buf as *mut _ as *mut u8;
-        Registers { base, offset: 0, size: PhantomData }
+        Registers {
+            base,
+            offset: 0,
+            size: PhantomData,
+        }
     }
 
     /// Write given value to the next free, type-aligned slot
@@ -259,9 +263,7 @@ impl<U: UtcbRegSize> Registers<U> {
             .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
         l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
         // SAFETY: bounds have been checked above.
-        unsafe {
-            *(self.base.add(start) as *mut T) = val;
-        }
+        unsafe { ptr::write(self.base.add(start) as *mut T, val) };
         self.offset = end;
         Ok(())
     }
@@ -279,7 +281,7 @@ impl<U: UtcbRegSize> Registers<U> {
             .ok_or(Error::Generic(GenericErr::MsgTooLong))?;
         l4_err_if!(end > U::BUF_SIZE => Generic, MsgTooLong);
         // SAFETY: bounds have been checked above.
-        let val: T = unsafe { (*(self.base.add(start) as *mut T)).clone() };
+        let val: T = unsafe { ptr::read(self.base.add(start) as *const T) };
         self.offset = end;
         Ok(val)
     }
@@ -340,7 +342,10 @@ impl<U: UtcbRegSize> Registers<U> {
             .ok_or(Error::Generic(GenericErr::OutOfBounds))?;
         l4_err_if!(end > U::BUF_SIZE => Generic, OutOfBounds);
         self.offset = end; // advance offset behind last element
-        Ok(core::slice::from_raw_parts(self.base.add(start) as *const T, len))
+        Ok(core::slice::from_raw_parts(
+            self.base.add(start) as *const T,
+            len,
+        ))
     }
 
     /// Read a str from the message registers
