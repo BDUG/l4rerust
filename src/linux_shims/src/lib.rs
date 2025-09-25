@@ -8,6 +8,15 @@ extern "C" {
     fn vprintf(fmt: *const c_char, args: *mut c_void) -> i32;
 }
 
+#[cfg(any(target_env = "musl", target_os = "l4re"))]
+const MUSL_GLIBC_VERSION: &[u8] = b"musl-compatible\0";
+
+#[cfg(any(target_env = "musl", target_os = "l4re"))]
+#[no_mangle]
+pub extern "C" fn gnu_get_libc_version() -> *const c_char {
+    MUSL_GLIBC_VERSION.as_ptr().cast()
+}
+
 static INIT_DONE: AtomicBool = AtomicBool::new(false);
 static mut EXIT_HANDLER: Option<extern "C" fn()> = None;
 
