@@ -56,6 +56,7 @@ fn resolve_musl_prefix() -> Option<PathBuf> {
     match target_arch.as_str() {
         "aarch64" => env_candidates.push("L4RE_LIBC_MUSL_PREFIX_ARM64".to_string()),
         "arm" => env_candidates.push("L4RE_LIBC_MUSL_PREFIX_ARM".to_string()),
+        "armv8r" => env_candidates.push("L4RE_LIBC_MUSL_PREFIX_ARM".to_string()),
         _ => {}
     }
     env_candidates.push("L4RE_LIBC_MUSL_PREFIX".to_string());
@@ -81,6 +82,7 @@ fn resolve_musl_prefix() -> Option<PathBuf> {
     let stage_arch = match target_arch.as_str() {
         "aarch64" => "arm64",
         "arm" => "arm",
+        "armv8r" => "arm",
         other => other,
     };
 
@@ -116,6 +118,7 @@ fn canonicalize(path: &Path) -> PathBuf {
 fn arch_uppercase_fallback(target_arch: &str) -> String {
     match target_arch {
         "aarch64" => "ARM64".to_string(),
+        "armv8r" => "ARM".to_string(),
         other => other.to_uppercase(),
     }
 }

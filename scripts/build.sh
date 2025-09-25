@@ -160,6 +160,9 @@ prepare_rust_musl_environment() {
     arm)
       stage_arch="arm"
       ;;
+    armv8r)
+      stage_arch="arm"
+      ;;
     aarch64)
       stage_arch="arm64"
       ;;
