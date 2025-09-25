@@ -8,6 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/common_build.sh
 source "$SCRIPT_DIR/common_build.sh"
+REPO_ROOT="$(resolve_path "$SCRIPT_DIR/..")"
+cd "$REPO_ROOT"
 
 # Handle optional non-interactive mode which runs both config and setup in
 # one go. When invoked as `scripts/setup.sh --non-interactive` the script will skip
@@ -267,12 +269,38 @@ clean_lsb_root_directory()
   clean_directory_except "$systemd_units_dir" "${preserved_units[@]}"
 }
 
+clean_rust_artifacts()
+{
+  local repo_root="${REPO_ROOT:-$(pwd)}"
+  local -a search_roots=(
+    "$repo_root/src"
+    "$repo_root/crates"
+    "$repo_root/tools"
+  )
+
+  local root
+  for root in "${search_roots[@]}"; do
+    [ -d "$root" ] || continue
+
+    while IFS= read -r -d '' lock_file; do
+      if [ "$lock_file" != "$repo_root/Cargo.lock" ]; then
+        rm -f "$lock_file"
+      fi
+    done < <(find "$root" -type f -name Cargo.lock -print0)
+
+    while IFS= read -r -d '' target_dir; do
+      rm -rf "$target_dir"
+    done < <(find "$root" -type d -name target -print0)
+  done
+}
+
 do_clean()
 {
   # Remove build artifacts and staged directories created by the build scripts
   rm -rf obj
   rm -rf out distribution
   rm -rf config/pkg_staging
+  clean_rust_artifacts
   clean_lsb_root_directory
 }
 
