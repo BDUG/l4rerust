@@ -151,14 +151,10 @@ write_config()
   mkdir -p obj
   echo '# snapshot build configuration' > obj/.config
 
-  for c in CONF_DO_ARM \
-           CONF_DO_ARM_VIRT_PL2 \
-           CONF_DO_ARM64 \
+  for c in CONF_DO_ARM64 \
            CONF_DO_ARM64_VIRT_EL2 \
-           CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
            CROSS_COMPILE \
-           CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
   ; do
     local v=$(eval echo \$$c)
@@ -331,15 +327,7 @@ do_clean()
 do_config()
 {
   if [ -n "$SETUP_CONFIG_ALL" ]; then
-    CONF_DO_ARM=1
     CONF_DO_ARM64=1
-
-    CONF_DO_ARM_VIRT_PL2=1
-    CONF_DO_ARM_RPIZ=0
-    CONF_DO_ARM_RPI3=0
-    CONF_DO_ARM_RPI4=0
-    CONF_DO_ARM_IMX6UL_PL1=0
-    CONF_DO_ARM_IMX6UL_PL2=0
     CONF_DO_ARM64_VIRT_EL2=0
     CONF_DO_ARM64_RCAR3=0
     CONF_DO_ARM64_RPI3=0
@@ -367,7 +355,6 @@ do_config()
 	 5 60 \
       --and-widget --begin 9 10 \
         --checklist "Select Targets to build:" 12 60 5 \
-         arm       "ARM (platform selection follows)"          off \
          arm64     "ARM64 / AARCH64"                           off \
          mips      "MIPS"                                      off \
          2> $tmpfile
@@ -387,43 +374,9 @@ do_config()
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-	\"arm\") CONF_DO_ARM=1 ;;
-	\"arm64\") CONF_DO_ARM64=1 ;;
+        \"arm64\") CONF_DO_ARM64=1 ;;
       esac
     done
-
-    if [ -n "$CONF_DO_ARM" ]; then
-      dialog \
-	--visit-items \
-	--begin 2 10 \
-	  --infobox \
-	   "The list of choices represents a popular set of target platforms. Many more are available." \
-	   5 60 \
-	--and-widget --begin 9 10 \
-	  --checklist "Select ARM Targets to build:" 12 60 5 \
-	   arm-virt-pl2    "QEMU Virt Platform"  on \
-	   arm-rpiz        "Raspberry Pi Zero"   off \
-	   arm-rpi3        "Raspberry Pi 3"      off \
-	   arm-rpi4        "Raspberry Pi 4"      off \
-	   arm-imx6ul-pl1  "NXP i.MX6UL/ULL"     off \
-	   arm-imx6ul-pl2  "NXP i.MX6UL/ULL Virtualization" off \
-	   2> $tmpfile
-
-      result=$(cat $tmpfile)
-
-      for e in $result; do
-	# fixup for older dialogs
-	[ "${e#\"}" = "$e" ] && e="\"$e\""
-	case "$e" in
-	  \"arm-virt-pl2\")   CONF_DO_ARM_VIRT_PL2=1 ;;
-	  \"arm-rpiz\")       CONF_DO_ARM_RPIZ=1 ;;
-	  \"arm-rpi3\")       CONF_DO_ARM_RPI3=1 ;;
-	  \"arm-rpi4\")       CONF_DO_ARM_RPI4=1 ;;
-	  \"arm-imx6ul-pl1\") CONF_DO_ARM_IMX6UL_PL1=1 ;;
-	  \"arm-imx6ul-pl2\") CONF_DO_ARM_IMX6UL_PL2=1 ;;
-	esac
-      done
-    fi
 
     if [ -n "$CONF_DO_ARM64" ]; then
       dialog \
@@ -432,8 +385,8 @@ do_config()
 	  --infobox \
 	   "The list of choices represents a popular set of target platforms. Many more are available." \
 	   5 60 \
-	--and-widget --begin 9 10 \
-	  --checklist "Select ARM Targets to build:" 11 60 4 \
+        --and-widget --begin 9 10 \
+          --checklist "Select ARM64 Targets to build:" 11 60 4 \
 	   arm64-virt-el2  "QEMU Virt Platform"  on \
 	   arm64-rpi3      "Raspberry Pi 3"      off \
 	   arm64-rpi4      "Raspberry Pi 4"      off \
@@ -484,7 +437,7 @@ do_config()
       done
     fi
 
-    if [ -n "$CONF_DO_ARM" ] || [ -n "$CONF_DO_ARM64" ]; then
+    if [ -n "$CONF_DO_ARM64" ]; then
       local default_cross_dialog="${CROSS_COMPILE:-aarch64-linux-gnu-}"
       dialog --no-mouse --visit-items \
         --inputbox "Cross compiler prefix (CROSS_COMPILE)" 8 70 "$default_cross_dialog" \
@@ -544,17 +497,6 @@ load_config()
 
 redo_config()
 {
-  if [ -n "$CONF_FAILED_ARM" ]; then
-    unset CONF_DO_ARM
-    add_to_config "unset CONF_DO_ARM"
-    unset CONF_DO_ARM_VIRT_PL2
-    unset CONF_DO_ARM_RPIZ
-    unset CONF_DO_ARM_RPI3
-    unset CONF_DO_ARM_RPI4
-    unset CONF_DO_ARM_IMX6UL_PL1
-    unset CONF_DO_ARM_IMX6UL_PL2
-  fi
-
   if [ -n "$CONF_FAILED_UX" ]; then
     unset CONF_DO_UX
     add_to_config "unset CONF_DO_UX"
@@ -755,7 +697,6 @@ check_tools()
     exit 1
   fi
 
-  check_cross_tools "ARM"      "$CONF_DO_ARM"      CONF_FAILED_ARM      "$CROSS_COMPILE_ARM"
   check_cross_tools "ARM64"    "$CONF_DO_ARM64"    CONF_FAILED_ARM64    "$CROSS_COMPILE_ARM64"
 
   if [ -n "$CONF_DO_UX" ]; then
@@ -773,7 +714,6 @@ check_tools()
 # Optional tools
   echo "Checking optional programs and tools"
   tools_optional="doxygen"
-  [ "$CONF_DO_ARM" ] && tools_needed="$tools_needed qemu-system-arm"
   for t in $tools_optional; do
     result="ok"
     if ! check_tool $t; then
@@ -792,14 +732,12 @@ check_tools()
 
 do_setup()
 {
-  [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
   [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
   get_fiasco_dir()
   {
     case "$1" in
       arm64-virt-el2) echo "arm64-virt-el2" ;;
-      arm-virt-pl2) echo "arm-virt-pl2" ;;
       *) return 1 ;;
     esac
   }
@@ -809,8 +747,6 @@ do_setup()
     case "$1" in
       arm64-virt-el2|arm64-rcar3|arm64-rpi3|arm64-rpi4|arm64-s32|arm64-zynqmp)
         echo "$CROSS_COMPILE_ARM64" ;;
-      arm-virt-pl2|arm-rpiz|arm-rpi3|arm-rpi4|arm-imx6ul|arm-imx6ul-pl2)
-        echo "$CROSS_COMPILE_ARM" ;;
       *) return 1 ;;
     esac
   }
@@ -886,62 +822,12 @@ do_setup()
   done
 
   echo "Default dirs"
-  
-  # L4Re build dirs with default configs
-  if [ "$CONF_DO_ARM" ]; then
-    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
-      DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
-    gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
-    ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
-    echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
-  fi
 
   if [ "$CONF_DO_ARM64" ]; then
     gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
   fi
 
-
-  # L4Linux build setup
-  [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
-
-  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
-
-    mkdir -p obj/l4linux/arm-up
-
-    if [ "$ARM_L4_DIR_FOR_LX_MP" ]; then
-      mkdir -p obj/l4linux/arm-mp
-    fi
-
-    if ! check_eabi_gxx ${CROSS_COMPILE_ARM}g++; then
-      echo "WARNING: L4Linux has been disabled due to a detected old OABI compiler"
-      echo "WARNING: Please update your compiler to an EABI version"
-      add_to_config SKIP_L4LINUX_ARM_BUILD=1
-    fi
-  fi
-
   common_paths=$(pwd)/config:$(pwd)/config/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
-
-  if [ "$CONF_DO_ARM" ]; then
-    local odir=obj/l4/arm-v7
-    local Mboot=$odir/conf/Makeconf.boot
-    mkdir -p $odir/conf
-
-    if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
-      cat<<EOF >> $Mboot
-QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
-EOF
-      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
-    fi
-
-    add_std_qemu_options $Mboot
-    add_nonx86_qemu_options $Mboot
-  fi # ARM
-
 
   echo "ABC ##############"
 

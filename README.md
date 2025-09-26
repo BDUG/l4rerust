@@ -51,11 +51,9 @@ automation. Build artifacts are placed under `out/`.
 
 The interactive `dialog` menu lets you review and edit the shared
 `CROSS_COMPILE` prefix alongside the Rust target triple (applied to
-`CARGO_BUILD_TARGET`/`RUST_TARGET_TRIPLE`). Architecture-specific
-`CROSS_COMPILE_ARM` and `CROSS_COMPILE_ARM64` values are derived from this
-prefix when left blank—defaulting to `arm-linux-gnueabihf-` for 32-bit ARM and
-`aarch64-linux-gnu-` for AArch64—so you can keep distinct toolchains when
-required. The Rust target
+`CARGO_BUILD_TARGET`/`RUST_TARGET_TRIPLE`). The `CROSS_COMPILE_ARM64` value is
+derived from this prefix when left blank—defaulting to `aarch64-linux-gnu-`—so
+you can keep distinct toolchains when required. The Rust target
 preset list is populated from `rustc --print target-list`, giving access to
 every target supported by the installed toolchain before the manual form
 appears. Leave the field blank to fall back to the detected defaults.

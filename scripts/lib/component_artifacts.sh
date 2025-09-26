@@ -106,7 +106,7 @@ initialize_component_prefixes() {
   fi
   local component arch key env_var prefix
   for component in "${STAGED_COMPONENTS[@]}"; do
-    for arch in arm arm64; do
+    for arch in arm64; do
       key="$component:$arch"
       if env_var=$(component_override_env_var_name "$component" "$arch"); then
         prefix="${!env_var}"

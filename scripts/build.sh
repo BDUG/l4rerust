@@ -159,12 +159,6 @@ prepare_rust_musl_environment() {
 
   local stage_arch
   case "$target_arch" in
-    arm)
-      stage_arch="arm"
-      ;;
-    armv8r)
-      stage_arch="arm"
-      ;;
     aarch64)
       stage_arch="arm64"
       ;;
@@ -250,27 +244,19 @@ print_debug_environment() {
   log_debug "env" "RUST_TARGET=${RUST_TARGET:-}"
   log_debug "env" "TARGET=${TARGET:-}"
   log_debug "env" "CROSS_COMPILE=${CROSS_COMPILE:-}"
-  log_debug "env" "CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-}"
   log_debug "env" "CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-}"
   log_debug "env" "HAM_BIN=${HAM_BIN:-}"
   log_debug "env" "ARTIFACTS_DIR=${ARTIFACTS_DIR:-}"
 
-  if declare -f component_prefix_path >/dev/null 2>&1; then
-    local musl_arm_prefix="(unavailable)"
-    local musl_arm64_prefix="(unavailable)"
-    if musl_arm_prefix=$(component_prefix_path "musl" "arm" 2>/dev/null); then
-      :
-    else
-      musl_arm_prefix="(unavailable)"
+    if declare -f component_prefix_path >/dev/null 2>&1; then
+      local musl_arm64_prefix="(unavailable)"
+      if musl_arm64_prefix=$(component_prefix_path "musl" "arm64" 2>/dev/null); then
+        :
+      else
+        musl_arm64_prefix="(unavailable)"
+      fi
+      log_debug "env" "musl arm64 prefix: $musl_arm64_prefix"
     fi
-    if musl_arm64_prefix=$(component_prefix_path "musl" "arm64" 2>/dev/null); then
-      :
-    else
-      musl_arm64_prefix="(unavailable)"
-    fi
-    log_debug "env" "musl arm prefix: $musl_arm_prefix"
-    log_debug "env" "musl arm64 prefix: $musl_arm64_prefix"
-  fi
 
   if [ -n "${L4RE_LIBC_MUSL_PREFIX:-}" ]; then
     log_debug "env" "L4RE_LIBC_MUSL_PREFIX=${L4RE_LIBC_MUSL_PREFIX}"
@@ -708,7 +694,6 @@ prompt_cross_compile_prefixes() {
 
   echo "Cross-compilation settings configured via dialog:"
   echo "  CROSS_COMPILE=${CROSS_COMPILE:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM (derived)=${CROSS_COMPILE_ARM:-"(empty)"}"
   echo "  CROSS_COMPILE_ARM64 (derived)=${CROSS_COMPILE_ARM64:-"(empty)"}"
   echo "  CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-"(empty)"}"
 
@@ -901,7 +886,7 @@ if [ "$DEBUG_MODE" = true ]; then
 fi
 
 # Configure for ARM using setup script
-export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
+export CROSS_COMPILE CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
 if [ -f "$SCRIPT_DIR/l4re.config" ]; then
@@ -947,7 +932,7 @@ build_musl_component() {
   local install_prefix=""
   local musl_src_dir=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "musl" "$arch"; then
       override_used=true
       continue
@@ -973,7 +958,7 @@ build_musl_component() {
       )
     fi
 
-    for arch in arm arm64; do
+    for arch in arm64; do
       if component_override_used "musl" "$arch"; then
         echo "Skipping musl build for $arch; using prebuilt artifacts from $(component_prefix_path "musl" "$arch")"
         continue
@@ -983,20 +968,7 @@ build_musl_component() {
         continue
       fi
 
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for musl build" >&2
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          rm -rf "$musl_src_dir"
-          return 1
-          ;;
-      esac
+      cross="$CROSS_COMPILE_ARM64"
 
       install_prefix="$(component_prefix_path "musl" "$arch")"
 
@@ -1021,7 +993,7 @@ build_musl_component() {
     echo "musl builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "musl for arm and arm64 already current, skipping"
+    echo "musl for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1035,7 +1007,7 @@ build_bash_component() {
   local bash_patch_dir=""
   local patch_file
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
       need_bash=true
       break
@@ -1055,14 +1027,13 @@ build_bash_component() {
         done
       )
     fi
-    "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     rm -rf "$bash_src_dir"
     COMPONENT_BUILD_NOTE="built"
     return 0
   fi
 
-  echo "bash for arm and arm64 already current, skipping"
+  echo "bash for arm64 already current, skipping"
   COMPONENT_BUILD_NOTE="already current"
   return 2
 }
@@ -1076,7 +1047,7 @@ build_libcap_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "libcap" "$arch"; then
       override_used=true
       continue
@@ -1090,21 +1061,8 @@ build_libcap_component() {
   if [ "$need_libcap" = true ]; then
     libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
     curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
-    for arch in arm arm64; do
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for libcap build" >&2
-          rm -rf "$libcap_src_dir"
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          return 1
-          ;;
-      esac
+    for arch in arm64; do
+      cross="$CROSS_COMPILE_ARM64"
       if component_override_used "libcap" "$arch"; then
         echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
         continue
@@ -1125,7 +1083,7 @@ build_libcap_component() {
     echo "libcap builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libcap for arm and arm64 already current, skipping"
+    echo "libcap for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1140,7 +1098,7 @@ build_libcrypt_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "libcrypt" "$arch"; then
       override_used=true
       continue
@@ -1154,7 +1112,7 @@ build_libcrypt_component() {
   if [ "$need_libcrypt" = true ]; then
     libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
     curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
-    for arch in arm arm64; do
+    for arch in arm64; do
       if component_override_used "libcrypt" "$arch"; then
         echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
         continue
@@ -1163,20 +1121,7 @@ build_libcrypt_component() {
         echo "libcrypt for $arch already current, skipping"
         continue
       fi
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for libcrypt build" >&2
-          rm -rf "$libxcrypt_src_dir"
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          return 1
-          ;;
-      esac
+      cross="$CROSS_COMPILE_ARM64"
       install_prefix="$(component_prefix_path "libcrypt" "$arch")"
       "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
     done
@@ -1189,7 +1134,7 @@ build_libcrypt_component() {
     echo "libcrypt builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libcrypt for arm and arm64 already current, skipping"
+    echo "libcrypt for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1204,7 +1149,7 @@ build_libblkid_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "libblkid" "$arch"; then
       override_used=true
       continue
@@ -1218,7 +1163,7 @@ build_libblkid_component() {
   if [ "$need_libblkid" = true ]; then
     util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
     curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
-    for arch in arm arm64; do
+    for arch in arm64; do
       if component_override_used "libblkid" "$arch"; then
         echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
         continue
@@ -1228,20 +1173,7 @@ build_libblkid_component() {
         continue
       fi
 
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for libblkid build" >&2
-          rm -rf "$util_linux_src_dir"
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          return 1
-          ;;
-      esac
+      cross="$CROSS_COMPILE_ARM64"
 
       install_prefix="$(component_prefix_path "libblkid" "$arch")"
       "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
@@ -1255,7 +1187,7 @@ build_libblkid_component() {
     echo "libblkid builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libblkid for arm and arm64 already current, skipping"
+    echo "libblkid for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1271,7 +1203,7 @@ build_libgcrypt_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "libgcrypt" "$arch"; then
       override_used=true
       continue
@@ -1287,21 +1219,8 @@ build_libgcrypt_component() {
     curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
     libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
     curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
-    for arch in arm arm64; do
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for libgcrypt build" >&2
-          rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          return 1
-          ;;
-      esac
+    for arch in arm64; do
+      cross="$CROSS_COMPILE_ARM64"
       if component_override_used "libgcrypt" "$arch"; then
         echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
         continue
@@ -1323,7 +1242,7 @@ build_libgcrypt_component() {
     echo "libgcrypt builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libgcrypt for arm and arm64 already current, skipping"
+    echo "libgcrypt for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1338,7 +1257,7 @@ build_libzstd_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if component_override_used "libzstd" "$arch"; then
       override_used=true
       continue
@@ -1352,7 +1271,7 @@ build_libzstd_component() {
   if [ "$need_libzstd" = true ]; then
     zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
     curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
-    for arch in arm arm64; do
+    for arch in arm64; do
       if component_override_used "libzstd" "$arch"; then
         echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
         continue
@@ -1363,20 +1282,7 @@ build_libzstd_component() {
         continue
       fi
 
-      case "$arch" in
-        arm)
-          cross="$CROSS_COMPILE_ARM"
-          ;;
-        arm64)
-          cross="$CROSS_COMPILE_ARM64"
-          ;;
-        *)
-          echo "Unsupported architecture '$arch' for libzstd build" >&2
-          rm -rf "$zstd_src_dir"
-          COMPONENT_BUILD_NOTE="unsupported architecture"
-          return 1
-          ;;
-      esac
+      cross="$CROSS_COMPILE_ARM64"
 
       install_prefix="$(component_prefix_path "libzstd" "$arch")"
       "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
@@ -1390,7 +1296,7 @@ build_libzstd_component() {
     echo "libzstd builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libzstd for arm and arm64 already current, skipping"
+    echo "libzstd for arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1409,7 +1315,7 @@ build_systemd_component() {
   local systemd_patch_dir=""
   local patch_file
 
-  for arch in arm arm64; do
+  for arch in arm64; do
     if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
       need_systemd=true
       break
@@ -1429,14 +1335,13 @@ build_systemd_component() {
         done
       )
     fi
-    "$SCRIPT_DIR/build_systemd.sh" arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION" "$systemd_src_dir"
     "$SCRIPT_DIR/build_systemd.sh" arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION" "$systemd_src_dir"
     rm -rf "$systemd_src_dir"
     COMPONENT_BUILD_NOTE="built"
     return 0
   fi
 
-  echo "systemd for arm and arm64 already current, skipping"
+  echo "systemd for arm64 already current, skipping"
   COMPONENT_BUILD_NOTE="already current"
   return 2
 }
