@@ -121,7 +121,8 @@ fn resolve_musl_prefix() -> Option<PathBuf> {
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".to_string());
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let require_musl = target_env == "musl" || target_os == "l4re";
+    let prefer_musl = target_env == "musl" || target_os == "l4re";
+    let require_musl = target_os == "l4re";
 
     let mut env_candidates = Vec::new();
     let arch_upper = target_arch.to_uppercase();
@@ -166,7 +167,7 @@ fn resolve_musl_prefix() -> Option<PathBuf> {
         .join("musl")
         .join(stage_arch);
     if default_prefix.exists() {
-        if require_musl {
+        if prefer_musl {
             return Some(canonicalize(&default_prefix));
         }
         return None;
@@ -178,6 +179,13 @@ fn resolve_musl_prefix() -> Option<PathBuf> {
 Set L4RE_LIBC_MUSL_PREFIX or L4RE_LIBC_MUSL_PREFIX_{} to the staged musl directory.",
             target_arch,
             arch_uppercase_fallback(&target_arch)
+        );
+    }
+
+    if prefer_musl {
+        println!(
+            "cargo:warning=No staged musl prefix found for target arch '{}'; relying on target toolchain provided libc",
+            target_arch
         );
     }
 
