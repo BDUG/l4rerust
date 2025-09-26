@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const MUSL_LIBS: &[&str] = &["c"];
+const C_RUNTIME_LIBS: &[&str] = &["c"];
 const L4RE_CORE_REQUIRED_LIBS: &[&str] = &["l4re_c", "l4re_c-util"];
 const L4RE_PTHREAD_LIB_CANDIDATES: &[&str] = &["pthread-l4", "pthread", "l4pthread", "c_pthread"];
 
@@ -15,6 +15,7 @@ fn main() {
 
     configure_l4re_core_linkage();
     configure_musl_linkage();
+    configure_native_c_linkage();
 }
 
 fn compile_syscall_wrappers() {
@@ -110,9 +111,7 @@ fn configure_musl_linkage() {
     }
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    for lib in MUSL_LIBS {
-        println!("cargo:rustc-link-lib={}", lib);
-    }
+    link_c_runtime_libs();
 }
 
 fn resolve_musl_prefix() -> Option<PathBuf> {
@@ -190,6 +189,19 @@ Set L4RE_LIBC_MUSL_PREFIX or L4RE_LIBC_MUSL_PREFIX_{} to the staged musl directo
     }
 
     None
+}
+
+fn configure_native_c_linkage() {
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    if target_env != "musl" {
+        link_c_runtime_libs();
+    }
+}
+
+fn link_c_runtime_libs() {
+    for lib in C_RUNTIME_LIBS {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
 }
 
 fn canonicalize(path: &Path) -> PathBuf {
