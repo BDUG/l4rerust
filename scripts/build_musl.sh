@@ -21,6 +21,169 @@ cleanup() {
   fi
 }
 
+determine_minimal_musl_objects() {
+  local nm_bin="$1"
+  local archive="$2"
+  shift 2 || true
+  local symbols=("$@")
+
+  python3 - "$nm_bin" "$archive" "${symbols[@]}" <<'PY'
+import os
+import subprocess
+import sys
+
+nm = sys.argv[1]
+archive = sys.argv[2]
+symbols = sys.argv[3:]
+
+try:
+    proc = subprocess.run(
+        [nm, "-g", "--defined-only", archive],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+except FileNotFoundError:
+    print(f"nm binary '{nm}' not found", file=sys.stderr)
+    sys.exit(1)
+
+current_obj = None
+mapping = {}
+for line in proc.stdout.splitlines():
+    if not line:
+        continue
+    if line.endswith(":"):
+        current_obj = line[:-1].strip()
+        if current_obj.startswith(archive):
+            current_obj = os.path.basename(current_obj)
+        continue
+    if current_obj is None:
+        continue
+    parts = line.split()
+    if len(parts) < 3:
+        continue
+    symbol_type = parts[-2].upper()
+    symbol = parts[-1]
+    if symbol_type in {"T", "D", "B", "W"}:
+        mapping.setdefault(symbol, current_obj)
+
+missing = [sym for sym in symbols if sym not in mapping]
+if missing:
+    for sym in missing:
+        print(f"Missing symbol {sym} in {archive}", file=sys.stderr)
+    sys.exit(1)
+
+seen = set()
+for sym in symbols:
+    obj = mapping[sym]
+    if obj not in seen:
+        seen.add(obj)
+        print(obj)
+PY
+}
+
+minimise_musl_libc() {
+  local install_prefix="$1"
+  local cross_prefix="$2"
+
+  local lib_dir="$install_prefix/lib"
+  local libc_archive="$lib_dir/libc.a"
+  if [ ! -f "$libc_archive" ]; then
+    echo "musl archive not found at $libc_archive" >&2
+    return 1
+  fi
+
+  local nm_bin="${cross_prefix}nm"
+  if ! command -v "$nm_bin" >/dev/null 2>&1; then
+    if command -v nm >/dev/null 2>&1; then
+      nm_bin="nm"
+    else
+      echo "No suitable nm binary found for prefix '$cross_prefix'" >&2
+      return 1
+    fi
+  fi
+
+  local ar_bin="${cross_prefix}ar"
+  if ! command -v "$ar_bin" >/dev/null 2>&1; then
+    if command -v ar >/dev/null 2>&1; then
+      ar_bin="ar"
+    else
+      echo "No suitable ar binary found for prefix '$cross_prefix'" >&2
+      return 1
+    fi
+  fi
+
+  local -a required_symbols=(
+    eventfd
+    eventfd_read
+    eventfd_write
+    epoll_create
+    epoll_create1
+    epoll_ctl
+    epoll_wait
+    epoll_pwait
+    signalfd
+    signalfd4
+    timerfd_create
+    timerfd_settime
+    timerfd_gettime
+    inotify_init1
+    inotify_add_watch
+    inotify_rm_watch
+  )
+
+  local objects
+  if ! objects=$(determine_minimal_musl_objects "$nm_bin" "$libc_archive" "${required_symbols[@]}"); then
+    echo "Failed to determine musl object set for L4Re shims" >&2
+    return 1
+  fi
+
+  if [ -z "$objects" ]; then
+    echo "No musl objects identified for minimal archive" >&2
+    return 1
+  fi
+
+  local tmpdir
+  tmpdir=$(mktemp -d "$lib_dir/libc-minimal.XXXXXX")
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local backup_archive="$lib_dir/libc.full.a"
+  rm -f "$backup_archive"
+  mv "$libc_archive" "$backup_archive"
+
+  printf '%s\n' "$objects" >"$tmpdir/objects.list"
+
+  if ! (
+    cd "$tmpdir" &&
+      obj_list=() &&
+      while IFS= read -r object; do
+        [ -n "$object" ] || continue
+        obj_list+=("$object")
+        "$ar_bin" x "$backup_archive" "$object"
+      done <"objects.list" &&
+      "$ar_bin" crs "$libc_archive" "${obj_list[@]}"
+  ); then
+    mv "$backup_archive" "$libc_archive"
+    rm -rf "$tmpdir"
+    trap - RETURN
+    return 1
+  fi
+
+  if [ -f "$lib_dir/libc.so" ]; then
+    mv "$lib_dir/libc.so" "$lib_dir/libc.full.so"
+  fi
+
+  if ls "$lib_dir"/ld-musl-*.so.1 >/dev/null 2>&1; then
+    for loader in "$lib_dir"/ld-musl-*.so.1; do
+      mv "$loader" "$loader.full"
+    done
+  fi
+
+  rm -rf "$tmpdir"
+  trap - RETURN
+  echo "Minimised musl libc archive to event/epoll/signalfd/timerfd/inotify symbols"
+}
+
 main() {
   if [ "$#" -ne 5 ]; then
     usage
@@ -88,6 +251,8 @@ main() {
     make -j"$jobs"
     make install
   )
+
+  minimise_musl_libc "$install_prefix" "$cross_prefix"
 
   mkdir -p "$install_prefix/lib/pkgconfig"
   cat >"$install_prefix/lib/pkgconfig/musl.pc" <<EOF_PC

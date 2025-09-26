@@ -41,6 +41,15 @@ file is generated for consumers that need to discover the staged libc through
 pkg-config. Version markers (`VERSION`) are written to allow the incremental
 component logic to determine whether a rebuild is required.
 
+After installation the build helper now prunes the musl archive so that only
+the epoll, eventfd, signalfd, timerfd, and inotify entry points remain. The
+script inspects `libc.a`, extracts the object files that define these symbols,
+and repackages them into a reduced archive while moving the full musl `libc`
+and dynamic loader aside. This ensures the staged runtime only provides the
+handful of kernel interfaces that are absent from the L4Re core libraries,
+avoiding conflicts with the native `pthread-l4`, `l4re_c`, and `l4re_c-util`
+implementations that ship with L4Re.
+
 ### Rust integration
 
 The `l4re-libc` crate has been taught to discover musl instead of glibc.
@@ -48,6 +57,11 @@ The `l4re-libc` crate has been taught to discover musl instead of glibc.
 variants) and links against the set of musl-provided libraries. The crate’s
 link search path defaults to `out/musl/<arch>` when no override is supplied,
 mirroring the previous behaviour while avoiding the old glibc assumptions.
+A companion lookup identifies the native L4Re core tree (`L4RE_CORE_DIR`) so
+that the crate links against `pthread-l4`, `l4re_c`, and `l4re_c-util` before
+falling back to the trimmed musl archive. This guarantees that L4Re’s
+implementations remain authoritative while musl only contributes the handful of
+missing kernel helper interfaces.
 
 A new smoke test (`musl_smoke.rs`) ensures the staged libc exports core
 symbols such as `eventfd`, verifying that musl is correctly deployed and can be
