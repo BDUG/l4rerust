@@ -47,6 +47,7 @@ fn configure_l4re_core_linkage() {
             "cargo:warning=L4Re core directory '{}' does not exist; skipping core linkage",
             core_dir.display()
         );
+        link_system_pthread_fallback();
         return;
     }
 
@@ -56,6 +57,7 @@ fn configure_l4re_core_linkage() {
             "cargo:warning=Unable to locate any L4Re core library directories under '{}'",
             core_dir.display()
         );
+        link_system_pthread_fallback();
         return;
     }
 
@@ -74,6 +76,7 @@ fn configure_l4re_core_linkage() {
             "cargo:warning=Failed to locate required L4Re core libraries ({}); builds may fail",
             L4RE_CORE_REQUIRED_LIBS.join(", ")
         );
+        link_system_pthread_fallback();
         return;
     }
 
