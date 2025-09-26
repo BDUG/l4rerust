@@ -86,7 +86,7 @@ fn configure_l4re_core_linkage() {
         .find_map(|dir| find_existing_library(dir, L4RE_PTHREAD_LIB_CANDIDATES))
     {
         println!("cargo:rustc-link-lib={}", pthread_lib);
-    } else {
+    } else if !link_system_pthread_fallback() {
         println!(
             "cargo:warning=Failed to locate an L4Re pthread library (candidates: {}); builds may fail",
             L4RE_PTHREAD_LIB_CANDIDATES.join(", ")
@@ -280,4 +280,17 @@ fn find_existing_library<'a>(dir: &Path, libs: &'a [&str]) -> Option<&'a str> {
 
 fn file_non_empty(path: &Path) -> bool {
     path.metadata().map(|meta| meta.len() > 0).unwrap_or(false)
+}
+
+fn link_system_pthread_fallback() -> bool {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "l4re" {
+        return false;
+    }
+
+    println!("cargo:rustc-link-lib=pthread");
+    println!(
+        "cargo:warning=Falling back to linking against the system pthread library; set L4RE_CORE_DIR to use L4Re-provided pthread variants"
+    );
+    true
 }
