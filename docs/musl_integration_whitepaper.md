@@ -42,7 +42,7 @@ pkg-config. Version markers (`VERSION`) are written to allow the incremental
 component logic to determine whether a rebuild is required.
 
 After installation the build helper now prunes the musl archive so that only
-the epoll, eventfd, signalfd, timerfd, and inotify entry points remain. The
+the epoll, eventfd, signalfd, timerfd, inotify, and nanosleep entry points remain. The
 script inspects `libc.a`, extracts the object files that define these symbols,
 and repackages them into a reduced archive while moving the full musl `libc`
 and dynamic loader aside. This ensures the staged runtime only provides the

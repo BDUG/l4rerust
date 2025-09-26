@@ -15,6 +15,13 @@ fn musl_libc_available() {
             !ptr.is_null(),
             "dlsym failed to locate eventfd symbol via staged musl libc"
         );
+
+        let symbol = CString::new("nanosleep").unwrap();
+        let ptr = libc::dlsym(handle, symbol.as_ptr());
+        assert!(
+            !ptr.is_null(),
+            "dlsym failed to locate nanosleep symbol via staged musl libc"
+        );
         libc::dlclose(handle);
     }
 }
