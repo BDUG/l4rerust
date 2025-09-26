@@ -140,6 +140,14 @@ minimise_musl_libc() {
     inotify_init1
     inotify_add_watch
     inotify_rm_watch
+    __syscall
+    __syscall_cp
+    __syscall_ret
+    __block_all_sigs
+    __restore_sigs
+    __pthread_self
+    pthread_testcancel
+    libc
   )
 
   local objects
