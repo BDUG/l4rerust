@@ -314,6 +314,7 @@ run_component_build() {
   local previous_errexit
   local status
   local note=""
+  local log_file=""
   local xtrace_was_on=false
   local previous_ps4="${PS4-+ }"
   local previous_current_component="$CURRENT_COMPONENT"
@@ -332,6 +333,21 @@ run_component_build() {
   set +e
   COMPONENT_BUILD_NOTE=""
 
+  if [ -n "${COMPONENT_LOG_DIR:-}" ]; then
+    log_file="$COMPONENT_LOG_DIR/${component}.log"
+  elif [ -n "${ARTIFACTS_DIR:-}" ]; then
+    log_file="${ARTIFACTS_DIR}/logs/${component}.log"
+  elif [ -n "${REPO_ROOT:-}" ]; then
+    log_file="$REPO_ROOT/out/logs/${component}.log"
+  else
+    log_file="./out/logs/${component}.log"
+  fi
+
+  mkdir -p "$(dirname "$log_file")"
+  {
+    printf '==== %s Starting %s build ====%s' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$component" $'\n'
+  } >"$log_file"
+
   if [ "$DEBUG_MODE" = true ]; then
     log_debug "$component" "Executing build function '$func'"
     CURRENT_COMPONENT="$component"
@@ -343,7 +359,9 @@ run_component_build() {
       set -x
     fi
   fi
-  "$func"
+  "$func" \
+    > >(tee -a "$log_file") \
+    2> >(tee -a "$log_file" >&2)
   status=$?
   if [ "$DEBUG_MODE" = true ]; then
     if [ "$xtrace_was_on" = false ]; then
@@ -367,11 +385,37 @@ run_component_build() {
       ;;
     *)
       BUILD_RESULTS["$component"]="failed"
-      BUILD_NOTES["$component"]="${note:-error}"
+      if [ -n "$note" ]; then
+        BUILD_NOTES["$component"]="$note (log: $log_file)"
+      else
+        BUILD_NOTES["$component"]="error (log: $log_file)"
+      fi
       FAILED_COMPONENTS+=("$component")
       BUILD_FAILURE_COUNT=$((BUILD_FAILURE_COUNT + 1))
       ;;
   esac
+
+  local status_text
+  case $status in
+    0)
+      status_text="success"
+      ;;
+    2)
+      status_text="skipped"
+      ;;
+    *)
+      status_text="failed"
+      ;;
+  esac
+
+  {
+    printf '==== %s Completed %s build: %s (exit %d) ====%s' \
+      "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+      "$component" \
+      "$status_text" \
+      "$status" \
+      $'\n'
+  } >>"$log_file"
 
   return 0
 }
@@ -881,6 +925,10 @@ else
 fi
 
 mkdir -p "$ARTIFACTS_DIR"
+
+COMPONENT_LOG_DIR="$ARTIFACTS_DIR/logs"
+mkdir -p "$COMPONENT_LOG_DIR"
+export COMPONENT_LOG_DIR
 
 initialize_component_prefixes
 
