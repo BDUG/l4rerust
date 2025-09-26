@@ -841,9 +841,28 @@ do_setup()
     fi
 
     if [ -f "$makeconf_local" ]; then
-      sed -i '/^CROSS_COMPILE=/d' "$makeconf_local"
+      sed -i \
+        -e '/^CROSS_COMPILE=/d' \
+        -e '/^CONFIG_HOST_CC=/d' \
+        -e '/^CONFIG_HOST_CXX=/d' \
+        -e '/^HOST_CC[[:space:]]*:?=/d' \
+        -e '/^HOST_CXX[[:space:]]*:?=/d' \
+        "$makeconf_local"
     fi
-    printf 'CROSS_COMPILE="%s"\n' "$cross_compile" >> "$makeconf_local"
+
+    host_cc=${HOST_CC:-$(command -v cc || command -v gcc || true)}
+    host_cxx=${HOST_CXX:-$(command -v c++ || command -v g++ || true)}
+
+    if [ -z "$host_cc" ] || [ -z "$host_cxx" ]; then
+      echo "Missing host compiler toolchain (cc/c++) required for Fiasco build" >&2
+      exit 1
+    fi
+
+    {
+      printf 'CROSS_COMPILE="%s"\n' "$cross_compile"
+      printf 'CONFIG_HOST_CC="%s"\n' "$host_cc"
+      printf 'CONFIG_HOST_CXX="%s"\n' "$host_cxx"
+    } >> "$makeconf_local"
   done
 
   echo "Default dirs"
