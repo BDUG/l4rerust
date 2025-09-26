@@ -52,9 +52,11 @@ sync_cross_compile_variables() {
     fi
   fi
 
-  CROSS_COMPILE="$primary"
-  CROSS_COMPILE_ARM="$primary"
-  CROSS_COMPILE_ARM64="$primary"
+  if [ -n "$primary" ]; then
+    CROSS_COMPILE="${CROSS_COMPILE:-$primary}"
+    CROSS_COMPILE_ARM="${CROSS_COMPILE_ARM:-$primary}"
+    CROSS_COMPILE_ARM64="${CROSS_COMPILE_ARM64:-$primary}"
+  fi
 
   export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 }
