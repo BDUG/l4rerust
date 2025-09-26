@@ -68,6 +68,8 @@ source "$SCRIPT_DIR/common_build.sh"
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
+sync_cross_compile_variables
+
 determine_rust_target_triple() {
   if [ -n "${RUST_TARGET_TRIPLE:-}" ]; then
     printf '%s' "$RUST_TARGET_TRIPLE"
@@ -247,6 +249,7 @@ print_debug_environment() {
   log_debug "env" "CARGO_TARGET=${CARGO_TARGET:-}"
   log_debug "env" "RUST_TARGET=${RUST_TARGET:-}"
   log_debug "env" "TARGET=${TARGET:-}"
+  log_debug "env" "CROSS_COMPILE=${CROSS_COMPILE:-}"
   log_debug "env" "CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-}"
   log_debug "env" "CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-}"
   log_debug "env" "HAM_BIN=${HAM_BIN:-}"
@@ -569,9 +572,9 @@ prompt_cross_compile_prefixes() {
   local host_os
   host_os=$(uname -s 2>/dev/null || echo "")
 
-  local default_general="${CROSS_COMPILE:-}"
-  local default_arm="${CROSS_COMPILE_ARM:-}"
-  local default_arm64="${CROSS_COMPILE_ARM64:-}"
+  sync_cross_compile_variables
+
+  local default_cross="${CROSS_COMPILE:-}"
   local default_rust_target="${RUST_TARGET_TRIPLE:-}"
 
   if [ -z "$default_rust_target" ]; then
@@ -582,54 +585,27 @@ prompt_cross_compile_prefixes() {
     fi
   fi
 
-  if [ -z "$default_arm" ] || [ -z "$default_arm64" ] || [ -z "$default_general" ]; then
+  if [ -z "$default_cross" ]; then
     case "$host_os" in
       Darwin)
         if declare -f setup_macos_paths >/dev/null 2>&1; then
           setup_macos_paths
         fi
-        if [ -z "$default_arm" ] && declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
-          local prefix
-          if prefix=$(find_gpp_cross_prefix arm-linux-gnueabihf-g++ 2>/dev/null); then
-            default_arm="$prefix"
-          fi
-        fi
-        if [ -z "$default_arm64" ] && declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
+        if declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
           local prefix
           if prefix=$(find_gpp_cross_prefix \
               aarch64-elf-g++ \
               aarch64-none-elf-g++ \
               aarch64-linux-gnu-g++ \
               aarch64-unknown-linux-gnu-g++ 2>/dev/null); then
-            default_arm64="$prefix"
+            default_cross="$prefix"
           fi
         fi
         ;;
       *)
-        :
+        default_cross="aarch64-linux-gnu-"
         ;;
     esac
-  fi
-
-  if [ -z "$default_arm" ]; then
-    default_arm="arm-linux-gnueabihf-"
-  fi
-  if [ -z "$default_arm64" ]; then
-    case "$host_os" in
-      Darwin)
-        default_arm64="aarch64-elf-"
-        ;;
-      *)
-        default_arm64="aarch64-linux-gnu-"
-        ;;
-    esac
-  fi
-  if [ -z "$default_general" ]; then
-    if [ -n "$default_arm64" ]; then
-      default_general="$default_arm64"
-    else
-      default_general="$default_arm"
-    fi
   fi
 
   local manual_desc="Enter custom target / keep current value"
@@ -703,11 +679,9 @@ prompt_cross_compile_prefixes() {
   if ! dialog --clear \
       --backtitle "L4Re external components" \
       --form "Edit cross-compilation settings used for external component builds." \
-      18 80 0 \
-      "General (CROSS_COMPILE)" 1 2 "$default_general" 1 34 60 0 \
-      "ARM (CROSS_COMPILE_ARM)" 3 2 "$default_arm" 3 34 60 0 \
-      "ARM64 (CROSS_COMPILE_ARM64)" 5 2 "$default_arm64" 5 34 60 0 \
-      "Rust target triple (CARGO_BUILD_TARGET)" 7 2 "$default_rust_target" 7 34 60 0 \
+      14 80 0 \
+      "Cross compiler prefix (CROSS_COMPILE)" 1 2 "$default_cross" 1 34 60 0 \
+      "Rust target triple (CARGO_BUILD_TARGET)" 3 2 "$default_rust_target" 3 34 60 0 \
       2>"$tmpfile"; then
     dialog_status=$?
   fi
@@ -721,36 +695,26 @@ prompt_cross_compile_prefixes() {
   mapfile -t _cross_values <"$tmpfile"
   rm -f "$tmpfile"
 
-  local new_general="${_cross_values[0]:-}"
-  local new_arm="${_cross_values[1]:-}"
-  local new_arm64="${_cross_values[2]:-}"
-  local new_rust_target="${_cross_values[3]:-}"
+  local new_cross="${_cross_values[0]:-}"
+  local new_rust_target="${_cross_values[1]:-}"
 
-  new_general="${new_general//$'\r'/}"
-  new_arm="${new_arm//$'\r'/}"
-  new_arm64="${new_arm64//$'\r'/}"
+  new_cross="${new_cross//$'\r'/}"
   new_rust_target="${new_rust_target//$'\r'/}"
 
-  CROSS_COMPILE="$new_general"
-  CROSS_COMPILE_ARM="$new_arm"
-  CROSS_COMPILE_ARM64="$new_arm64"
+  CROSS_COMPILE="$new_cross"
+  sync_cross_compile_variables
 
   set_rust_cross_compile_target "$new_rust_target"
 
-  if [ -z "$CROSS_COMPILE" ] && [ -n "$CROSS_COMPILE_ARM64" ]; then
-    CROSS_COMPILE="$CROSS_COMPILE_ARM64"
-  fi
-
-  export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
-
   echo "Cross-compilation settings configured via dialog:"
   echo "  CROSS_COMPILE=${CROSS_COMPILE:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM=${CROSS_COMPILE_ARM:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-"(empty)"}"
+  echo "  CROSS_COMPILE_ARM (derived)=${CROSS_COMPILE_ARM:-"(empty)"}"
+  echo "  CROSS_COMPILE_ARM64 (derived)=${CROSS_COMPILE_ARM64:-"(empty)"}"
   echo "  CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-"(empty)"}"
 
   return 0
 }
+
 
 clean=false
 component_arg=""
@@ -937,7 +901,7 @@ if [ "$DEBUG_MODE" = true ]; then
 fi
 
 # Configure for ARM using setup script
-export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
+export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
 if [ -f "$SCRIPT_DIR/l4re.config" ]; then

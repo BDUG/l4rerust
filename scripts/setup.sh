@@ -11,6 +11,8 @@ source "$SCRIPT_DIR/common_build.sh"
 REPO_ROOT="$(resolve_path "$SCRIPT_DIR/..")"
 cd "$REPO_ROOT"
 
+sync_cross_compile_variables
+
 # Handle optional non-interactive mode which runs both config and setup in
 # one go. When invoked as `scripts/setup.sh --non-interactive` the script will skip
 # prompts and execute the combined steps automatically.
@@ -131,6 +133,8 @@ if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
   fi
 fi
 
+sync_cross_compile_variables
+
 export CROSS_COMPILE=${CROSS_COMPILE:-}
 CC=${CC:-${CROSS_COMPILE}g++}
 CXX=${CXX:-${CROSS_COMPILE}g++}
@@ -153,6 +157,7 @@ write_config()
            CONF_DO_ARM64_VIRT_EL2 \
            CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
+           CROSS_COMPILE \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
   ; do
@@ -479,18 +484,13 @@ do_config()
       done
     fi
 
-    if [ -n "$CONF_DO_ARM" ]; then
+    if [ -n "$CONF_DO_ARM" ] || [ -n "$CONF_DO_ARM64" ]; then
+      local default_cross_dialog="${CROSS_COMPILE:-aarch64-linux-gnu-}"
       dialog --no-mouse --visit-items \
-	--inputbox "ARM cross compiler prefix (CROSS_COMPILE)" 8 70 "arm-linux-gnueabihf-" \
-	2> $tmpfile
-      CROSS_COMPILE_ARM=$(cat $tmpfile)
-    fi
-
-    if [ -n "$CONF_DO_ARM64" ]; then
-      dialog --no-mouse --visit-items \
-	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-elf-" \
-	2> $tmpfile
-      CROSS_COMPILE_ARM64=$(cat $tmpfile)
+        --inputbox "Cross compiler prefix (CROSS_COMPILE)" 8 70 "$default_cross_dialog" \
+        2> $tmpfile
+      CROSS_COMPILE=$(cat $tmpfile)
+      sync_cross_compile_variables
     fi
 
     if [ -n "$CONF_DO_MIPS32R2" ]; then
@@ -539,6 +539,7 @@ load_config()
   fi
 
   . obj/.config
+  sync_cross_compile_variables
 }
 
 redo_config()

@@ -47,23 +47,23 @@ $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*)):
 	$(MAKE) -C $(@D)
 
 obj/l4linux/arm-mp/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
-	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
-	                          O=$(abspath $(@D)) arm-mp_defconfig
+        +. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+                                  CROSS_COMPILE=$$CROSS_COMPILE \
+                                  O=$(abspath $(@D)) arm-mp_defconfig
 	src/l4linux/scripts/config --file $(@D)/.config \
 	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+        +. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE
 
 obj/l4linux/arm-up/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
-	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
-	                          O=$(abspath $(@D)) arm_defconfig
+        +. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+                                  CROSS_COMPILE=$$CROSS_COMPILE \
+                                  O=$(abspath $(@D)) arm_defconfig
 	src/l4linux/scripts/config --file $(@D)/.config \
 	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+        +. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE
 
 obj/l4linux/arm64/vmlinux: obj/l4/arm64/l4defs.mk.inc
-	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM64
+        +. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE
 
 build_images: build_l4linux build_l4re build_fiasco
 	@echo "=============== Building Images ==============================="
