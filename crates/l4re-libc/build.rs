@@ -5,7 +5,8 @@ use std::{
 };
 
 const MUSL_LIBS: &[&str] = &["c"];
-const L4RE_CORE_LIBS: &[&str] = &["pthread-l4", "l4re_c", "l4re_c-util"];
+const L4RE_CORE_REQUIRED_LIBS: &[&str] = &["l4re_c", "l4re_c-util"];
+const L4RE_PTHREAD_LIB_CANDIDATES: &[&str] = &["pthread-l4", "pthread", "l4pthread", "c_pthread"];
 
 fn main() {
     if env::var_os("CARGO_FEATURE_SYSCALL_FALLBACKS").is_some() {
@@ -58,22 +59,37 @@ fn configure_l4re_core_linkage() {
         return;
     }
 
-    let mut linked = false;
+    let mut linked_dirs = Vec::new();
     for dir in candidate_dirs {
-        if ensure_libraries_present(&dir, L4RE_CORE_LIBS) {
-            println!("cargo:rustc-link-search=native={}", dir.display());
-            linked = true;
+        if ensure_libraries_present(&dir, L4RE_CORE_REQUIRED_LIBS) {
+            if !linked_dirs.iter().any(|d: &PathBuf| d == &dir) {
+                println!("cargo:rustc-link-search=native={}", dir.display());
+                linked_dirs.push(dir);
+            }
         }
     }
 
-    if linked {
-        for lib in L4RE_CORE_LIBS {
-            println!("cargo:rustc-link-lib={}", lib);
-        }
-    } else {
+    if linked_dirs.is_empty() {
         println!(
             "cargo:warning=Failed to locate required L4Re core libraries ({}); builds may fail",
-            L4RE_CORE_LIBS.join(", ")
+            L4RE_CORE_REQUIRED_LIBS.join(", ")
+        );
+        return;
+    }
+
+    for lib in L4RE_CORE_REQUIRED_LIBS {
+        println!("cargo:rustc-link-lib={}", lib);
+    }
+
+    if let Some(pthread_lib) = linked_dirs
+        .iter()
+        .find_map(|dir| find_existing_library(dir, L4RE_PTHREAD_LIB_CANDIDATES))
+    {
+        println!("cargo:rustc-link-lib={}", pthread_lib);
+    } else {
+        println!(
+            "cargo:warning=Failed to locate an L4Re pthread library (candidates: {}); builds may fail",
+            L4RE_PTHREAD_LIB_CANDIDATES.join(", ")
         );
     }
 }
@@ -235,12 +251,12 @@ fn ensure_libraries_present(dir: &Path, libs: &[&str]) -> bool {
 fn library_exists(dir: &Path, lib: &str) -> bool {
     let base = format!("lib{}", lib);
     let static_path = dir.join(format!("{}.a", base));
-    if static_path.exists() {
+    if file_non_empty(&static_path) {
         return true;
     }
 
     let shared_path = dir.join(format!("{}.so", base));
-    if shared_path.exists() {
+    if file_non_empty(&shared_path) {
         return true;
     }
 
@@ -248,7 +264,7 @@ fn library_exists(dir: &Path, lib: &str) -> bool {
         for entry in entries.flatten() {
             let file_name = entry.file_name();
             if let Some(name) = file_name.to_str() {
-                if name.starts_with(&format!("{}.so", base)) {
+                if name.starts_with(&format!("{}.so", base)) && file_non_empty(&entry.path()) {
                     return true;
                 }
             }
@@ -256,4 +272,12 @@ fn library_exists(dir: &Path, lib: &str) -> bool {
     }
 
     false
+}
+
+fn find_existing_library<'a>(dir: &Path, libs: &'a [&str]) -> Option<&'a str> {
+    libs.iter().copied().find(|lib| library_exists(dir, lib))
+}
+
+fn file_non_empty(path: &Path) -> bool {
+    path.metadata().map(|meta| meta.len() > 0).unwrap_or(false)
 }
