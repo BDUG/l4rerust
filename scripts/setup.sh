@@ -89,6 +89,17 @@ if [ "$cmd" != "clean" ]; then
         exit "$sync_status"
       fi
     fi
+
+    fiasco_patch_dir="$SCRIPT_DIR/patches/fiasco"
+    if [ -d "$fiasco_patch_dir" ] && [ -d fiasco ]; then
+      (
+        cd fiasco
+        for patch_file in "$fiasco_patch_dir"/*.patch; do
+          [ -e "$patch_file" ] || continue
+          patch -p1 -N <"$patch_file"
+        done
+      )
+    fi
   )
 fi
 
