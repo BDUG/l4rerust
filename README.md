@@ -41,7 +41,7 @@ scripts/build.sh          # builds natively
 
 **Mac:**
 ```bash
-CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Override any aarch64-elf- default.
+CROSS_COMPILE=aarch64-linux-gnu- scripts/build.sh  # Override the default prefix.
 ```
 
 Pass `--clean` (or select “Clean out directory before build” in the interactive
@@ -49,14 +49,12 @@ menu) to remove previous build directories.
 existing directories for incremental builds; `--no-clean` enforces this reuse in
 automation. Build artifacts are placed under `out/`.
 
-The interactive `dialog` menu also lets you review and edit the cross-compiler
-prefixes before building. The form now includes the Rust target triple (applied
-to `CARGO_BUILD_TARGET`/`RUST_TARGET_TRIPLE`) so the Rust toolchain follows the
-selected cross-compilers. The Rust target preset list is populated from
-`rustc --print target-list`, giving access to every target supported by the
-installed toolchain before the manual form appears. Leave a field blank to fall
-back to the detected defaults or mirror the ARM64 prefix into the general
-`CROSS_COMPILE` setting.
+The interactive `dialog` menu lets you review and edit the single
+`CROSS_COMPILE` prefix used by the entire project, alongside the Rust target
+triple (applied to `CARGO_BUILD_TARGET`/`RUST_TARGET_TRIPLE`). The Rust target
+preset list is populated from `rustc --print target-list`, giving access to
+every target supported by the installed toolchain before the manual form
+appears. Leave the field blank to fall back to the detected defaults.
 
 ## Running the QEMU Environment
 
