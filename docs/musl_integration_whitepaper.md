@@ -22,8 +22,7 @@ simplifying maintenance and enabling future musl-specific improvements.
 
 `build.sh` now orchestrates a dedicated `musl` component in place of the
 previous `glibc` entry. When the component is selected, the build script
-performs the following steps for each enabled architecture (currently `arm`
-and `arm64`):
+performs the following steps for each enabled architecture (currently `arm64`):
 
 1. Download the official musl release archive (`musl-1.2.5`).
 2. Apply any local patches located under `scripts/patches/musl` (the directory
@@ -33,13 +32,13 @@ and `arm64`):
    installs musl into the architecture-specific staging prefix under
    `out/musl/<arch>`.
 
-The helper performs an out-of-tree build, selecting the appropriate musl
-configuration target (`arm-linux-musleabihf` or `aarch64-linux-musl`) while
-respecting the configured cross compiler prefix. Both shared and static
-variants of the C runtime are produced, and a minimal `musl.pc` pkg-config
-file is generated for consumers that need to discover the staged libc through
-pkg-config. Version markers (`VERSION`) are written to allow the incremental
-component logic to determine whether a rebuild is required.
+The helper performs an out-of-tree build, selecting the `aarch64-linux-musl`
+configuration target while respecting the configured cross compiler prefix.
+Both shared and static variants of the C runtime are produced, and a minimal
+`musl.pc` pkg-config file is generated for consumers that need to discover the
+staged libc through pkg-config. Version markers (`VERSION`) are written to
+allow the incremental component logic to determine whether a rebuild is
+required.
 
 After installation the build helper now prunes the musl archive so that only
 the epoll, eventfd, signalfd, timerfd, inotify, and nanosleep entry points remain. The
@@ -126,7 +125,7 @@ consumers) can reference the musl prefix explicitly.
 
 1. Run `scripts/build.sh --components musl` (or include `musl` in the default
    component selection) to populate `out/musl/<arch>` with the musl headers,
-   libraries, loader, and pkg-config metadata for both ARM and ARM64.
+   libraries, loader, and pkg-config metadata for ARM64.
 2. Inspect the staged runtime under `out/musl/<arch>/lib` and confirm that the
    architecture-specific loader (for example `ld-musl-aarch64.so.1`) and shared
    libraries (`libc.so`, `libpthread.so`, `libdl.so`, and friends) are present.
@@ -138,8 +137,7 @@ consumers) can reference the musl prefix explicitly.
    cargo test -p l4re-libc --test musl_smoke --target aarch64-unknown-linux-musl
    ```
 
-   Adjust the environment variable and target triple for ARM if desired. The
-   test succeeds once the staged musl runtime is visible to the linker and
+   The test succeeds once the staged musl runtime is visible to the linker and
    exports the expected symbols.
 4. Invoke `scripts/build.sh` with additional components (for example
    `--components musl,systemd,lsb_root`) to produce the bootable root

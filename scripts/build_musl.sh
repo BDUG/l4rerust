@@ -205,9 +205,6 @@ main() {
 
   local target triplet
   case "$arch" in
-    arm)
-      target="arm-linux-musleabihf"
-      ;;
     arm64)
       target="aarch64-linux-musl"
       ;;

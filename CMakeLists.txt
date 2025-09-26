@@ -9,8 +9,6 @@ if(DEFINED ENV{CROSS_COMPILE} AND NOT "$ENV{CROSS_COMPILE}" STREQUAL "")
   set(_l4rerust_cross_value "$ENV{CROSS_COMPILE}")
 elseif(DEFINED ENV{CROSS_COMPILE_ARM64} AND NOT "$ENV{CROSS_COMPILE_ARM64}" STREQUAL "")
   set(_l4rerust_cross_value "$ENV{CROSS_COMPILE_ARM64}")
-elseif(DEFINED ENV{CROSS_COMPILE_ARM} AND NOT "$ENV{CROSS_COMPILE_ARM}" STREQUAL "")
-  set(_l4rerust_cross_value "$ENV{CROSS_COMPILE_ARM}")
 else()
   set(_l4rerust_cross_value "${_l4rerust_cross_default}")
 endif()
@@ -18,18 +16,6 @@ endif()
 set(CROSS_COMPILE
     "${_l4rerust_cross_value}"
     CACHE STRING "Cross-compiler prefix shared across all architectures.")
-
-set(_l4rerust_cross_arm_default "arm-linux-gnueabihf-")
-if(DEFINED ENV{CROSS_COMPILE_ARM} AND NOT "$ENV{CROSS_COMPILE_ARM}" STREQUAL "")
-  set(_l4rerust_cross_arm_value "$ENV{CROSS_COMPILE_ARM}")
-elseif(NOT "${CROSS_COMPILE}" STREQUAL "")
-  set(_l4rerust_cross_arm_value "${CROSS_COMPILE}")
-else()
-  set(_l4rerust_cross_arm_value "${_l4rerust_cross_arm_default}")
-endif()
-set(CROSS_COMPILE_ARM
-    "${_l4rerust_cross_arm_value}"
-    CACHE INTERNAL "Derived from CROSS_COMPILE for legacy consumers.")
 
 if(DEFINED ENV{CROSS_COMPILE_ARM64} AND NOT "$ENV{CROSS_COMPILE_ARM64}" STREQUAL "")
   set(_l4rerust_cross_arm64_value "$ENV{CROSS_COMPILE_ARM64}")
@@ -66,8 +52,6 @@ unset(_value)
 unset(_var)
 unset(_l4rerust_cross_default)
 unset(_l4rerust_cross_value)
-unset(_l4rerust_cross_arm_default)
-unset(_l4rerust_cross_arm_value)
 unset(_l4rerust_cross_arm64_value)
 unset(_l4rerust_legacy_cross_defaults)
 

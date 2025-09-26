@@ -25,7 +25,6 @@ setup_macos_paths() {
 
   local prefix
   local -a formulas=(
-    arm-linux-gnueabihf-g++
     aarch64-elf-g++
     e2fsprogs
   )
@@ -54,11 +53,12 @@ sync_cross_compile_variables() {
 
   if [ -n "$primary" ]; then
     CROSS_COMPILE="${CROSS_COMPILE:-$primary}"
-    CROSS_COMPILE_ARM="${CROSS_COMPILE_ARM:-$primary}"
     CROSS_COMPILE_ARM64="${CROSS_COMPILE_ARM64:-$primary}"
   fi
 
-  export CROSS_COMPILE CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
+  unset CROSS_COMPILE_ARM
+
+  export CROSS_COMPILE CROSS_COMPILE_ARM64
 }
 
 # Locate the prefix for the first available g++ cross-compiler in the list of
