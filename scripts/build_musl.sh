@@ -21,6 +21,132 @@ cleanup() {
   fi
 }
 
+resolve_l4re_core_dir() {
+  if [ -n "${L4RE_CORE_DIR:-}" ] && [ -d "$L4RE_CORE_DIR" ]; then
+    echo "$L4RE_CORE_DIR"
+    return 0
+  fi
+
+  local default_core="$REPO_ROOT/src/l4re-core"
+  if [ -d "$default_core" ]; then
+    echo "$default_core"
+    return 0
+  fi
+
+  return 1
+}
+
+find_l4re_libs() {
+  local core_dir
+  if ! core_dir=$(resolve_l4re_core_dir); then
+    return 0
+  fi
+
+  find "$core_dir" -type f \
+    \( -name 'libl4re_c.a' -o -name 'libl4re_c-util.a' -o -name 'libpthread-l4.a' \ )
+}
+
+collect_l4re_symbols() {
+  local nm_bin="$1"
+  shift || true
+
+  if [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  python3 - "$nm_bin" "$@" <<'PY'
+import subprocess
+import sys
+
+nm = sys.argv[1]
+libs = sys.argv[2:]
+symbols = set()
+
+for lib in libs:
+    try:
+        proc = subprocess.run(
+            [nm, "-g", "--defined-only", lib],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        print(f"nm binary '{nm}' not found", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as exc:
+        sys.stderr.write(exc.stderr or "")
+        print(f"Failed to inspect L4Re library {lib}", file=sys.stderr)
+        sys.exit(exc.returncode)
+
+    current_obj = None
+    for line in proc.stdout.splitlines():
+        if not line:
+            continue
+        if line.endswith(":"):
+            current_obj = line[:-1]
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        symbol_type = parts[-2].upper()
+        if symbol_type not in {"T", "W", "D", "B"}:
+            continue
+        symbol = parts[-1]
+        symbols.add(symbol)
+
+for name in sorted(symbols):
+    print(name)
+PY
+}
+
+combine_l4re_and_musl() {
+  local install_prefix="$1"
+  local ar_bin="$2"
+  shift 2 || true
+
+  local lib_dir="$install_prefix/lib"
+  local combined_archive="$lib_dir/libc.a"
+  local musl_archive="$lib_dir/libc.musl-minimal.a"
+
+  if [ ! -f "$musl_archive" ]; then
+    echo "musl minimal archive '$musl_archive' not found; skipping L4Re integration" >&2
+    return 1
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    rm -f "$combined_archive"
+    cp "$musl_archive" "$combined_archive"
+    return 0
+  fi
+
+  local script_file
+  script_file=$(mktemp "$lib_dir/libc-merge.XXXXXX")
+  trap "rm -f '$script_file'" RETURN
+
+  {
+    echo "create $combined_archive"
+    for lib in "$@"; do
+      echo "addlib $lib"
+    done
+    echo "addlib $musl_archive"
+    echo "save"
+    echo "end"
+  } >"$script_file"
+
+  if ! "$ar_bin" -M <"$script_file"; then
+    rm -f "$combined_archive"
+    mv "$musl_archive" "$combined_archive"
+    rm -f "$script_file"
+    trap - RETURN
+    return 1
+  fi
+
+  rm -f "$script_file"
+  trap - RETURN
+
+  echo "Integrated L4Re static libraries into combined libc archive"
+}
+
 determine_minimal_musl_objects() {
   local nm_bin="$1"
   local archive="$2"
@@ -122,7 +248,7 @@ minimise_musl_libc() {
     fi
   fi
 
-  local -a required_symbols=(
+  local -a desired_symbols=(
     eventfd
     eventfd_read
     eventfd_write
@@ -141,6 +267,42 @@ minimise_musl_libc() {
     inotify_add_watch
     inotify_rm_watch
   )
+
+  local -a l4re_libs=()
+  while IFS= read -r lib; do
+    [ -n "$lib" ] || continue
+    l4re_libs+=("$lib")
+  done < <(find_l4re_libs)
+
+  local -a l4re_symbols=()
+  if [ "${#l4re_libs[@]}" -gt 0 ]; then
+    if mapfile -t l4re_symbols < <(collect_l4re_symbols "$nm_bin" "${l4re_libs[@]}"); then
+      :
+    else
+      echo "Failed to collect L4Re symbols; proceeding without symbol filtering" >&2
+      l4re_symbols=()
+    fi
+  fi
+
+  local -a required_symbols=()
+  if [ "${#l4re_symbols[@]}" -gt 0 ]; then
+    for sym in "${desired_symbols[@]}"; do
+      local lookup="${sym%?}"
+      if printf '%s\n' "${l4re_symbols[@]}" | grep -Fxq "$lookup"; then
+        continue
+      fi
+      required_symbols+=("$sym")
+    done
+  else
+    required_symbols=("${desired_symbols[@]}")
+  fi
+
+  if [ "${#required_symbols[@]}" -eq 0 ]; then
+    echo "L4Re core already provides required interfaces; skipping musl archive reduction"
+    mv "$libc_archive" "$lib_dir/libc.musl-minimal.a"
+    combine_l4re_and_musl "$install_prefix" "$ar_bin" "${l4re_libs[@]}"
+    return 0
+  fi
 
   local objects
   if ! objects=$(determine_minimal_musl_objects "$nm_bin" "$libc_archive" "${required_symbols[@]}"); then
@@ -171,7 +333,7 @@ minimise_musl_libc() {
         obj_list+=("$object")
         "$ar_bin" x "$backup_archive" "$object"
       done <"objects.list" &&
-      "$ar_bin" crs "$libc_archive" "${obj_list[@]}"
+      "$ar_bin" crs "$lib_dir/libc.musl-minimal.a" "${obj_list[@]}"
   ); then
     mv "$backup_archive" "$libc_archive"
     rm -rf "$tmpdir"
@@ -191,6 +353,7 @@ minimise_musl_libc() {
 
   rm -rf "$tmpdir"
   trap - RETURN
+  combine_l4re_and_musl "$install_prefix" "$ar_bin" "${l4re_libs[@]}"
   echo "Minimised musl libc archive to event/epoll/signalfd/timerfd/inotify/nanosleep symbols"
 }
 

@@ -42,13 +42,17 @@ pkg-config. Version markers (`VERSION`) are written to allow the incremental
 component logic to determine whether a rebuild is required.
 
 After installation the build helper now prunes the musl archive so that only
-the epoll, eventfd, signalfd, timerfd, inotify, and nanosleep entry points remain. The
-script inspects `libc.a`, extracts the object files that define these symbols,
-and repackages them into a reduced archive while moving the full musl `libc`
-and dynamic loader aside. This ensures the staged runtime only provides the
-handful of kernel interfaces that are absent from the L4Re core libraries,
-avoiding conflicts with the native `pthread-l4`, `l4re_c`, and `l4re_c-util`
-implementations that ship with L4Re.
+the epoll, eventfd, signalfd, timerfd, inotify, and nanosleep entry points remain.
+The reduction step inspects the L4Re core static libraries (`libl4re_c.a`,
+`libl4re_c-util.a`, and `libpthread-l4.a`) and discards any musl objects whose
+symbols are already provided by those archives before repackaging the
+remaining objects into a minimal `libc.musl-minimal.a`. The helper then creates
+a combined `libc.a` via the archiver’s MRI scripting mode so that the staged
+prefix exposes a single archive composed of the native L4Re implementations and
+the musl fallbacks. The original musl `libc` and dynamic loader are still moved
+aside to prevent accidental linkage. This guarantees that the staged runtime
+only contributes kernel helper interfaces that L4Re lacks while presenting
+callers with a unified libc archive.
 
 ### Rust integration
 
