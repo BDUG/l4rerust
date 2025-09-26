@@ -96,7 +96,15 @@ if [ "$cmd" != "clean" ]; then
         cd fiasco
         for patch_file in "$fiasco_patch_dir"/*.patch; do
           [ -e "$patch_file" ] || continue
-          patch -p1 -N <"$patch_file"
+
+          if patch -p1 -N --dry-run -s <"$patch_file"; then
+            patch -p1 -N <"$patch_file"
+          elif patch -p1 -R --dry-run -s <"$patch_file"; then
+            echo "Patch already applied, skipping: $(basename "$patch_file")"
+          else
+            echo "Failed to apply patch: $patch_file" >&2
+            exit 1
+          fi
         done
       )
     fi
