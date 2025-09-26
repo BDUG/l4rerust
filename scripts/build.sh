@@ -899,7 +899,7 @@ fi
 "$SCRIPT_DIR/setup.sh" --non-interactive
 
 BASH_VERSION=5.3
-BASH_URL="https://cgit.git.savannah.gnu.org/cgit/bash.git/tag/?h=bash-${BASH_VERSION}.tar.gz"
+BASH_URL="https://cgit.git.savannah.gnu.org/cgit/bash.git/snapshot/bash-${BASH_VERSION}.tar.gz"
 
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
