@@ -4,6 +4,22 @@ use libc::{c_char, c_int, c_void, sigset_t, size_t};
 #[cfg(feature = "syscall-fallbacks")]
 use libc::{c_uint, clockid_t, itimerspec};
 
+#[cfg(target_os = "l4re")]
+mod pthread_shims {
+    use libc::{c_int, pthread_t};
+
+    ///
+    /// On L4Re every thread is detached by default, so there is nothing we need to do here.  The
+    /// symbol still has to exist though because Rust's standard library started referencing
+    /// `pthread_detach` when linking on tier-3 targets, and without it any build that pulls in the
+    /// standard library will fail at link-time.  Returning success keeps the behaviour consistent
+    /// with the "already detached" semantics on L4Re.
+    #[no_mangle]
+    pub unsafe extern "C" fn pthread_detach(_thread: pthread_t) -> c_int {
+        0
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union epoll_data_t {
