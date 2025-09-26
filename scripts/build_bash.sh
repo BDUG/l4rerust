@@ -9,6 +9,32 @@ source "$SCRIPT_DIR/common_build.sh"
 # shellcheck source=lib/component_artifacts.sh
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 
+read_makefile_var() {
+  local var_name="$1"
+  local makefile_path="${2:-Makefile}"
+
+  if [ ! -f "$makefile_path" ]; then
+    return 0
+  fi
+
+  awk -v name="$var_name" -F'=' '
+    $1 ~ ("^" name "[\\t ]*$") {
+      sub(/^[\\t ]*/, "", $2)
+      print $2
+      exit
+    }
+  ' "$makefile_path"
+}
+
+sanitize_build_flag() {
+  local value="$1"
+
+  printf '%s\n' "$value" |
+    sed -e 's/-DCROSS_COMPILING//g' \
+        -e 's/[[:space:]]\+/ /g' \
+        -e 's/^ //; s/ $//'
+}
+
 usage() {
   echo "Usage: $0 <arch> <cross-prefix> <expected-version> <artifacts-dir> <source-dir>" >&2
   exit 1
@@ -55,8 +81,24 @@ main() {
     gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
       ./configure --host="$host" --without-bash-malloc
-    gmake clean
+
+    local build_cflags_for_build
+    local build_cppflags_for_build
+    local build_ldflags_for_build
+
+    build_cflags_for_build=$(sanitize_build_flag "$(read_makefile_var "CFLAGS_FOR_BUILD")")
+    build_cppflags_for_build=$(sanitize_build_flag "$(read_makefile_var "CPPFLAGS_FOR_BUILD")")
+    build_ldflags_for_build=$(sanitize_build_flag "$(read_makefile_var "LDFLAGS_FOR_BUILD")")
+
+    CFLAGS_FOR_BUILD="$build_cflags_for_build" \
+    CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
+    LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
+      gmake clean
+
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CFLAGS_FOR_BUILD="$build_cflags_for_build" \
+    CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
+    LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
       gmake STATIC_LDFLAGS=-static
     cp bash "$out_dir_path/"
   )
