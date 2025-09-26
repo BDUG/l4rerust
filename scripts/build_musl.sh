@@ -131,6 +131,7 @@ minimise_musl_libc() {
     epoll_ctl
     epoll_wait
     epoll_pwait
+    nanosleep
     signalfd
     signalfd4?
     timerfd_create
@@ -190,7 +191,7 @@ minimise_musl_libc() {
 
   rm -rf "$tmpdir"
   trap - RETURN
-  echo "Minimised musl libc archive to event/epoll/signalfd/timerfd/inotify symbols"
+  echo "Minimised musl libc archive to event/epoll/signalfd/timerfd/inotify/nanosleep symbols"
 }
 
 main() {
