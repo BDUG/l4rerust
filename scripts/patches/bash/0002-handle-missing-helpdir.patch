@@ -1,0 +1,48 @@
+--- a/builtins/mkbuiltins.c	2025-09-26 15:31:23.637357723 +0000
++++ b/builtins/mkbuiltins.c	2025-09-26 15:31:26.773410542 +0000
+@@ -280,11 +280,14 @@
+ 	}
+       else if (strcmp (arg, "-H") == 0)
+         {
+-	  separate_helpfiles = 1;
+-	  helpfile_directory = argv[arg_index++];
++          separate_helpfiles = 1;
++          if (arg_index < argc && argv[arg_index][0] != '\0' && argv[arg_index][0] != '-')
++            helpfile_directory = argv[arg_index++];
++          else
++            helpfile_directory = (char *)NULL;
+         }
+       else if (strcmp (arg, "-S") == 0)
+-	single_longdoc_strings = 0;
++        single_longdoc_strings = 0;
+       else
+ 	{
+ 	  fprintf (stderr, "%s: Unknown flag %s.\n", argv[0], arg);
+@@ -292,6 +295,9 @@
+ 	}
+     }
+ 
++  if (separate_helpfiles && helpfile_directory == 0)
++    helpfile_directory = ".";
++
+   if (include_filename == 0)
+     include_filename = extern_filename;
+ 
+@@ -1357,11 +1363,12 @@
+       fprintf (stream, "char * const %s_doc[] =", dname);
+ 
+       if (separate_helpfiles)
+-	{
+-	  int l = strlen (helpfile_directory) + strlen (dname) + 1;
+-	  sarray[0] = (char *)xmalloc (l + 1);
+-	  sprintf (sarray[0], "%s/%s", helpfile_directory, dname);
+-	  sarray[1] = (char *)NULL;
++        {
++          const char *helpdir = helpfile_directory ? helpfile_directory : ".";
++          int l = strlen (helpdir) + strlen (dname) + 1;
++          sarray[0] = (char *)xmalloc (l + 1);
++          sprintf (sarray[0], "%s/%s", helpdir, dname);
++          sarray[1] = (char *)NULL;
+ 	  write_documentation (stream, sarray, 0, STRING_ARRAY|HELPFILE);
+ 	  free (sarray[0]);
+ 	}
