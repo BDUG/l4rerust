@@ -34,7 +34,12 @@ import sys
 
 nm = sys.argv[1]
 archive = sys.argv[2]
-symbols = sys.argv[3:]
+raw_symbols = sys.argv[3:]
+symbols = []
+for raw in raw_symbols:
+    optional = raw.endswith("?")
+    name = raw[:-1] if optional else raw
+    symbols.append((name, optional))
 
 try:
     proc = subprocess.run(
@@ -67,15 +72,19 @@ for line in proc.stdout.splitlines():
     if symbol_type in {"T", "D", "B", "W"}:
         mapping.setdefault(symbol, current_obj)
 
-missing = [sym for sym in symbols if sym not in mapping]
+missing = [name for name, optional in symbols if not optional and name not in mapping]
 if missing:
     for sym in missing:
         print(f"Missing symbol {sym} in {archive}", file=sys.stderr)
     sys.exit(1)
 
 seen = set()
-for sym in symbols:
-    obj = mapping[sym]
+for name, optional in symbols:
+    obj = mapping.get(name)
+    if obj is None:
+        if optional:
+            continue
+        raise RuntimeError(f"Symbol {name} unexpectedly missing")
     if obj not in seen:
         seen.add(obj)
         print(obj)
@@ -123,7 +132,7 @@ minimise_musl_libc() {
     epoll_wait
     epoll_pwait
     signalfd
-    signalfd4
+    signalfd4?
     timerfd_create
     timerfd_settime
     timerfd_gettime
