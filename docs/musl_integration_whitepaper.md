@@ -44,10 +44,12 @@ component logic to determine whether a rebuild is required.
 After installation the build helper now prunes the musl archive so that only
 the epoll, eventfd, signalfd, timerfd, inotify, and nanosleep entry points remain. The
 script inspects `libc.a`, extracts the object files that define these symbols,
-and repackages them into a reduced archive while moving the full musl `libc`
-and dynamic loader aside. This ensures the staged runtime only provides the
-handful of kernel interfaces that are absent from the L4Re core libraries,
-avoiding conflicts with the native `pthread-l4`, `l4re_c`, and `l4re_c-util`
+and repackages them into a reduced archive while keeping the original shared
+objects intact. The full static archive is preserved as `libc.full.a`, allowing
+consumers that require the complete musl runtime to access it explicitly while
+the default `libc.a` only exports the kernel helpers needed by L4Re. This
+ensures the staged runtime provides the handful of missing interfaces without
+conflicting with the native `pthread-l4`, `l4re_c`, and `l4re_c-util`
 implementations that ship with L4Re.
 
 ### Rust integration

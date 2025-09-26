@@ -179,16 +179,6 @@ minimise_musl_libc() {
     return 1
   fi
 
-  if [ -f "$lib_dir/libc.so" ]; then
-    mv "$lib_dir/libc.so" "$lib_dir/libc.full.so"
-  fi
-
-  if ls "$lib_dir"/ld-musl-*.so.1 >/dev/null 2>&1; then
-    for loader in "$lib_dir"/ld-musl-*.so.1; do
-      mv "$loader" "$loader.full"
-    done
-  fi
-
   rm -rf "$tmpdir"
   trap - RETURN
   echo "Minimised musl libc archive to event/epoll/signalfd/timerfd/inotify/nanosleep symbols"
