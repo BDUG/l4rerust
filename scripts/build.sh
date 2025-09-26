@@ -1510,10 +1510,23 @@ EOF
   debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
   rm "$tmpfile"
 
-  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
-  debugfs -w -R "set_inode_field /bin/sh mode 0100755" "$lsb_img" >/dev/null
-  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
-  debugfs -w -R "set_inode_field /bin/bash mode 0100755" "$lsb_img" >/dev/null
+  local bash_binary="$ARTIFACTS_DIR/bash/arm64/bash"
+  if [ -f "$bash_binary" ]; then
+    mkdir -p config/lsb_root/bin config/lsb_root/boot
+    cp "$bash_binary" config/lsb_root/bin/bash
+    cp "$bash_binary" config/lsb_root/boot/bash
+    chmod 0755 config/lsb_root/bin/bash config/lsb_root/boot/bash
+
+    debugfs -w -R "write $bash_binary /bin/sh" "$lsb_img" >/dev/null
+    debugfs -w -R "set_inode_field /bin/sh mode 0100755" "$lsb_img" >/dev/null
+    debugfs -w -R "write $bash_binary /bin/bash" "$lsb_img" >/dev/null
+    debugfs -w -R "set_inode_field /bin/bash mode 0100755" "$lsb_img" >/dev/null
+    debugfs -w -R "mkdir /boot" "$lsb_img" >/dev/null || true
+    debugfs -w -R "write $bash_binary /boot/bash" "$lsb_img" >/dev/null
+    debugfs -w -R "set_inode_field /boot/bash mode 0100755" "$lsb_img" >/dev/null
+  else
+    echo "bash binary not found at $bash_binary; skipping staging into LSB image" >&2
+  fi
 
   if should_build_component "systemd"; then
     sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
