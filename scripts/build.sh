@@ -1205,6 +1205,13 @@ EOF
       echo "Staging image $base from $file into $distribution_images_dir"
       cp -f "$file" "$dest_path"
     done
+
+    if [ -f "$lsb_img" ]; then
+      base="$(basename "$lsb_img")"
+      dest_path="$distribution_images_dir/$base"
+      echo "Staging root filesystem $base from $lsb_img into $distribution_images_dir"
+      cp -f "$lsb_img" "$dest_path"
+    fi
   }
 
   stage_bootable_images

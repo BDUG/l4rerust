@@ -53,7 +53,10 @@ scripts/build.sh --no-clean          # build L4Re, systemd, Bash, and stage the 
 scripts/runqemu.sh                   # boot the freshest image under QEMU
 ```
 
-The bootable binary is staged under `distribution/images/`; for example the
-`bootstrap_bash_arm_virt.uimage` target boots into systemd, which in turn starts
-the file server, network server, and an interactive Bash console.
+Boot artifacts are staged under `distribution/images/`. The
+`lsb_root.img` root filesystem image contains the packaged Bash shell and
+systemd (installed as `/sbin/init`), while the
+`bootstrap_bash_arm_virt.uimage` boot image loads that filesystem together with
+the required L4Re components to start the file server, network server, and an
+interactive Bash console.
 
