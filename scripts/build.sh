@@ -370,6 +370,12 @@ else
   done
 fi
 
+if should_build_component "fiasco"; then
+  unset L4RERUST_SKIP_FIASCO_SETUP
+else
+  export L4RERUST_SKIP_FIASCO_SETUP=1
+fi
+
 if [ "$clean_cli_override" = "no-clean" ]; then
   clean=false
 elif [ "$clean_cli_override" = "clean" ]; then
