@@ -136,10 +136,22 @@ main() {
   (
     cd "$source_dir"
     gmake distclean >/dev/null 2>&1 || true
-    CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    local -a configure_env=(
+      "CC=${cross}gcc"
+      "CXX=${cross}g++"
+      "AR=${cross}ar"
+      "RANLIB=${cross}ranlib"
+      "CC_FOR_BUILD=$build_cc"
+      "CXX_FOR_BUILD=$build_cxx"
+    )
 
-    CC_FOR_BUILD="$build_cc" CXX_FOR_BUILD="$build_cxx" \
-      ./configure --host="$host" --build="$build_machine" --without-bash-malloc
+    if [ "$host" != "$build_machine" ]; then
+      configure_env+=(
+        "ac_cv_exeext="
+      )
+    fi
+
+    "${configure_env[@]}" ./configure --host="$host" --build="$build_machine" --without-bash-malloc
 
 
     local build_cflags_for_build
