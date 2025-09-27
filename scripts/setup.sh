@@ -677,52 +677,93 @@ do_setup()
     echo "Skipping L4Re build directory setup (component disabled)"
   else
     if [ "$CONF_DO_ARM" ]; then
-      gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
-        DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
-      gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
-      ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
-      echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
+      local arm_dir="obj/l4/arm-v7"
+      if [ -d "$arm_dir" ]; then
+        echo "Skipping creation of L4Re build directory $arm_dir (already exists)"
+      else
+        gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
+          DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../$arm_dir
+      fi
+      if [ -d "$arm_dir" ]; then
+        gmake -C "$arm_dir" CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
+        ARM_L4_DIR_FOR_LX_MP=$arm_dir
+        echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> "$arm_dir"/Makeconf.local
+      fi
     fi
 
     if [ "$CONF_DO_ARM64" ]; then
-      gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
+      local arm64_dir="obj/l4/arm64"
+      if [ -d "$arm64_dir" ]; then
+        echo "Skipping creation of L4Re build directory $arm64_dir (already exists)"
+      else
+        gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 \
+          DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../$arm64_dir
+      fi
     fi
 
     if [ "$CONF_DO_MIPS32R2" ]; then
-      cp src/l4/mk/defconfig/config.mips .tmp1
-      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-      echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
-      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-        CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
-      rm .tmp1
-      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
+      local mips32r2_dir="obj/l4/mips32r2"
+      if [ -d "$mips32r2_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips32r2_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../$mips32r2_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips32r2_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> "$mips32r2_dir"/Makeconf.local
+      fi
     fi
     if [ "$CONF_DO_MIPS32R6" ]; then
-      cp src/l4/mk/defconfig/config.mips .tmp1
-      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-      echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
-      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-        CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
-      rm .tmp1
-      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
+      local mips32r6_dir="obj/l4/mips32r6"
+      if [ -d "$mips32r6_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips32r6_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../$mips32r6_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips32r6_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> "$mips32r6_dir"/Makeconf.local
+      fi
     fi
     if [ "$CONF_DO_MIPS64R2" ]; then
-      cp src/l4/mk/defconfig/config.mips .tmp1
-      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-      echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
-      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-        CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
-      rm .tmp1
-      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
+      local mips64r2_dir="obj/l4/mips64r2"
+      if [ -d "$mips64r2_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips64r2_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../$mips64r2_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips64r2_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> "$mips64r2_dir"/Makeconf.local
+      fi
     fi
     if [ "$CONF_DO_MIPS64R6" ]; then
-      cp src/l4/mk/defconfig/config.mips .tmp1
-      echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
-      echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
-      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-        CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
-      rm .tmp1
-      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
+      local mips64r6_dir="obj/l4/mips64r6"
+      if [ -d "$mips64r6_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips64r6_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
+        echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../$mips64r6_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips64r6_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> "$mips64r6_dir"/Makeconf.local
+      fi
     fi
   fi
 
