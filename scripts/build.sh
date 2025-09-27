@@ -962,6 +962,7 @@ build_image_component() {
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=180
   mke2fs -F "$lsb_img" >/dev/null
+  ln -sf "$(pwd)/$lsb_img" config/lsb_root.img
   local d
   for d in /bin /etc /sbin /usr /usr/bin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null

@@ -1,0 +1,9 @@
+entry bash
+kernel fiasco -serial_esc
+roottask moe rom/ned -c rom/bash.cfg
+module sigma0
+module moe
+module l4re
+module ned
+module bash.cfg
+module lsb_root.img
