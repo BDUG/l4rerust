@@ -97,6 +97,7 @@ write_config()
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
            SKIP_L4_BUILD_SETUP \
+           SKIP_L4LINUX_BUILD_SETUP \
   ; do
     local v=$(eval echo \$$c)
     [ -n "$v" ] && add_to_config $c="$v"
@@ -176,19 +177,35 @@ do_config()
     done
 
     dialog --no-mouse --checklist \
-      "Select additional setup options:" 7 70 1 \
+      "Select additional setup options:" 9 70 2 \
+       l4linux   "Enable L4Linux build directory setup" on \
        skip-l4re "Skip L4Re build directory setup" off \
       2> $tmpfile
 
     result=$(cat $tmpfile)
 
+    local l4linux_selected=0
+    local skip_l4re_selected=0
     for e in $result; do
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-        \"skip-l4re\") SKIP_L4_BUILD_SETUP=1 ;;
+        \"l4linux\") l4linux_selected=1 ;;
+        \"skip-l4re\") skip_l4re_selected=1 ;;
       esac
     done
+
+    if [ $l4linux_selected -eq 1 ]; then
+      unset SKIP_L4LINUX_BUILD_SETUP
+    else
+      SKIP_L4LINUX_BUILD_SETUP=1
+    fi
+
+    if [ $skip_l4re_selected -eq 1 ]; then
+      SKIP_L4_BUILD_SETUP=1
+    else
+      unset SKIP_L4_BUILD_SETUP
+    fi
 
     if [ -n "$CONF_DO_ARM" ]; then
       dialog \
@@ -583,6 +600,7 @@ do_setup()
   local fiasco_configs=""
   local skip_fiasco_setup="${L4RERUST_SKIP_FIASCO_SETUP:-}"
   local skip_l4_setup="${SKIP_L4_BUILD_SETUP:-}"
+  local skip_l4linux_setup="${SKIP_L4LINUX_BUILD_SETUP:-}"
   local ARM_L4_DIR_FOR_LX_MP=""
   local ARM_L4_DIR_FOR_LX_UP=""
 
@@ -613,9 +631,18 @@ do_setup()
 
   mkdir -p obj/fiasco
   mkdir -p obj/l4
-  mkdir -p obj/l4linux
 
-  [ -e src/l4linux ] && l4lx_avail=1
+  local l4linux_enabled=true
+  if [ "$skip_l4linux_setup" = "1" ]; then
+    l4linux_enabled=false
+  fi
+
+  if [ "$l4linux_enabled" = true ]; then
+    mkdir -p obj/l4linux
+    [ -e src/l4linux ] && l4lx_avail=1
+  else
+    unset l4lx_avail
+  fi
 
   if [ "$skip_fiasco_setup" = "1" ]; then
     echo "Skipping Fiasco build directory setup (component disabled)"
@@ -702,7 +729,9 @@ do_setup()
   # L4Linux build setup
   [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
 
-  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
+  if [ "$l4linux_enabled" = true ] && \
+     [ -n "$ARM_L4_DIR_FOR_LX_UP" ] && \
+     [ -n "${l4lx_avail:-}" ]; then
 
     mkdir -p obj/l4linux/arm-up
 
@@ -725,7 +754,14 @@ do_setup()
     mkdir -p $odir/conf
 
     if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
+      local module_search_path="$(pwd)/obj/fiasco/arm-virt-pl2"
+      if [ "$l4linux_enabled" = true ] && \
+         [ -n "${l4lx_avail:-}" ] && \
+         [ -n "$ARM_L4_DIR_FOR_LX_MP" ]; then
+        module_search_path="$module_search_path:$(pwd)/obj/l4linux/arm-mp"
+      fi
+      module_search_path="$module_search_path:$common_paths"
+      echo "MODULE_SEARCH_PATH+=$module_search_path" >> $Mboot
       cat<<EOF >> $Mboot
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
 EOF
