@@ -31,6 +31,7 @@ sanitize_build_flag() {
 
   printf '%s\n' "$value" |
     sed -e 's/-DCROSS_COMPILING//g' \
+        -e 's/-D[[:space:]]\+CROSS_COMPILING//g' \
         -e 's/[[:space:]]\+/ /g' \
         -e 's/^ //; s/ $//'
 }
@@ -89,16 +90,22 @@ main() {
     build_cflags_for_build=$(sanitize_build_flag "$(read_makefile_var "CFLAGS_FOR_BUILD")")
     build_cppflags_for_build=$(sanitize_build_flag "$(read_makefile_var "CPPFLAGS_FOR_BUILD")")
     build_ldflags_for_build=$(sanitize_build_flag "$(read_makefile_var "LDFLAGS_FOR_BUILD")")
+    local_defs_for_build=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS_FOR_BUILD")")
+    local_defs=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS")")
 
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
+    LOCAL_DEFS_FOR_BUILD="$local_defs_for_build" \
+    LOCAL_DEFS="$local_defs" \
       gmake clean
 
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
+    LOCAL_DEFS_FOR_BUILD="$local_defs_for_build" \
+    LOCAL_DEFS="$local_defs" \
       gmake STATIC_LDFLAGS=-static
     cp bash "$out_dir_path/"
   )
