@@ -121,8 +121,10 @@ main() {
     cd "$source_dir"
     gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+
     CC_FOR_BUILD="$build_cc" CXX_FOR_BUILD="$build_cxx" \
       ./configure --host="$host" --build="$build_machine" --without-bash-malloc
+
 
     local build_cflags_for_build
     local build_cppflags_for_build
