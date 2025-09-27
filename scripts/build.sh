@@ -960,7 +960,7 @@ build_image_component() {
   lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
   rm -f "$lsb_img"
   mkdir -p "$(dirname "$lsb_img")"
-  dd if=/dev/zero of="$lsb_img" bs=1M count=8
+  dd if=/dev/zero of="$lsb_img" bs=1M count=80
   mke2fs -F "$lsb_img" >/dev/null
   local d
   for d in /bin /etc /sbin /usr /usr/bin; do
