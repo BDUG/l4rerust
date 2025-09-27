@@ -564,6 +564,9 @@ check_tools()
 
 do_setup()
 {
+  local fiasco_configs=""
+  local skip_fiasco_setup="${L4RERUST_SKIP_FIASCO_SETUP:-}"
+
   [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
   [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
@@ -595,21 +598,25 @@ do_setup()
 
   [ -e src/l4linux ] && l4lx_avail=1
 
-  # Fiasco build dirs
-  for b in $fiasco_configs; do
-    fiasco_dir=$(get_fiasco_dir "$b") || {
-      echo "Internal error: No directory given for config '$b'"
-      exit 1
-    }
-    cross_compile=$(get_cross_compile "$b")
-    echo "$fiasco_dir" "->" "$b"
-    if [ -z "$cross_compile" ]; then
-      echo "Internal error: No cross compiler given for config '$b'"
-      exit 1
-    fi
-    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
-  done
+  if [ "$skip_fiasco_setup" = "1" ]; then
+    echo "Skipping Fiasco build directory setup (component disabled)"
+  else
+    # Fiasco build dirs
+    for b in $fiasco_configs; do
+      fiasco_dir=$(get_fiasco_dir "$b") || {
+        echo "Internal error: No directory given for config '$b'"
+        exit 1
+      }
+      cross_compile=$(get_cross_compile "$b")
+      echo "$fiasco_dir" "->" "$b"
+      if [ -z "$cross_compile" ]; then
+        echo "Internal error: No cross compiler given for config '$b'"
+        exit 1
+      fi
+      (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+      echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
+    done
+  fi
 
   # some config tweaking
   if [ "$CONF_DO_MIPS32R2" ]; then
