@@ -96,6 +96,7 @@ write_config()
            CONF_FAILED_ARM64 \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
+           SKIP_L4_BUILD_SETUP \
   ; do
     local v=$(eval echo \$$c)
     [ -n "$v" ] && add_to_config $c="$v"
@@ -169,16 +170,31 @@ do_config()
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-	\"arm\") CONF_DO_ARM=1 ;;
-	\"arm64\") CONF_DO_ARM64=1 ;;
+        \"arm\") CONF_DO_ARM=1 ;;
+        \"arm64\") CONF_DO_ARM64=1 ;;
+      esac
+    done
+
+    dialog --no-mouse --checklist \
+      "Select additional setup options:" 7 70 1 \
+       skip-l4re "Skip L4Re build directory setup" off \
+      2> $tmpfile
+
+    result=$(cat $tmpfile)
+
+    for e in $result; do
+      # fixup for older dialogs
+      [ "${e#\"}" = "$e" ] && e="\"$e\""
+      case "$e" in
+        \"skip-l4re\") SKIP_L4_BUILD_SETUP=1 ;;
       esac
     done
 
     if [ -n "$CONF_DO_ARM" ]; then
       dialog \
-	--visit-items \
-	--begin 2 10 \
-	  --infobox \
+        --visit-items \
+        --begin 2 10 \
+          --infobox \
 	   "The list of choices represents a popular set of target platforms. Many more are available." \
 	   5 60 \
 	--and-widget --begin 9 10 \
@@ -564,6 +580,12 @@ check_tools()
 
 do_setup()
 {
+  local fiasco_configs=""
+  local skip_fiasco_setup="${L4RERUST_SKIP_FIASCO_SETUP:-}"
+  local skip_l4_setup="${SKIP_L4_BUILD_SETUP:-}"
+  local ARM_L4_DIR_FOR_LX_MP=""
+  local ARM_L4_DIR_FOR_LX_UP=""
+
   [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
   [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
@@ -595,21 +617,25 @@ do_setup()
 
   [ -e src/l4linux ] && l4lx_avail=1
 
-  # Fiasco build dirs
-  for b in $fiasco_configs; do
-    fiasco_dir=$(get_fiasco_dir "$b") || {
-      echo "Internal error: No directory given for config '$b'"
-      exit 1
-    }
-    cross_compile=$(get_cross_compile "$b")
-    echo "$fiasco_dir" "->" "$b"
-    if [ -z "$cross_compile" ]; then
-      echo "Internal error: No cross compiler given for config '$b'"
-      exit 1
-    fi
-    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
-  done
+  if [ "$skip_fiasco_setup" = "1" ]; then
+    echo "Skipping Fiasco build directory setup (component disabled)"
+  else
+    # Fiasco build dirs
+    for b in $fiasco_configs; do
+      fiasco_dir=$(get_fiasco_dir "$b") || {
+        echo "Internal error: No directory given for config '$b'"
+        exit 1
+      }
+      cross_compile=$(get_cross_compile "$b")
+      echo "$fiasco_dir" "->" "$b"
+      if [ -z "$cross_compile" ]; then
+        echo "Internal error: No cross compiler given for config '$b'"
+        exit 1
+      fi
+      (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+      echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
+    done
+  fi
 
   # some config tweaking
   if [ "$CONF_DO_MIPS32R2" ]; then
@@ -620,53 +646,57 @@ do_setup()
 
 
   # L4Re build dirs with default configs
-  if [ "$CONF_DO_ARM" ]; then
-    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
-      DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
-    gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
-    ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
-    echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
-  fi
+  if [ "$skip_l4_setup" = "1" ]; then
+    echo "Skipping L4Re build directory setup (component disabled)"
+  else
+    if [ "$CONF_DO_ARM" ]; then
+      gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
+        DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
+      gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
+      ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
+      echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
+    fi
 
-  if [ "$CONF_DO_ARM64" ]; then
-    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
-  fi
+    if [ "$CONF_DO_ARM64" ]; then
+      gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
+    fi
 
-  if [ "$CONF_DO_MIPS32R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS32R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
+    if [ "$CONF_DO_MIPS32R2" ]; then
+      cp src/l4/mk/defconfig/config.mips .tmp1
+      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+      echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
+      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+        CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
+      rm .tmp1
+      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
+    fi
+    if [ "$CONF_DO_MIPS32R6" ]; then
+      cp src/l4/mk/defconfig/config.mips .tmp1
+      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+      echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
+      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+        CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
+      rm .tmp1
+      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
+    fi
+    if [ "$CONF_DO_MIPS64R2" ]; then
+      cp src/l4/mk/defconfig/config.mips .tmp1
+      echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+      echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
+      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+        CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
+      rm .tmp1
+      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
+    fi
+    if [ "$CONF_DO_MIPS64R6" ]; then
+      cp src/l4/mk/defconfig/config.mips .tmp1
+      echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
+      echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
+      gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+        CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
+      rm .tmp1
+      echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
+    fi
   fi
 
   # L4Linux build setup

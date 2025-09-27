@@ -61,7 +61,8 @@ readonly -a BUILD_COMPONENT_IDS=(
   libgcrypt
   libzstd
   systemd
-  l4re
+  fiasco
+  l4
   image
 )
 
@@ -73,9 +74,19 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
-  [l4re]="Build the L4Re tree"
+  [fiasco]="Fiasco.OC microkernel"
+  [l4]="Build the L4Re tree"
   [image]="Generate bootable images"
 )
+
+declare -A BUILD_COMPONENT_ALIASES=(
+  [l4re]=l4
+)
+
+canonical_component() {
+  local component="$1"
+  echo "${BUILD_COMPONENT_ALIASES[$component]:-$component}"
+}
 
 run_component_build() {
   local component="$1"
@@ -138,7 +149,9 @@ EOF
 }
 
 is_valid_component() {
-  local candidate="$1" component
+  local candidate
+  candidate="$(canonical_component "$1")"
+  local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
     if [ "$component" = "$candidate" ]; then
       return 0
@@ -150,6 +163,7 @@ is_valid_component() {
 clear_component_selection() {
   local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    component="$(canonical_component "$component")"
     SHOULD_BUILD["$component"]=0
   done
 }
@@ -157,12 +171,14 @@ clear_component_selection() {
 set_all_components_selected() {
   local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    component="$(canonical_component "$component")"
     SHOULD_BUILD["$component"]=1
   done
 }
 
 should_build_component() {
   local component="$1"
+  component="$(canonical_component "$component")"
   [[ "${SHOULD_BUILD["$component"]:-0}" == 1 ]]
 }
 
@@ -214,6 +230,7 @@ prompt_component_selection() {
     entry="${entry%\"}"
     entry="${entry#\"}"
     if [ -n "$entry" ]; then
+      entry="$(canonical_component "$entry")"
       _result+=("$entry")
     fi
   done
@@ -321,6 +338,7 @@ if [ "$component_arg_set" = true ]; then
       usage >&2
       exit 1
     fi
+    component="$(canonical_component "$component")"
     if [[ -n "${seen_components["$component"]-}" ]]; then
       continue
     fi
@@ -366,6 +384,12 @@ else
   for component in "${selected_components[@]}"; do
     SHOULD_BUILD["$component"]=1
   done
+fi
+
+if should_build_component "fiasco"; then
+  unset L4RERUST_SKIP_FIASCO_SETUP
+else
+  export L4RERUST_SKIP_FIASCO_SETUP=1
 fi
 
 if [ "$clean_cli_override" = "no-clean" ]; then
@@ -869,6 +893,39 @@ build_systemd_component() {
   return 2
 }
 
+build_fiasco_component() {
+  set -e
+
+  if (( BUILD_FAILURE_COUNT > 0 )); then
+    COMPONENT_BUILD_NOTE="dependency failed"
+    return 2
+  fi
+
+  local fiasco_root="obj/fiasco"
+  local -a fiasco_dirs=()
+
+  if [ -d "$fiasco_root" ]; then
+    while IFS= read -r -d '' dir; do
+      fiasco_dirs+=("$dir")
+    done < <(find "$fiasco_root" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+  fi
+
+  if (( ${#fiasco_dirs[@]} == 0 )); then
+    echo "No Fiasco build directories found in $fiasco_root; skipping"
+    COMPONENT_BUILD_NOTE="not configured"
+    return 2
+  fi
+
+  local dir
+  for dir in "${fiasco_dirs[@]}"; do
+    echo "Building Fiasco in $dir"
+    gmake -C "$dir"
+  done
+
+  COMPONENT_BUILD_NOTE="built"
+  return 0
+}
+
 build_l4re_component() {
   set -e
 
@@ -1154,6 +1211,7 @@ run_component_build "libblkid" build_libblkid_component
 run_component_build "libgcrypt" build_libgcrypt_component
 run_component_build "libzstd" build_libzstd_component
 run_component_build "systemd" build_systemd_component
+run_component_build "fiasco" build_fiasco_component
 
 if (( BUILD_FAILURE_COUNT > 0 )); then
   echo "One or more external component builds failed; skipping remaining build steps."
@@ -1163,5 +1221,5 @@ if (( BUILD_FAILURE_COUNT == 0 )); then
   echo "######### EXTERNAL BUILD DONE ###############"
 fi
 
-run_component_build "l4re" build_l4re_component
+run_component_build "l4" build_l4re_component
 run_component_build "image" build_image_component
