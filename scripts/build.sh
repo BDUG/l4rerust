@@ -61,6 +61,7 @@ readonly -a BUILD_COMPONENT_IDS=(
   libgcrypt
   libzstd
   systemd
+  fiasco
   l4re
   image
 )
@@ -73,6 +74,7 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
+  [fiasco]="Fiasco.OC microkernel"
   [l4re]="Build the L4Re tree"
   [image]="Generate bootable images"
 )
@@ -869,6 +871,39 @@ build_systemd_component() {
   return 2
 }
 
+build_fiasco_component() {
+  set -e
+
+  if (( BUILD_FAILURE_COUNT > 0 )); then
+    COMPONENT_BUILD_NOTE="dependency failed"
+    return 2
+  fi
+
+  local fiasco_root="obj/fiasco"
+  local -a fiasco_dirs=()
+
+  if [ -d "$fiasco_root" ]; then
+    while IFS= read -r -d '' dir; do
+      fiasco_dirs+=("$dir")
+    done < <(find "$fiasco_root" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+  fi
+
+  if (( ${#fiasco_dirs[@]} == 0 )); then
+    echo "No Fiasco build directories found in $fiasco_root; skipping"
+    COMPONENT_BUILD_NOTE="not configured"
+    return 2
+  fi
+
+  local dir
+  for dir in "${fiasco_dirs[@]}"; do
+    echo "Building Fiasco in $dir"
+    gmake -C "$dir"
+  done
+
+  COMPONENT_BUILD_NOTE="built"
+  return 0
+}
+
 build_l4re_component() {
   set -e
 
@@ -1154,6 +1189,7 @@ run_component_build "libblkid" build_libblkid_component
 run_component_build "libgcrypt" build_libgcrypt_component
 run_component_build "libzstd" build_libzstd_component
 run_component_build "systemd" build_systemd_component
+run_component_build "fiasco" build_fiasco_component
 
 if (( BUILD_FAILURE_COUNT > 0 )); then
   echo "One or more external component builds failed; skipping remaining build steps."
