@@ -1,0 +1,13 @@
+[package]
+name = "aio_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+l4 = { path = "../../crates/l4" }
+l4re = { path = "../../crates/l4re" }
+l4_sys = { path = "../../crates/l4-sys" }
+libc = "0.2"
+slab = "0.4"
+
+[workspace]

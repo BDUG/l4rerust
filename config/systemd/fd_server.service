@@ -1,0 +1,11 @@
+[Unit]
+Description=L4Re descriptor helper server
+After=fs_server.service
+Requires=fs_server.service
+
+[Service]
+ExecStart=/boot/fd_server
+Environment="L4_CAP_GLOBAL_FD=global_fd"
+
+[Install]
+WantedBy=multi-user.target
