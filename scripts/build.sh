@@ -887,7 +887,7 @@ else
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=8
   mke2fs -F "$lsb_img" >/dev/null
-  for d in /bin /etc /usr /usr/bin; do
+  for d in /bin /etc /sbin /usr /usr/bin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
   done
   tmpfile=$(mktemp)
@@ -922,6 +922,11 @@ EOF
         debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
+        mkdir -p config/lsb_root/sbin
+        ln -sf ../lib/systemd/systemd config/lsb_root/sbin/init
+        debugfs -w -R "mkdir /sbin" "$lsb_img" >/dev/null || true
+        debugfs -w -R "rm /sbin/init" "$lsb_img" >/dev/null 2>&1 || true
+        debugfs -w -R "symlink /lib/systemd/systemd /sbin/init" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
           find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
             rel="${d#$sys_root}"
@@ -1078,6 +1083,8 @@ EOF
   }
 
   if should_build_component "systemd"; then
+    enable_service fs_server
+    enable_service net_server
     enable_service bash
   fi
 
