@@ -151,7 +151,7 @@ main() {
       )
     fi
 
-    "${configure_env[@]}" ./configure --host="$host" --build="$build_machine" --without-bash-malloc
+    env "${configure_env[@]}" ./configure --host="$host" --build="$build_machine" --without-bash-malloc
 
 
     local build_cflags_for_build
