@@ -62,6 +62,7 @@ readonly -a BUILD_COMPONENT_IDS=(
   libzstd
   systemd
   fiasco
+  rust
   l4
   image
 )
@@ -75,6 +76,7 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
   [fiasco]="Fiasco.OC microkernel"
+  [rust]="Rust support libraries"
   [l4]="Build the L4Re tree"
   [image]="Generate bootable images"
 )
@@ -452,10 +454,17 @@ else
 fi
 "$SCRIPT_DIR/setup.sh" --non-interactive
 
-# Build the Rust libc crate so other crates can link against it
-cargo build -p l4re-libc --release
-# Ensure Rust crates pick up the freshly built static libc
+# Ensure Rust crates can locate the static libc artifacts if they are available.
 export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
+
+build_rust_component() {
+  set -e
+
+  cargo build -p l4re-libc --release
+
+  COMPONENT_BUILD_NOTE="built"
+  return 0
+}
 
 BASH_VERSION=5.3
 BASH_URL="https://cgit.git.savannah.gnu.org/cgit/bash.git/snapshot/bash-${BASH_VERSION}.tar.gz"
@@ -1212,6 +1221,7 @@ run_component_build "libgcrypt" build_libgcrypt_component
 run_component_build "libzstd" build_libzstd_component
 run_component_build "systemd" build_systemd_component
 run_component_build "fiasco" build_fiasco_component
+run_component_build "rust" build_rust_component
 
 if (( BUILD_FAILURE_COUNT > 0 )); then
   echo "One or more external component builds failed; skipping remaining build steps."
