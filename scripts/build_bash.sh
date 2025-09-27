@@ -77,10 +77,21 @@ main() {
   fi
 
   mkdir -p "$out_dir_path"
+  local native_cc
+  native_cc="${CC_FOR_BUILD:-${BUILD_CC:-}}"
+  if [ -z "$native_cc" ]; then
+    if command -v gcc >/dev/null 2>&1; then
+      native_cc="gcc"
+    else
+      native_cc="cc"
+    fi
+  fi
+
   (
     cd "$source_dir"
     gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC_FOR_BUILD="$native_cc" BUILD_CC="$native_cc" \
       ./configure --host="$host" --without-bash-malloc
 
     local build_cflags_for_build
@@ -93,6 +104,7 @@ main() {
     local_defs_for_build=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS_FOR_BUILD")")
     local_defs=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS")")
 
+    CC_FOR_BUILD="$native_cc" BUILD_CC="$native_cc" \
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
@@ -101,6 +113,7 @@ main() {
       gmake clean
 
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC_FOR_BUILD="$native_cc" BUILD_CC="$native_cc" \
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
