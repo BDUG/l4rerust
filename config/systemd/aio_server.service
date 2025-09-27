@@ -1,0 +1,12 @@
+[Unit]
+Description=L4Re AIO Server
+
+[Service]
+ExecStart=/boot/aio_server
+Environment="L4_CAP_GLOBAL_AIO=global_aio"
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
