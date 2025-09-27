@@ -96,6 +96,8 @@ write_config()
            CONF_FAILED_ARM64 \
            CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
+           SKIP_L4_BUILD_SETUP \
+           SKIP_L4LINUX_BUILD_SETUP \
   ; do
     local v=$(eval echo \$$c)
     [ -n "$v" ] && add_to_config $c="$v"
@@ -169,16 +171,47 @@ do_config()
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-	\"arm\") CONF_DO_ARM=1 ;;
-	\"arm64\") CONF_DO_ARM64=1 ;;
+        \"arm\") CONF_DO_ARM=1 ;;
+        \"arm64\") CONF_DO_ARM64=1 ;;
       esac
     done
 
+    dialog --no-mouse --checklist \
+      "Select additional setup options:" 9 70 2 \
+       l4linux   "Enable L4Linux build directory setup" on \
+       skip-l4re "Skip L4Re build directory setup" off \
+      2> $tmpfile
+
+    result=$(cat $tmpfile)
+
+    local l4linux_selected=0
+    local skip_l4re_selected=0
+    for e in $result; do
+      # fixup for older dialogs
+      [ "${e#\"}" = "$e" ] && e="\"$e\""
+      case "$e" in
+        \"l4linux\") l4linux_selected=1 ;;
+        \"skip-l4re\") skip_l4re_selected=1 ;;
+      esac
+    done
+
+    if [ $l4linux_selected -eq 1 ]; then
+      unset SKIP_L4LINUX_BUILD_SETUP
+    else
+      SKIP_L4LINUX_BUILD_SETUP=1
+    fi
+
+    if [ $skip_l4re_selected -eq 1 ]; then
+      SKIP_L4_BUILD_SETUP=1
+    else
+      unset SKIP_L4_BUILD_SETUP
+    fi
+
     if [ -n "$CONF_DO_ARM" ]; then
       dialog \
-	--visit-items \
-	--begin 2 10 \
-	  --infobox \
+        --visit-items \
+        --begin 2 10 \
+          --infobox \
 	   "The list of choices represents a popular set of target platforms. Many more are available." \
 	   5 60 \
 	--and-widget --begin 9 10 \
@@ -564,6 +597,13 @@ check_tools()
 
 do_setup()
 {
+  local fiasco_configs=""
+  local skip_fiasco_setup="${L4RERUST_SKIP_FIASCO_SETUP:-}"
+  local skip_l4_setup="${SKIP_L4_BUILD_SETUP:-}"
+  local skip_l4linux_setup="${SKIP_L4LINUX_BUILD_SETUP:-}"
+  local ARM_L4_DIR_FOR_LX_MP=""
+  local ARM_L4_DIR_FOR_LX_UP=""
+
   [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
   [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
@@ -591,25 +631,38 @@ do_setup()
 
   mkdir -p obj/fiasco
   mkdir -p obj/l4
-  mkdir -p obj/l4linux
 
-  [ -e src/l4linux ] && l4lx_avail=1
+  local l4linux_enabled=true
+  if [ "$skip_l4linux_setup" = "1" ]; then
+    l4linux_enabled=false
+  fi
 
-  # Fiasco build dirs
-  for b in $fiasco_configs; do
-    fiasco_dir=$(get_fiasco_dir "$b") || {
-      echo "Internal error: No directory given for config '$b'"
-      exit 1
-    }
-    cross_compile=$(get_cross_compile "$b")
-    echo "$fiasco_dir" "->" "$b"
-    if [ -z "$cross_compile" ]; then
-      echo "Internal error: No cross compiler given for config '$b'"
-      exit 1
-    fi
-    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
-    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
-  done
+  if [ "$l4linux_enabled" = true ]; then
+    mkdir -p obj/l4linux
+    [ -e src/l4linux ] && l4lx_avail=1
+  else
+    unset l4lx_avail
+  fi
+
+  if [ "$skip_fiasco_setup" = "1" ]; then
+    echo "Skipping Fiasco build directory setup (component disabled)"
+  else
+    # Fiasco build dirs
+    for b in $fiasco_configs; do
+      fiasco_dir=$(get_fiasco_dir "$b") || {
+        echo "Internal error: No directory given for config '$b'"
+        exit 1
+      }
+      cross_compile=$(get_cross_compile "$b")
+      echo "$fiasco_dir" "->" "$b"
+      if [ -z "$cross_compile" ]; then
+        echo "Internal error: No cross compiler given for config '$b'"
+        exit 1
+      fi
+      (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+      echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
+    done
+  fi
 
   # some config tweaking
   if [ "$CONF_DO_MIPS32R2" ]; then
@@ -620,59 +673,106 @@ do_setup()
 
 
   # L4Re build dirs with default configs
-  if [ "$CONF_DO_ARM" ]; then
-    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
-      DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
-    gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
-    ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
-    echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
-  fi
+  if [ "$skip_l4_setup" = "1" ]; then
+    echo "Skipping L4Re build directory setup (component disabled)"
+  else
+    if [ "$CONF_DO_ARM" ]; then
+      local arm_dir="obj/l4/arm-v7"
+      if [ -d "$arm_dir" ]; then
+        echo "Skipping creation of L4Re build directory $arm_dir (already exists)"
+      else
+        gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
+          DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../$arm_dir
+      fi
+      if [ -d "$arm_dir" ]; then
+        gmake -C "$arm_dir" CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
+        ARM_L4_DIR_FOR_LX_MP=$arm_dir
+        echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> "$arm_dir"/Makeconf.local
+      fi
+    fi
 
-  if [ "$CONF_DO_ARM64" ]; then
-    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
-  fi
+    if [ "$CONF_DO_ARM64" ]; then
+      local arm64_dir="obj/l4/arm64"
+      if [ -d "$arm64_dir" ]; then
+        echo "Skipping creation of L4Re build directory $arm64_dir (already exists)"
+      else
+        gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 \
+          DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../$arm64_dir
+      fi
+    fi
 
-  if [ "$CONF_DO_MIPS32R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS32R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R2" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
-  fi
-  if [ "$CONF_DO_MIPS64R6" ]; then
-    cp src/l4/mk/defconfig/config.mips .tmp1
-    echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
-    echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
-    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
-      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
-    rm .tmp1
-    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
+    if [ "$CONF_DO_MIPS32R2" ]; then
+      local mips32r2_dir="obj/l4/mips32r2"
+      if [ -d "$mips32r2_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips32r2_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../$mips32r2_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips32r2_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> "$mips32r2_dir"/Makeconf.local
+      fi
+    fi
+    if [ "$CONF_DO_MIPS32R6" ]; then
+      local mips32r6_dir="obj/l4/mips32r6"
+      if [ -d "$mips32r6_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips32r6_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../$mips32r6_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips32r6_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> "$mips32r6_dir"/Makeconf.local
+      fi
+    fi
+    if [ "$CONF_DO_MIPS64R2" ]; then
+      local mips64r2_dir="obj/l4/mips64r2"
+      if [ -d "$mips64r2_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips64r2_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+        echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../$mips64r2_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips64r2_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> "$mips64r2_dir"/Makeconf.local
+      fi
+    fi
+    if [ "$CONF_DO_MIPS64R6" ]; then
+      local mips64r6_dir="obj/l4/mips64r6"
+      if [ -d "$mips64r6_dir" ]; then
+        echo "Skipping creation of L4Re build directory $mips64r6_dir (already exists)"
+      else
+        cp src/l4/mk/defconfig/config.mips .tmp1
+        echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
+        echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
+        gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+          CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../$mips64r6_dir
+        rm .tmp1
+      fi
+      if [ -d "$mips64r6_dir" ]; then
+        echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> "$mips64r6_dir"/Makeconf.local
+      fi
+    fi
   fi
 
   # L4Linux build setup
   [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
 
-  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
+  if [ "$l4linux_enabled" = true ] && \
+     [ -n "$ARM_L4_DIR_FOR_LX_UP" ] && \
+     [ -n "${l4lx_avail:-}" ]; then
 
     mkdir -p obj/l4linux/arm-up
 
@@ -695,7 +795,14 @@ do_setup()
     mkdir -p $odir/conf
 
     if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
-      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
+      local module_search_path="$(pwd)/obj/fiasco/arm-virt-pl2"
+      if [ "$l4linux_enabled" = true ] && \
+         [ -n "${l4lx_avail:-}" ] && \
+         [ -n "$ARM_L4_DIR_FOR_LX_MP" ]; then
+        module_search_path="$module_search_path:$(pwd)/obj/l4linux/arm-mp"
+      fi
+      module_search_path="$module_search_path:$common_paths"
+      echo "MODULE_SEARCH_PATH+=$module_search_path" >> $Mboot
       cat<<EOF >> $Mboot
 QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
 EOF
