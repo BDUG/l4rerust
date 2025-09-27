@@ -429,8 +429,8 @@ cargo build -p l4re-libc --release
 # Ensure Rust crates pick up the freshly built static libc
 export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
 
-BASH_VERSION=5.2.21
-BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
+BASH_VERSION=5.3
+BASH_URL="https://cgit.git.savannah.gnu.org/cgit/bash.git/snapshot/bash-${BASH_VERSION}.tar.gz"
 
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"

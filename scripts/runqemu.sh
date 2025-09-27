@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(dirname "$0")"
-REPO_ROOT="$SCRIPT_DIR/.."
+SCRIPT_DIR=""
+REPO_ROOT="."
 DEFAULT_IMAGE_DIR="$REPO_ROOT/distribution"
-DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/images/bootstrap_bash_arm_virt.elf"
+DEFAULT_IMAGE_CANDIDATE="$DEFAULT_IMAGE_DIR/images/bootstrap_bash_arm_virt.uimage"
 
 IMAGE_PATH="${1:-}"
 
 if [[ -z "$IMAGE_PATH" ]]; then
   shopt -s nullglob
-  images=("$DEFAULT_IMAGE_DIR"/images/*.elf)
+  images=("$DEFAULT_IMAGE_DIR"/images/*.uimage)
   shopt -u nullglob
 
   if (( ${#images[@]} == 0 )); then
