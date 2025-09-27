@@ -63,6 +63,14 @@ main() {
   fi
 
   local host="$triple"
+  local config_sub_script="$source_dir/support/config.sub"
+  if [ -x "$config_sub_script" ]; then
+    local canonical_host
+    canonical_host="$("$config_sub_script" "$host" 2>/dev/null || true)"
+    if [ -n "$canonical_host" ]; then
+      host="$canonical_host"
+    fi
+  fi
   local out_dir="$ARTIFACTS_DIR/bash/$arch"
   local out_dir_path
   if [[ "$out_dir" == /* ]]; then
@@ -101,11 +109,19 @@ main() {
 
   local build_machine
   build_machine="$(${build_cc} -dumpmachine 2>/dev/null || true)"
-  if [ -z "$build_machine" ]; then
-    if command -v gcc >/dev/null 2>&1; then
-      build_machine="$(gcc -dumpmachine 2>/dev/null || true)"
+  if [ -z "$build_machine" ] && command -v gcc >/dev/null 2>&1; then
+    build_machine="$(gcc -dumpmachine 2>/dev/null || true)"
+  fi
+
+  local config_guess_script="$source_dir/support/config.guess"
+  if [ -x "$config_guess_script" ]; then
+    local guessed_build
+    guessed_build="$("$config_guess_script" 2>/dev/null || true)"
+    if [ -n "$guessed_build" ]; then
+      build_machine="$guessed_build"
     fi
   fi
+
   if [ -z "$build_machine" ]; then
     case "$(uname -s)" in
       Darwin)
