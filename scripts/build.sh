@@ -61,6 +61,8 @@ readonly -a BUILD_COMPONENT_IDS=(
   libgcrypt
   libzstd
   systemd
+  l4re
+  image
 )
 
 declare -A BUILD_COMPONENT_LABELS=(
@@ -71,6 +73,8 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
+  [l4re]="Build the L4Re tree"
+  [image]="Generate bootable images"
 )
 
 run_component_build() {
@@ -865,28 +869,34 @@ build_systemd_component() {
   return 2
 }
 
-run_component_build "bash" build_bash_component
-run_component_build "libcap" build_libcap_component
-run_component_build "libcrypt" build_libcrypt_component
-run_component_build "libblkid" build_libblkid_component
-run_component_build "libgcrypt" build_libgcrypt_component
-run_component_build "libzstd" build_libzstd_component
-run_component_build "systemd" build_systemd_component
+build_l4re_component() {
+  set -e
 
-if (( BUILD_FAILURE_COUNT > 0 )); then
-  echo "One or more external component builds failed; skipping remaining build steps."
-else
-  echo "######### EXTERNAL BUILD DONE ###############"
+  if (( BUILD_FAILURE_COUNT > 0 )); then
+    COMPONENT_BUILD_NOTE="dependency failed"
+    return 2
+  fi
 
-  # Build the tree including libc, Leo, and Rust crates
   gmake
+  COMPONENT_BUILD_NOTE="built"
+  return 0
+}
 
-  # Create a minimal LSB root filesystem image
+build_image_component() {
+  set -e
+
+  if (( BUILD_FAILURE_COUNT > 0 )); then
+    COMPONENT_BUILD_NOTE="dependency failed"
+    return 2
+  fi
+
+  local lsb_img tmpfile
   lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
   rm -f "$lsb_img"
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=8
   mke2fs -F "$lsb_img" >/dev/null
+  local d
   for d in /bin /etc /sbin /usr /usr/bin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
   done
@@ -903,8 +913,8 @@ EOF
   debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
   debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
-  # Install systemd into the root filesystem image and staging area
   if should_build_component "systemd"; then
+    local sys_root systemd_bin units_dir
     sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
     if [ -d "$sys_root" ]; then
       mkdir -p config/lsb_root/usr/lib/systemd
@@ -928,13 +938,15 @@ EOF
         debugfs -w -R "rm /sbin/init" "$lsb_img" >/dev/null 2>&1 || true
         debugfs -w -R "symlink /lib/systemd/systemd /sbin/init" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
-          find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
-            rel="${d#$sys_root}"
+          find "$sys_root/usr/lib/systemd" -type d | while read -r sd; do
+            local rel
+            rel="${sd#$sys_root}"
             debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
           done
-          find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
-            rel="${f#$sys_root}"
-            debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+          find "$sys_root/usr/lib/systemd" -type f | while read -r sf; do
+            local rel
+            rel="${sf#$sys_root}"
+            debugfs -w -R "write $sf $rel" "$lsb_img" >/dev/null
             debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
           done
         fi
@@ -948,14 +960,44 @@ EOF
       fi
       if [ -L "$sys_root/bin/systemctl" ]; then
         mkdir -p config/lsb_root/bin
+        local symlink_target
         symlink_target="$(readlink "$sys_root/bin/systemctl")"
         ln -snf "$symlink_target" config/lsb_root/bin/systemctl
         debugfs -w -R "symlink $symlink_target /bin/systemctl" "$lsb_img" >/dev/null || true
       fi
+      units_dir="config/systemd"
+      if [ -d "$units_dir" ]; then
+        mkdir -p config/lsb_root/lib/systemd/system
+        debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
+        local unit base
+        for unit in "$units_dir"/*.service; do
+          [ -f "$unit" ] || continue
+          base="$(basename "$unit")"
+          cp "$unit" config/lsb_root/lib/systemd/system/
+          debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
+          debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
+        done
+      fi
+      enable_service() {
+        local name="$1"
+        local unit="config/systemd/${name}.service"
+        if [ -f "$unit" ]; then
+          mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
+          ln -sf ../../../../lib/systemd/system/${name}.service \
+            config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
+          debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
+          debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
+          debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
+          debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
+        fi
+      }
+
+      enable_service fs_server
+      enable_service net_server
+      enable_service bash
     fi
   fi
 
-  # Stage runtime libraries from staged components in the root filesystem image
   stage_component_runtime_libraries() {
     local component="$1"
     local arch="$2"
@@ -1034,6 +1076,7 @@ EOF
     done
   }
 
+  local component
   for component in "${SYSTEMD_COMPONENTS[@]}"; do
     if ! should_build_component "$component"; then
       continue
@@ -1051,44 +1094,6 @@ EOF
     esac
   done
 
-  # Install systemd unit files into the image
-  if should_build_component "systemd"; then
-    units_dir="config/systemd"
-    if [ -d "$units_dir" ]; then
-      mkdir -p config/lsb_root/lib/systemd/system
-      debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-      for unit in "$units_dir"/*.service; do
-        [ -f "$unit" ] || continue
-        base="$(basename "$unit")"
-        cp "$unit" config/lsb_root/lib/systemd/system/
-        debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-        debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
-      done
-    fi
-  fi
-
-  # Enable services
-  enable_service() {
-    local name="$1"
-    local unit="config/systemd/${name}.service"
-    if [ -f "$unit" ]; then
-      mkdir -p config/lsb_root/etc/systemd/system/multi-user.target.wants
-      ln -sf ../../../../lib/systemd/system/${name}.service \
-        config/lsb_root/etc/systemd/system/multi-user.target.wants/${name}.service
-      debugfs -w -R "mkdir /etc/systemd" "$lsb_img" >/dev/null || true
-      debugfs -w -R "mkdir /etc/systemd/system" "$lsb_img" >/dev/null || true
-      debugfs -w -R "mkdir /etc/systemd/system/multi-user.target.wants" "$lsb_img" >/dev/null || true
-      debugfs -w -R "symlink /lib/systemd/system/${name}.service /etc/systemd/system/multi-user.target.wants/${name}.service" "$lsb_img" >/dev/null
-    fi
-  }
-
-  if should_build_component "systemd"; then
-    enable_service fs_server
-    enable_service net_server
-    enable_service bash
-  fi
-
-  # Collect key build artifacts
   stage_bootable_images() {
     local source_root="obj/l4"
     local distribution_dir="distribution"
@@ -1137,4 +1142,26 @@ EOF
   }
 
   stage_bootable_images
+
+  COMPONENT_BUILD_NOTE="built"
+  return 0
+}
+
+run_component_build "bash" build_bash_component
+run_component_build "libcap" build_libcap_component
+run_component_build "libcrypt" build_libcrypt_component
+run_component_build "libblkid" build_libblkid_component
+run_component_build "libgcrypt" build_libgcrypt_component
+run_component_build "libzstd" build_libzstd_component
+run_component_build "systemd" build_systemd_component
+
+if (( BUILD_FAILURE_COUNT > 0 )); then
+  echo "One or more external component builds failed; skipping remaining build steps."
 fi
+
+if (( BUILD_FAILURE_COUNT == 0 )); then
+  echo "######### EXTERNAL BUILD DONE ###############"
+fi
+
+run_component_build "l4re" build_l4re_component
+run_component_build "image" build_image_component
