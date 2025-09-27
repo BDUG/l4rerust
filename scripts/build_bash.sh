@@ -77,11 +77,52 @@ main() {
   fi
 
   mkdir -p "$out_dir_path"
+
+  local build_cc
+  if command -v cc >/dev/null 2>&1; then
+    build_cc="cc"
+  elif command -v gcc >/dev/null 2>&1; then
+    build_cc="gcc"
+  else
+    echo "No native C compiler (cc or gcc) found for building host utilities" >&2
+    exit 1
+  fi
+
+  local build_cxx
+  if command -v c++ >/dev/null 2>&1; then
+    build_cxx="c++"
+  elif command -v g++ >/dev/null 2>&1; then
+    build_cxx="g++"
+  elif command -v clang++ >/dev/null 2>&1; then
+    build_cxx="clang++"
+  else
+    build_cxx="$build_cc"
+  fi
+
+  local build_machine
+  build_machine="$(${build_cc} -dumpmachine 2>/dev/null || true)"
+  if [ -z "$build_machine" ]; then
+    if command -v gcc >/dev/null 2>&1; then
+      build_machine="$(gcc -dumpmachine 2>/dev/null || true)"
+    fi
+  fi
+  if [ -z "$build_machine" ]; then
+    case "$(uname -s)" in
+      Darwin)
+        build_machine="$(uname -m)-apple-darwin"
+        ;;
+      *)
+        build_machine="$(uname -m)-unknown-linux-gnu"
+        ;;
+    esac
+  fi
+
   (
     cd "$source_dir"
     gmake distclean >/dev/null 2>&1 || true
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
-      ./configure --host="$host" --without-bash-malloc
+    CC_FOR_BUILD="$build_cc" CXX_FOR_BUILD="$build_cxx" \
+      ./configure --host="$host" --build="$build_machine" --without-bash-malloc
 
     local build_cflags_for_build
     local build_cppflags_for_build
@@ -93,6 +134,7 @@ main() {
     local_defs_for_build=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS_FOR_BUILD")")
     local_defs=$(sanitize_build_flag "$(read_makefile_var "LOCAL_DEFS")")
 
+    CC_FOR_BUILD="$build_cc" CXX_FOR_BUILD="$build_cxx" \
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
@@ -101,6 +143,7 @@ main() {
       gmake clean
 
     CC="${cross}gcc" CXX="${cross}g++" AR="${cross}ar" RANLIB="${cross}ranlib" \
+    CC_FOR_BUILD="$build_cc" CXX_FOR_BUILD="$build_cxx" \
     CFLAGS_FOR_BUILD="$build_cflags_for_build" \
     CPPFLAGS_FOR_BUILD="$build_cppflags_for_build" \
     LDFLAGS_FOR_BUILD="$build_ldflags_for_build" \
