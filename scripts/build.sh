@@ -8,28 +8,6 @@ declare -a FAILED_COMPONENTS=()
 BUILD_FAILURE_COUNT=0
 COMPONENT_BUILD_NOTE=""
 
-DEBUG_MODE=false
-CURRENT_COMPONENT=""
-
-log_debug() {
-  if [ "$DEBUG_MODE" != true ]; then
-    return
-  fi
-
-  local component="${1:-global}"
-  if [ "$#" -gt 0 ]; then
-    shift
-  fi
-  local command="$*"
-  local timestamp
-  timestamp=$(date +"%Y-%m-%dT%H:%M:%S%z")
-  if [ -n "$command" ]; then
-    printf '[%s] [%s] %s\n' "$timestamp" "$component" "$command" >&2
-  else
-    printf '[%s] [%s]\n' "$timestamp" "$component" >&2
-  fi
-}
-
 print_component_summary() {
   local component
   local result
@@ -68,233 +46,31 @@ source "$SCRIPT_DIR/common_build.sh"
 source "$SCRIPT_DIR/lib/component_artifacts.sh"
 cd "$REPO_ROOT"
 
-sync_cross_compile_variables
-
-determine_rust_target_triple() {
-  if [ -n "${RUST_TARGET_TRIPLE:-}" ]; then
-    printf '%s' "$RUST_TARGET_TRIPLE"
-    return 0
-  fi
-  if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
-    printf '%s' "$CARGO_BUILD_TARGET"
-    return 0
-  fi
-  if [ -n "${CARGO_TARGET:-}" ]; then
-    printf '%s' "$CARGO_TARGET"
-    return 0
-  fi
-  if [ -n "${RUST_TARGET:-}" ]; then
-    printf '%s' "$RUST_TARGET"
-    return 0
-  fi
-  if [ -n "${TARGET:-}" ]; then
-    printf '%s' "$TARGET"
-    return 0
-  fi
-
-  if ! command -v rustc >/dev/null 2>&1; then
-    echo "rustc is required to determine the default Rust target" >&2
-    return 1
-  fi
-
-  rustc -vV | awk '/^host: / { print $2; exit }'
-}
-
-determine_rust_target_arch() {
-  local triple
-  triple=$(determine_rust_target_triple) || return 1
-  if [ -z "$triple" ]; then
-    return 1
-  fi
-
-  printf '%s' "${triple%%-*}"
-}
-
-set_rust_cross_compile_target() {
-  local triple="${1:-}"
-
-  if [ -n "$triple" ]; then
-    RUST_TARGET_TRIPLE="$triple"
-    CARGO_BUILD_TARGET="$triple"
-    CARGO_TARGET="$triple"
-    RUST_TARGET="$triple"
-    export RUST_TARGET_TRIPLE CARGO_BUILD_TARGET CARGO_TARGET RUST_TARGET
-  else
-    unset RUST_TARGET_TRIPLE
-    unset CARGO_BUILD_TARGET
-    unset CARGO_TARGET
-    unset RUST_TARGET
-  fi
-}
-
-initialise_rust_target_from_environment() {
-  if [ -n "${RUST_TARGET_TRIPLE:-}" ]; then
-    set_rust_cross_compile_target "$RUST_TARGET_TRIPLE"
-    return
-  fi
-  if [ -n "${CARGO_BUILD_TARGET:-}" ]; then
-    set_rust_cross_compile_target "$CARGO_BUILD_TARGET"
-    return
-  fi
-  if [ -n "${CARGO_TARGET:-}" ]; then
-    set_rust_cross_compile_target "$CARGO_TARGET"
-    return
-  fi
-  if [ -n "${RUST_TARGET:-}" ]; then
-    set_rust_cross_compile_target "$RUST_TARGET"
-  fi
-}
-
-prepare_rust_musl_environment() {
-  local target_arch
-  target_arch=$(determine_rust_target_arch) || {
-    echo "Unable to determine Rust target architecture" >&2
-    exit 1
-  }
-
-  if [ -z "$target_arch" ]; then
-    echo "Rust target architecture is empty" >&2
-    exit 1
-  fi
-
-  local stage_arch
-  case "$target_arch" in
-    aarch64)
-      stage_arch="arm64"
-      ;;
-    *)
-      stage_arch=""
-      ;;
-  esac
-
-  local musl_prefix=""
-  if [ -n "$stage_arch" ]; then
-    musl_prefix="$(component_prefix_path "musl" "$stage_arch")"
-  fi
-
-  if [ -z "$musl_prefix" ] && [ -n "${L4RE_LIBC_MUSL_PREFIX:-}" ]; then
-    musl_prefix="$L4RE_LIBC_MUSL_PREFIX"
-  fi
-
-  if [ -z "$musl_prefix" ]; then
-    echo "No staged musl prefix found for Rust target architecture '$target_arch'" >&2
-    echo "Set L4RE_LIBC_MUSL_PREFIX_<ARCH> or L4RE_LIBC_MUSL_PREFIX to point to the staged musl build." >&2
-    exit 1
-  fi
-
-  local musl_lib_dir="$musl_prefix/lib"
-  if [ ! -d "$musl_lib_dir" ]; then
-    echo "musl library directory not found: $musl_lib_dir" >&2
-    echo "Ensure the musl component has been built or an override prefix is provided." >&2
-    exit 1
-  fi
-
-  local target_upper
-  target_upper=$(printf '%s' "$target_arch" | tr '[:lower:]' '[:upper:]')
-  local stage_upper
-  if [ -n "$stage_arch" ]; then
-    stage_upper=$(printf '%s' "$stage_arch" | tr '[:lower:]' '[:upper:]')
-  else
-    stage_upper="$target_upper"
-  fi
-
-  export L4RE_LIBC_MUSL_PREFIX="$musl_prefix"
-  export "L4RE_LIBC_MUSL_PREFIX_${target_upper}"="$musl_prefix"
-  if [ "$stage_upper" != "$target_upper" ]; then
-    export "L4RE_LIBC_MUSL_PREFIX_${stage_upper}"="$musl_prefix"
-  fi
-
-  if [ -n "${LIBRARY_PATH:-}" ]; then
-    LIBRARY_PATH="$musl_lib_dir:${LIBRARY_PATH}"
-  else
-    LIBRARY_PATH="$musl_lib_dir"
-  fi
-  if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-    LD_LIBRARY_PATH="$musl_lib_dir:${LD_LIBRARY_PATH}"
-  else
-    LD_LIBRARY_PATH="$musl_lib_dir"
-  fi
-  export LIBRARY_PATH LD_LIBRARY_PATH
-}
-
-print_debug_environment() {
-  if [ "$DEBUG_MODE" != true ]; then
-    return
-  fi
-
-  local rust_triple="(unavailable)"
-  if rust_triple=$(determine_rust_target_triple 2>/dev/null); then
-    :
-  else
-    rust_triple="(unavailable)"
-  fi
-
-  local rust_arch="(unavailable)"
-  if rust_arch=$(determine_rust_target_arch 2>/dev/null); then
-    :
-  else
-    rust_arch="(unavailable)"
-  fi
-
-  log_debug "env" "Rust target triple: $rust_triple"
-  log_debug "env" "Rust target arch: $rust_arch"
-  log_debug "env" "RUST_TARGET_TRIPLE=${RUST_TARGET_TRIPLE:-}"
-  log_debug "env" "CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-}"
-  log_debug "env" "CARGO_TARGET=${CARGO_TARGET:-}"
-  log_debug "env" "RUST_TARGET=${RUST_TARGET:-}"
-  log_debug "env" "TARGET=${TARGET:-}"
-  log_debug "env" "CROSS_COMPILE=${CROSS_COMPILE:-}"
-  log_debug "env" "CROSS_COMPILE_ARM64=${CROSS_COMPILE_ARM64:-}"
-  log_debug "env" "HAM_BIN=${HAM_BIN:-}"
-  log_debug "env" "ARTIFACTS_DIR=${ARTIFACTS_DIR:-}"
-
-    if declare -f component_prefix_path >/dev/null 2>&1; then
-      local musl_arm64_prefix="(unavailable)"
-      if musl_arm64_prefix=$(component_prefix_path "musl" "arm64" 2>/dev/null); then
-        :
-      else
-        musl_arm64_prefix="(unavailable)"
-      fi
-      log_debug "env" "musl arm64 prefix: $musl_arm64_prefix"
-    fi
-
-  if [ -n "${L4RE_LIBC_MUSL_PREFIX:-}" ]; then
-    log_debug "env" "L4RE_LIBC_MUSL_PREFIX=${L4RE_LIBC_MUSL_PREFIX}"
-  fi
-}
-
-initialise_rust_target_from_environment
-
 # Usage: build.sh [options]
 #   --clean                    Remove previous build directories before building
 #   --no-clean                 Skip removal of build directories (default)
 #   --components=name1,name2   Limit builds to the specified components
 #   --no-menu                  Skip the interactive component selection menu
-#   --debug                    Enable verbose debug logging for component builds
 #   --help                     Show usage information and exit
 
 readonly -a BUILD_COMPONENT_IDS=(
   bash
-  musl
   libcap
   libcrypt
   libblkid
   libgcrypt
   libzstd
   systemd
-  lsb_root
 )
 
 declare -A BUILD_COMPONENT_LABELS=(
   [bash]="GNU Bash shell"
-  [musl]="musl libc runtime"
   [libcap]="libcap (POSIX capabilities)"
   [libcrypt]="libxcrypt (libcrypt)"
   [libblkid]="util-linux libblkid"
   [libgcrypt]="libgcrypt (and libgpg-error)"
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
-  [lsb_root]="LSB root filesystem creation"
 )
 
 run_component_build() {
@@ -303,15 +79,8 @@ run_component_build() {
   local previous_errexit
   local status
   local note=""
-  local log_file=""
-  local xtrace_was_on=false
-  local previous_ps4="${PS4-+ }"
-  local previous_current_component="$CURRENT_COMPONENT"
 
   if ! should_build_component "$component"; then
-    if [ "$DEBUG_MODE" = true ]; then
-      log_debug "$component" "Skipping build (component disabled)"
-    fi
     echo "Skipping ${component} build (component disabled)"
     BUILD_RESULTS["$component"]="skipped"
     BUILD_NOTES["$component"]="not selected"
@@ -321,44 +90,8 @@ run_component_build() {
   previous_errexit=$(set +o | grep errexit)
   set +e
   COMPONENT_BUILD_NOTE=""
-
-  if [ -n "${COMPONENT_LOG_DIR:-}" ]; then
-    log_file="$COMPONENT_LOG_DIR/${component}.log"
-  elif [ -n "${ARTIFACTS_DIR:-}" ]; then
-    log_file="${ARTIFACTS_DIR}/logs/${component}.log"
-  elif [ -n "${REPO_ROOT:-}" ]; then
-    log_file="$REPO_ROOT/out/logs/${component}.log"
-  else
-    log_file="./out/logs/${component}.log"
-  fi
-
-  mkdir -p "$(dirname "$log_file")"
-  {
-    printf '==== %s Starting %s build ====%s' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$component" $'\n'
-  } >"$log_file"
-
-  if [ "$DEBUG_MODE" = true ]; then
-    log_debug "$component" "Executing build function '$func'"
-    CURRENT_COMPONENT="$component"
-    PS4='+ [$(date "+%Y-%m-%dT%H:%M:%S%z")] [$CURRENT_COMPONENT] '
-    if [[ $- == *x* ]]; then
-      xtrace_was_on=true
-    else
-      xtrace_was_on=false
-      set -x
-    fi
-  fi
-  "$func" \
-    > >(tee -a "$log_file") \
-    2> >(tee -a "$log_file" >&2)
+  "$func"
   status=$?
-  if [ "$DEBUG_MODE" = true ]; then
-    if [ "$xtrace_was_on" = false ]; then
-      set +x
-    fi
-    PS4="$previous_ps4"
-    CURRENT_COMPONENT="$previous_current_component"
-  fi
   eval "$previous_errexit"
 
   note="${COMPONENT_BUILD_NOTE:-}"
@@ -374,37 +107,11 @@ run_component_build() {
       ;;
     *)
       BUILD_RESULTS["$component"]="failed"
-      if [ -n "$note" ]; then
-        BUILD_NOTES["$component"]="$note (log: $log_file)"
-      else
-        BUILD_NOTES["$component"]="error (log: $log_file)"
-      fi
+      BUILD_NOTES["$component"]="${note:-error}"
       FAILED_COMPONENTS+=("$component")
       BUILD_FAILURE_COUNT=$((BUILD_FAILURE_COUNT + 1))
       ;;
   esac
-
-  local status_text
-  case $status in
-    0)
-      status_text="success"
-      ;;
-    2)
-      status_text="skipped"
-      ;;
-    *)
-      status_text="failed"
-      ;;
-  esac
-
-  {
-    printf '==== %s Completed %s build: %s (exit %d) ====%s' \
-      "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
-      "$component" \
-      "$status_text" \
-      "$status" \
-      $'\n'
-  } >>"$log_file"
 
   return 0
 }
@@ -416,7 +123,6 @@ Usage: $0 [options]
   --no-clean                 Skip removal of build directories (default)
   --components=name1,name2   Limit builds to the specified components
   --no-menu                  Skip the interactive component selection menu
-  --debug                    Enable verbose debug logging for component builds
   --help                     Show this message and exit
 EOF
   local components_list
@@ -546,161 +252,6 @@ prompt_clean_before_build() {
   return 0
 }
 
-prompt_cross_compile_prefixes() {
-  if [ ! -t 0 ]; then
-    return 1
-  fi
-
-  if ! command -v dialog >/dev/null 2>&1; then
-    return 1
-  fi
-
-  local host_os
-  host_os=$(uname -s 2>/dev/null || echo "")
-
-  sync_cross_compile_variables
-
-  local default_cross="${CROSS_COMPILE:-}"
-  local default_rust_target="${RUST_TARGET_TRIPLE:-}"
-
-  if [ -z "$default_rust_target" ]; then
-    if default_rust_target=$(determine_rust_target_triple 2>/dev/null); then
-      :
-    else
-      default_rust_target=""
-    fi
-  fi
-
-  if [ -z "$default_cross" ]; then
-    case "$host_os" in
-      Darwin)
-        if declare -f setup_macos_paths >/dev/null 2>&1; then
-          setup_macos_paths
-        fi
-        if declare -f find_gpp_cross_prefix >/dev/null 2>&1; then
-          local prefix
-          if prefix=$(find_gpp_cross_prefix \
-              aarch64-elf-g++ \
-              aarch64-none-elf-g++ \
-              aarch64-linux-gnu-g++ \
-              aarch64-unknown-linux-gnu-g++ 2>/dev/null); then
-            default_cross="$prefix"
-          fi
-        fi
-        ;;
-      *)
-        default_cross="aarch64-linux-gnu-"
-        ;;
-    esac
-  fi
-
-  local manual_desc="Enter custom target / keep current value"
-  if [ -n "$default_rust_target" ]; then
-    manual_desc+=" ($default_rust_target)"
-  fi
-
-  local -a rust_target_menu=(
-    "__manual__" "$manual_desc"
-  )
-
-  local -a available_rust_targets=()
-  if command -v rustc >/dev/null 2>&1; then
-    if mapfile -t available_rust_targets < <(rustc --print target-list 2>/dev/null); then
-      log_debug "env" "Loaded $((${#available_rust_targets[@]})) rustc targets"
-    else
-      log_debug "env" "Unable to load rustc target list"
-    fi
-  else
-    log_debug "env" "rustc not available to query target list"
-  fi
-
-  local target
-  for target in "${available_rust_targets[@]}"; do
-    rust_target_menu+=("$target" "$target")
-  done
-
-  local default_menu_item="__manual__"
-  local option_index
-  for ((option_index = 0; option_index < ${#rust_target_menu[@]}; option_index += 2)); do
-    if [ "${rust_target_menu[$option_index]}" = "$default_rust_target" ]; then
-      default_menu_item="$default_rust_target"
-      break
-    fi
-  done
-
-  local rust_target_menu_height=$(( ${#rust_target_menu[@]} / 2 ))
-  if [ $rust_target_menu_height -lt 1 ]; then
-    rust_target_menu_height=1
-  elif [ $rust_target_menu_height -gt 20 ]; then
-    rust_target_menu_height=20
-  fi
-
-  local tmp_rust_menu
-  tmp_rust_menu=$(mktemp)
-  local rust_menu_status=0
-  if ! dialog --clear \
-      --backtitle "L4Re external components" \
-      --default-item "$default_menu_item" \
-      --menu "Select a Rust cross-compilation target triple" 20 80 $rust_target_menu_height \
-      "${rust_target_menu[@]}" 2>"$tmp_rust_menu"; then
-    rust_menu_status=$?
-  fi
-
-  local selected_rust_target=""
-  if [ $rust_menu_status -ne 0 ]; then
-    rm -f "$tmp_rust_menu"
-    return 1
-  fi
-
-  selected_rust_target=$(<"$tmp_rust_menu")
-  rm -f "$tmp_rust_menu"
-
-  if [ -n "$selected_rust_target" ] && [ "$selected_rust_target" != "__manual__" ]; then
-    default_rust_target="$selected_rust_target"
-  fi
-
-  local tmpfile
-  tmpfile=$(mktemp)
-  local dialog_status=0
-  if ! dialog --clear \
-      --backtitle "L4Re external components" \
-      --form "Edit cross-compilation settings used for external component builds." \
-      14 80 0 \
-      "Cross compiler prefix (CROSS_COMPILE)" 1 2 "$default_cross" 1 34 60 0 \
-      "Rust target triple (CARGO_BUILD_TARGET)" 3 2 "$default_rust_target" 3 34 60 0 \
-      2>"$tmpfile"; then
-    dialog_status=$?
-  fi
-
-  if [ $dialog_status -ne 0 ]; then
-    rm -f "$tmpfile"
-    return 1
-  fi
-
-  local -a _cross_values=()
-  mapfile -t _cross_values <"$tmpfile"
-  rm -f "$tmpfile"
-
-  local new_cross="${_cross_values[0]:-}"
-  local new_rust_target="${_cross_values[1]:-}"
-
-  new_cross="${new_cross//$'\r'/}"
-  new_rust_target="${new_rust_target//$'\r'/}"
-
-  CROSS_COMPILE="$new_cross"
-  sync_cross_compile_variables
-
-  set_rust_cross_compile_target "$new_rust_target"
-
-  echo "Cross-compilation settings configured via dialog:"
-  echo "  CROSS_COMPILE=${CROSS_COMPILE:-"(empty)"}"
-  echo "  CROSS_COMPILE_ARM64 (derived)=${CROSS_COMPILE_ARM64:-"(empty)"}"
-  echo "  CARGO_BUILD_TARGET=${CARGO_BUILD_TARGET:-"(empty)"}"
-
-  return 0
-}
-
-
 clean=false
 component_arg=""
 component_arg_set=false
@@ -717,10 +268,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-clean)
       clean_cli_override="no-clean"
-      shift
-      ;;
-    --debug)
-      DEBUG_MODE=true
       shift
       ;;
     --components=*)
@@ -754,10 +301,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-if [ "$DEBUG_MODE" = true ]; then
-  log_debug "global" "Debug mode enabled"
-fi
 
 if [ "$component_arg_set" = true ]; then
   IFS=',' read -ra selected_components <<< "$component_arg"
@@ -831,15 +374,6 @@ else
   clean=false
 fi
 
-if [ "${used_dialog_menu:-false}" = true ] && command -v dialog >/dev/null 2>&1; then
-  if prompt_cross_compile_prefixes; then
-    :
-  else
-    echo "Cross-compiler prefix selection cancelled; exiting." >&2
-    exit 1
-  fi
-fi
-
 if [ "$clean" = true ]; then
   echo "Cleanup before build: enabled"
 else
@@ -875,18 +409,10 @@ fi
 
 mkdir -p "$ARTIFACTS_DIR"
 
-COMPONENT_LOG_DIR="$ARTIFACTS_DIR/logs"
-mkdir -p "$COMPONENT_LOG_DIR"
-export COMPONENT_LOG_DIR
-
 initialize_component_prefixes
 
-if [ "$DEBUG_MODE" = true ]; then
-  print_debug_environment
-fi
-
 # Configure for ARM using setup script
-export CROSS_COMPILE CROSS_COMPILE_ARM64
+export CROSS_COMPILE_ARM CROSS_COMPILE_ARM64
 # Run the setup tool. If a pre-generated configuration is available, reuse it
 # to avoid the interactive `config` step.
 if [ -f "$SCRIPT_DIR/l4re.config" ]; then
@@ -898,8 +424,13 @@ else
 fi
 "$SCRIPT_DIR/setup.sh" --non-interactive
 
-BASH_VERSION=5.3
-BASH_URL="https://cgit.git.savannah.gnu.org/cgit/bash.git/snapshot/bash-${BASH_VERSION}.tar.gz"
+# Build the Rust libc crate so other crates can link against it
+cargo build -p l4re-libc --release
+# Ensure Rust crates pick up the freshly built static libc
+export LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH:-}"
+
+BASH_VERSION=5.2.21
+BASH_URL="https://ftp.gnu.org/gnu/bash/bash-${BASH_VERSION}.tar.gz"
 
 LIBCAP_VERSION=2.69
 LIBCAP_URL="https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-${LIBCAP_VERSION}.tar.gz"
@@ -920,85 +451,6 @@ LIBGCRYPT_URL="https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-${LIBGCRYPT_VERS
 LIBZSTD_VERSION=1.5.6
 LIBZSTD_URL="https://github.com/facebook/zstd/releases/download/v${LIBZSTD_VERSION}/zstd-${LIBZSTD_VERSION}.tar.gz"
 
-MUSL_VERSION=1.2.5
-MUSL_URL="https://musl.libc.org/releases/musl-${MUSL_VERSION}.tar.gz"
-
-build_musl_component() {
-  set -e
-  local arch
-  local need_musl=false
-  local override_used=false
-  local cross=""
-  local install_prefix=""
-  local musl_src_dir=""
-
-  for arch in arm64; do
-    if component_override_used "musl" "$arch"; then
-      override_used=true
-      continue
-    fi
-    if ! component_is_current "musl" "$arch" "lib/libc.so" "$MUSL_VERSION"; then
-      need_musl=true
-      break
-    fi
-  done
-
-  if [ "$need_musl" = true ]; then
-    musl_src_dir=$(mktemp -d src/musl-XXXXXX)
-    curl -L "$MUSL_URL" | tar -xz -C "$musl_src_dir" --strip-components=1
-
-    local patch_dir="$SCRIPT_DIR/patches/musl"
-    if [ -d "$patch_dir" ]; then
-      (
-        cd "$musl_src_dir"
-        for patch_file in "$patch_dir"/*.patch; do
-          [ -e "$patch_file" ] || continue
-          patch -p1 -N <"$patch_file"
-        done
-      )
-    fi
-
-    for arch in arm64; do
-      if component_override_used "musl" "$arch"; then
-        echo "Skipping musl build for $arch; using prebuilt artifacts from $(component_prefix_path "musl" "$arch")"
-        continue
-      fi
-      if component_is_current "musl" "$arch" "lib/libc.so" "$MUSL_VERSION"; then
-        echo "musl for $arch already current, skipping"
-        continue
-      fi
-
-      cross="$CROSS_COMPILE_ARM64"
-
-      install_prefix="$(component_prefix_path "musl" "$arch")"
-
-      if ! "$SCRIPT_DIR/build_musl.sh" \
-          "$arch" \
-          "$cross" \
-          "$MUSL_VERSION" \
-          "$install_prefix" \
-          "$musl_src_dir"; then
-        COMPONENT_BUILD_NOTE="build failed"
-        rm -rf "$musl_src_dir"
-        return 1
-      fi
-    done
-
-    rm -rf "$musl_src_dir"
-    COMPONENT_BUILD_NOTE="built"
-    return 0
-  fi
-
-  if [ "$override_used" = true ]; then
-    echo "musl builds provided by environment overrides"
-    COMPONENT_BUILD_NOTE="overridden"
-  else
-    echo "musl for arm64 already current, skipping"
-    COMPONENT_BUILD_NOTE="already current"
-  fi
-  return 2
-}
-
 build_bash_component() {
   set -e
   local arch
@@ -1007,7 +459,7 @@ build_bash_component() {
   local bash_patch_dir=""
   local patch_file
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if ! component_is_current "bash" "$arch" "bash" "$BASH_VERSION"; then
       need_bash=true
       break
@@ -1027,13 +479,14 @@ build_bash_component() {
         done
       )
     fi
+    "$SCRIPT_DIR/build_bash.sh" arm "$CROSS_COMPILE_ARM" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     "$SCRIPT_DIR/build_bash.sh" arm64 "$CROSS_COMPILE_ARM64" "$BASH_VERSION" "$ARTIFACTS_DIR" "$bash_src_dir"
     rm -rf "$bash_src_dir"
     COMPONENT_BUILD_NOTE="built"
     return 0
   fi
 
-  echo "bash for arm64 already current, skipping"
+  echo "bash for arm and arm64 already current, skipping"
   COMPONENT_BUILD_NOTE="already current"
   return 2
 }
@@ -1047,7 +500,7 @@ build_libcap_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if component_override_used "libcap" "$arch"; then
       override_used=true
       continue
@@ -1061,8 +514,21 @@ build_libcap_component() {
   if [ "$need_libcap" = true ]; then
     libcap_src_dir=$(mktemp -d src/libcap-XXXXXX)
     curl -L "$LIBCAP_URL" | tar -xz -C "$libcap_src_dir" --strip-components=1
-    for arch in arm64; do
-      cross="$CROSS_COMPILE_ARM64"
+    for arch in arm arm64; do
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libcap build" >&2
+          rm -rf "$libcap_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
       if component_override_used "libcap" "$arch"; then
         echo "Skipping libcap build for $arch; using prebuilt artifacts from $(component_prefix_path "libcap" "$arch")"
         continue
@@ -1083,7 +549,7 @@ build_libcap_component() {
     echo "libcap builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libcap for arm64 already current, skipping"
+    echo "libcap for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1098,7 +564,7 @@ build_libcrypt_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if component_override_used "libcrypt" "$arch"; then
       override_used=true
       continue
@@ -1112,7 +578,7 @@ build_libcrypt_component() {
   if [ "$need_libcrypt" = true ]; then
     libxcrypt_src_dir=$(mktemp -d src/libxcrypt-XXXXXX)
     curl -L "$LIBXCRYPT_URL" | tar -xJ -C "$libxcrypt_src_dir" --strip-components=1
-    for arch in arm64; do
+    for arch in arm arm64; do
       if component_override_used "libcrypt" "$arch"; then
         echo "Skipping libcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libcrypt" "$arch")"
         continue
@@ -1121,7 +587,20 @@ build_libcrypt_component() {
         echo "libcrypt for $arch already current, skipping"
         continue
       fi
-      cross="$CROSS_COMPILE_ARM64"
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libcrypt build" >&2
+          rm -rf "$libxcrypt_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
       install_prefix="$(component_prefix_path "libcrypt" "$arch")"
       "$SCRIPT_DIR/build_libcrypt.sh" "$arch" "$cross" "$LIBXCRYPT_VERSION" "$libxcrypt_src_dir" "$install_prefix"
     done
@@ -1134,7 +613,7 @@ build_libcrypt_component() {
     echo "libcrypt builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libcrypt for arm64 already current, skipping"
+    echo "libcrypt for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1149,7 +628,7 @@ build_libblkid_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if component_override_used "libblkid" "$arch"; then
       override_used=true
       continue
@@ -1163,7 +642,7 @@ build_libblkid_component() {
   if [ "$need_libblkid" = true ]; then
     util_linux_src_dir=$(mktemp -d src/util-linux-XXXXXX)
     curl -L "$UTIL_LINUX_URL" | tar -xJ -C "$util_linux_src_dir" --strip-components=1
-    for arch in arm64; do
+    for arch in arm arm64; do
       if component_override_used "libblkid" "$arch"; then
         echo "Skipping libblkid build for $arch; using prebuilt artifacts from $(component_prefix_path "libblkid" "$arch")"
         continue
@@ -1173,7 +652,20 @@ build_libblkid_component() {
         continue
       fi
 
-      cross="$CROSS_COMPILE_ARM64"
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libblkid build" >&2
+          rm -rf "$util_linux_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
 
       install_prefix="$(component_prefix_path "libblkid" "$arch")"
       "$SCRIPT_DIR/build_libblkid.sh" "$arch" "$cross" "$UTIL_LINUX_VERSION" "$util_linux_src_dir" "$install_prefix"
@@ -1187,7 +679,7 @@ build_libblkid_component() {
     echo "libblkid builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libblkid for arm64 already current, skipping"
+    echo "libblkid for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1203,7 +695,7 @@ build_libgcrypt_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if component_override_used "libgcrypt" "$arch"; then
       override_used=true
       continue
@@ -1219,8 +711,21 @@ build_libgcrypt_component() {
     curl -L "$LIBGPG_ERROR_URL" | tar -xj -C "$libgpg_error_src_dir" --strip-components=1
     libgcrypt_src_dir=$(mktemp -d src/libgcrypt-XXXXXX)
     curl -L "$LIBGCRYPT_URL" | tar -xj -C "$libgcrypt_src_dir" --strip-components=1
-    for arch in arm64; do
-      cross="$CROSS_COMPILE_ARM64"
+    for arch in arm arm64; do
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libgcrypt build" >&2
+          rm -rf "$libgpg_error_src_dir" "$libgcrypt_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
       if component_override_used "libgcrypt" "$arch"; then
         echo "Skipping libgcrypt build for $arch; using prebuilt artifacts from $(component_prefix_path "libgcrypt" "$arch")"
         continue
@@ -1242,7 +747,7 @@ build_libgcrypt_component() {
     echo "libgcrypt builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libgcrypt for arm64 already current, skipping"
+    echo "libgcrypt for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1257,7 +762,7 @@ build_libzstd_component() {
   local cross=""
   local install_prefix=""
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if component_override_used "libzstd" "$arch"; then
       override_used=true
       continue
@@ -1271,7 +776,7 @@ build_libzstd_component() {
   if [ "$need_libzstd" = true ]; then
     zstd_src_dir=$(mktemp -d src/libzstd-XXXXXX)
     curl -L "$LIBZSTD_URL" | tar -xz -C "$zstd_src_dir" --strip-components=1
-    for arch in arm64; do
+    for arch in arm arm64; do
       if component_override_used "libzstd" "$arch"; then
         echo "Skipping libzstd build for $arch; using prebuilt artifacts from $(component_prefix_path "libzstd" "$arch")"
         continue
@@ -1282,7 +787,20 @@ build_libzstd_component() {
         continue
       fi
 
-      cross="$CROSS_COMPILE_ARM64"
+      case "$arch" in
+        arm)
+          cross="$CROSS_COMPILE_ARM"
+          ;;
+        arm64)
+          cross="$CROSS_COMPILE_ARM64"
+          ;;
+        *)
+          echo "Unsupported architecture '$arch' for libzstd build" >&2
+          rm -rf "$zstd_src_dir"
+          COMPONENT_BUILD_NOTE="unsupported architecture"
+          return 1
+          ;;
+      esac
 
       install_prefix="$(component_prefix_path "libzstd" "$arch")"
       "$SCRIPT_DIR/build_libzstd.sh" "$arch" "$cross" "$LIBZSTD_VERSION" "$zstd_src_dir" "$install_prefix"
@@ -1296,7 +814,7 @@ build_libzstd_component() {
     echo "libzstd builds provided by environment overrides"
     COMPONENT_BUILD_NOTE="overridden"
   else
-    echo "libzstd for arm64 already current, skipping"
+    echo "libzstd for arm and arm64 already current, skipping"
     COMPONENT_BUILD_NOTE="already current"
   fi
   return 2
@@ -1315,7 +833,7 @@ build_systemd_component() {
   local systemd_patch_dir=""
   local patch_file
 
-  for arch in arm64; do
+  for arch in arm arm64; do
     if ! component_is_current "systemd" "$arch" "systemd" "$SYSTEMD_VERSION"; then
       need_systemd=true
       break
@@ -1335,41 +853,43 @@ build_systemd_component() {
         done
       )
     fi
+    "$SCRIPT_DIR/build_systemd.sh" arm "$CROSS_COMPILE_ARM" "$SYSTEMD_VERSION" "$systemd_src_dir"
     "$SCRIPT_DIR/build_systemd.sh" arm64 "$CROSS_COMPILE_ARM64" "$SYSTEMD_VERSION" "$systemd_src_dir"
     rm -rf "$systemd_src_dir"
     COMPONENT_BUILD_NOTE="built"
     return 0
   fi
 
-  echo "systemd for arm64 already current, skipping"
+  echo "systemd for arm and arm64 already current, skipping"
   COMPONENT_BUILD_NOTE="already current"
   return 2
 }
 
-build_lsb_root_component() {
-  set -e
+run_component_build "bash" build_bash_component
+run_component_build "libcap" build_libcap_component
+run_component_build "libcrypt" build_libcrypt_component
+run_component_build "libblkid" build_libblkid_component
+run_component_build "libgcrypt" build_libgcrypt_component
+run_component_build "libzstd" build_libzstd_component
+run_component_build "systemd" build_systemd_component
 
-  local lsb_img
-  local tmpfile
-  local sys_root
-  local systemd_bin
-  local symlink_target
-  local units_dir
-  local component
+if (( BUILD_FAILURE_COUNT > 0 )); then
+  echo "One or more external component builds failed; skipping remaining build steps."
+else
+  echo "######### EXTERNAL BUILD DONE ###############"
 
-  mkdir -p config/lsb_root
+  # Build the tree including libc, Leo, and Rust crates
+  gmake
 
+  # Create a minimal LSB root filesystem image
   lsb_img="$ARTIFACTS_DIR/images/lsb_root.img"
   rm -f "$lsb_img"
   mkdir -p "$(dirname "$lsb_img")"
   dd if=/dev/zero of="$lsb_img" bs=1M count=8
   mke2fs -F "$lsb_img" >/dev/null
-
-  local d
   for d in /bin /etc /usr /usr/bin; do
     debugfs -w -R "mkdir $d" "$lsb_img" >/dev/null
   done
-
   tmpfile=$(mktemp)
   cat <<'EOF' > "$tmpfile"
 DISTRIB_ID=L4Re
@@ -1378,25 +898,12 @@ DISTRIB_DESCRIPTION="L4Re root image"
 EOF
   debugfs -w -R "write $tmpfile /etc/lsb-release" "$lsb_img" >/dev/null
   rm "$tmpfile"
+  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/sh" "$lsb_img" >/dev/null
+  debugfs -w -R "chmod 0755 /bin/sh" "$lsb_img" >/dev/null
+  debugfs -w -R "write $ARTIFACTS_DIR/bash/arm64/bash /bin/bash" "$lsb_img" >/dev/null
+  debugfs -w -R "chmod 0755 /bin/bash" "$lsb_img" >/dev/null
 
-  local bash_binary="$ARTIFACTS_DIR/bash/arm64/bash"
-  if [ -f "$bash_binary" ]; then
-    mkdir -p config/lsb_root/bin config/lsb_root/boot
-    cp "$bash_binary" config/lsb_root/bin/bash
-    cp "$bash_binary" config/lsb_root/boot/bash
-    chmod 0755 config/lsb_root/bin/bash config/lsb_root/boot/bash
-
-    debugfs -w -R "write $bash_binary /bin/sh" "$lsb_img" >/dev/null
-    debugfs -w -R "set_inode_field /bin/sh mode 0100755" "$lsb_img" >/dev/null
-    debugfs -w -R "write $bash_binary /bin/bash" "$lsb_img" >/dev/null
-    debugfs -w -R "set_inode_field /bin/bash mode 0100755" "$lsb_img" >/dev/null
-    debugfs -w -R "mkdir /boot" "$lsb_img" >/dev/null || true
-    debugfs -w -R "write $bash_binary /boot/bash" "$lsb_img" >/dev/null
-    debugfs -w -R "set_inode_field /boot/bash mode 0100755" "$lsb_img" >/dev/null
-  else
-    echo "bash binary not found at $bash_binary; skipping staging into LSB image" >&2
-  fi
-
+  # Install systemd into the root filesystem image and staging area
   if should_build_component "systemd"; then
     sys_root="$ARTIFACTS_DIR/systemd/arm64/root"
     if [ -d "$sys_root" ]; then
@@ -1412,20 +919,18 @@ EOF
         debugfs -w -R "mkdir /lib/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "mkdir /usr/lib/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "write $systemd_bin /lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "set_inode_field /lib/systemd/systemd mode 0100755" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /lib/systemd/systemd" "$lsb_img" >/dev/null
         debugfs -w -R "write $systemd_bin /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
-        debugfs -w -R "set_inode_field /usr/lib/systemd/systemd mode 0100755" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /usr/lib/systemd/systemd" "$lsb_img" >/dev/null
         if [ -d "$sys_root/usr/lib/systemd" ]; then
-          find "$sys_root/usr/lib/systemd" -type d | while read -r subdir; do
-            local rel
-            rel="${subdir#$sys_root}"
+          find "$sys_root/usr/lib/systemd" -type d | while read -r d; do
+            rel="${d#$sys_root}"
             debugfs -w -R "mkdir $rel" "$lsb_img" >/dev/null || true
           done
-          find "$sys_root/usr/lib/systemd" -type f | while read -r file; do
-            local rel
-            rel="${file#$sys_root}"
-            debugfs -w -R "write $file $rel" "$lsb_img" >/dev/null
-            debugfs -w -R "set_inode_field $rel mode 0100644" "$lsb_img" >/dev/null
+          find "$sys_root/usr/lib/systemd" -type f | while read -r f; do
+            rel="${f#$sys_root}"
+            debugfs -w -R "write $f $rel" "$lsb_img" >/dev/null
+            debugfs -w -R "chmod 0644 $rel" "$lsb_img" >/dev/null
           done
         fi
       fi
@@ -1434,7 +939,7 @@ EOF
         cp "$sys_root/usr/bin/systemctl" config/lsb_root/usr/bin/systemctl
         chmod 0755 config/lsb_root/usr/bin/systemctl
         debugfs -w -R "write $sys_root/usr/bin/systemctl /usr/bin/systemctl" "$lsb_img" >/dev/null
-        debugfs -w -R "set_inode_field /usr/bin/systemctl mode 0100755" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0755 /usr/bin/systemctl" "$lsb_img" >/dev/null
       fi
       if [ -L "$sys_root/bin/systemctl" ]; then
         mkdir -p config/lsb_root/bin
@@ -1445,6 +950,7 @@ EOF
     fi
   fi
 
+  # Stage runtime libraries from staged components in the root filesystem image
   stage_component_runtime_libraries() {
     local component="$1"
     local arch="$2"
@@ -1456,37 +962,11 @@ EOF
 
     local runtime_prefix
     runtime_prefix="$(component_prefix_path "$component" "$arch")"
-    if [ "$component" = "musl" ] && [ -d "pkg/$component" ]; then
-      local l4_root=""
-      local primary_l4_root="$REPO_ROOT/src/l4"
-      local fallback_l4_root="$REPO_ROOT/src/l4re-core/src/l4"
-      if [ -f "$primary_l4_root/mk/subdir.mk" ]; then
-        l4_root="$primary_l4_root"
-      elif [ -f "$fallback_l4_root/mk/subdir.mk" ]; then
-        l4_root="$fallback_l4_root"
-      else
-        echo "Unable to locate the L4Re source tree. Expected to find 'mk/subdir.mk' in either" \
-          " '$primary_l4_root' or '$fallback_l4_root'." >&2
-        exit 1
-      fi
-      local pkg_stage_dir="config/pkg_staging/$component/$arch"
-      rm -rf "$pkg_stage_dir"
-      mkdir -p "$pkg_stage_dir"
-      gmake -C "pkg/$component" \
-        install \
-        L4ARCH="$arch" \
-        INSTDIR="$pkg_stage_dir" \
-        MUSL_STAGE_DIR="$runtime_prefix" \
-        L4DIR="$l4_root"
-      runtime_prefix="$pkg_stage_dir"
-    fi
     local -a stage_dirs=()
     local candidate
-    declare -A subdirs_present=()
     for candidate in "$runtime_prefix/lib" "$runtime_prefix/lib64"; do
       if [ -d "$candidate" ]; then
         stage_dirs+=("$candidate")
-        subdirs_present["$(basename "$candidate")"]=1
       fi
     done
 
@@ -1496,19 +976,14 @@ EOF
 
     declare -A staged_files=()
     declare -A staged_links=()
-    declare -A staged_file_subdirs=()
-    declare -A staged_link_subdirs=()
-    local pattern stage_dir subdir
+    local pattern stage_dir
     for stage_dir in "${stage_dirs[@]}"; do
-      subdir="$(basename "$stage_dir")"
       for pattern in "${patterns[@]}"; do
         while IFS= read -r -d '' sofile; do
           staged_files["$sofile"]=1
-          staged_file_subdirs["$sofile"]="$subdir"
         done < <(find "$stage_dir" -maxdepth 1 -type f -name "$pattern" -print0)
         while IFS= read -r -d '' solink; do
           staged_links["$solink"]=1
-          staged_link_subdirs["$solink"]="$subdir"
         done < <(find "$stage_dir" -maxdepth 1 -type l -name "$pattern" -print0)
       done
     done
@@ -1518,33 +993,24 @@ EOF
     fi
 
     echo "Staging $component shared libraries for $arch"
-
-    local -a sorted_subdirs=()
-    mapfile -t sorted_subdirs < <(printf '%s\n' "${!subdirs_present[@]}" | sort)
-    local dest_subdir
-    for dest_subdir in "${sorted_subdirs[@]}"; do
-      mkdir -p "config/lsb_root/$dest_subdir" "config/lsb_root/usr/$dest_subdir"
-      debugfs -w -R "mkdir /$dest_subdir" "$lsb_img" >/dev/null || true
-      debugfs -w -R "mkdir /usr/$dest_subdir" "$lsb_img" >/dev/null || true
-    done
+    mkdir -p config/lsb_root/lib config/lsb_root/usr/lib
+    debugfs -w -R "mkdir /lib" "$lsb_img" >/dev/null || true
+    debugfs -w -R "mkdir /usr/lib" "$lsb_img" >/dev/null || true
 
     local -a sorted_files=()
     mapfile -t sorted_files < <(printf '%s\n' "${!staged_files[@]}" | sort)
-    local sofile base subdir_path dest_dir usr_dest_dir
+    local sofile base
     for sofile in "${sorted_files[@]}"; do
       [ -n "$sofile" ] || continue
       base="$(basename "$sofile")"
-      subdir_path="${staged_file_subdirs[$sofile]}"
-      dest_dir="config/lsb_root/$subdir_path"
-      usr_dest_dir="config/lsb_root/usr/$subdir_path"
-      cp "$sofile" "$dest_dir/$base"
-      chmod 0644 "$dest_dir/$base"
-      debugfs -w -R "rm /$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "write $sofile /$subdir_path/$base" "$lsb_img" >/dev/null
-      debugfs -w -R "set_inode_field /$subdir_path/$base mode 0100644" "$lsb_img" >/dev/null
-      ln -sf "../$subdir_path/$base" "$usr_dest_dir/$base"
-      debugfs -w -R "rm /usr/$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../$subdir_path/$base /usr/$subdir_path/$base" "$lsb_img" >/dev/null || true
+      cp "$sofile" "config/lsb_root/lib/$base"
+      chmod 0644 "config/lsb_root/lib/$base"
+      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "write $sofile /lib/$base" "$lsb_img" >/dev/null
+      debugfs -w -R "chmod 0644 /lib/$base" "$lsb_img" >/dev/null
+      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
     done
 
     local -a sorted_links=()
@@ -1554,34 +1020,20 @@ EOF
       [ -n "$solink" ] || continue
       base="$(basename "$solink")"
       target="$(readlink "$solink")"
-      subdir_path="${staged_link_subdirs[$solink]}"
-      dest_dir="config/lsb_root/$subdir_path"
-      usr_dest_dir="config/lsb_root/usr/$subdir_path"
-      ln -sf "$target" "$dest_dir/$base"
-      debugfs -w -R "rm /$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink $target /$subdir_path/$base" "$lsb_img" >/dev/null || true
-      ln -sf "../$subdir_path/$base" "$usr_dest_dir/$base"
-      debugfs -w -R "rm /usr/$subdir_path/$base" "$lsb_img" >/dev/null 2>&1 || true
-      debugfs -w -R "symlink ../$subdir_path/$base /usr/$subdir_path/$base" "$lsb_img" >/dev/null || true
+      ln -sf "$target" "config/lsb_root/lib/$base"
+      debugfs -w -R "rm /lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink $target /lib/$base" "$lsb_img" >/dev/null || true
+      ln -sf "../lib/$base" "config/lsb_root/usr/lib/$base"
+      debugfs -w -R "rm /usr/lib/$base" "$lsb_img" >/dev/null 2>&1 || true
+      debugfs -w -R "symlink ../lib/$base /usr/lib/$base" "$lsb_img" >/dev/null || true
     done
   }
 
-  for component in "${STAGED_COMPONENTS[@]}"; do
+  for component in "${SYSTEMD_COMPONENTS[@]}"; do
     if ! should_build_component "$component"; then
       continue
     fi
     case "$component" in
-      musl)
-        stage_component_runtime_libraries "$component" "arm64" \
-          "ld-musl-*.so*" \
-          "libc.so*" \
-          "libpthread.so*" \
-          "libm.so*" \
-          "libdl.so*" \
-          "librt.so*" \
-          "libresolv.so*" \
-          "libutil.so*"
-        ;;
       libcap)
         stage_component_runtime_libraries "$component" "arm64" "libcap.so*" "libpsx.so*"
         ;;
@@ -1594,22 +1046,23 @@ EOF
     esac
   done
 
+  # Install systemd unit files into the image
   if should_build_component "systemd"; then
     units_dir="config/systemd"
     if [ -d "$units_dir" ]; then
       mkdir -p config/lsb_root/lib/systemd/system
       debugfs -w -R "mkdir /lib/systemd/system" "$lsb_img" >/dev/null || true
-      local unit base
       for unit in "$units_dir"/*.service; do
         [ -f "$unit" ] || continue
         base="$(basename "$unit")"
         cp "$unit" config/lsb_root/lib/systemd/system/
         debugfs -w -R "write $unit /lib/systemd/system/$base" "$lsb_img" >/dev/null
-        debugfs -w -R "set_inode_field /lib/systemd/system/$base mode 0100644" "$lsb_img" >/dev/null
+        debugfs -w -R "chmod 0644 /lib/systemd/system/$base" "$lsb_img" >/dev/null
       done
     fi
   fi
 
+  # Enable services
   enable_service() {
     local name="$1"
     local unit="config/systemd/${name}.service"
@@ -1628,61 +1081,11 @@ EOF
     enable_service bash
   fi
 
-  COMPONENT_BUILD_NOTE="created"
-  return 0
-}
-
-run_component_build "musl" build_musl_component
-
-if (( BUILD_FAILURE_COUNT == 0 )); then
-  prepare_rust_musl_environment
-
-  # Build the Rust libc crate so other crates can link against it
-  cargo build -p l4re-libc --release
-
-  # Ensure Rust crates pick up the freshly built static libc
-  if [ -n "${LIBRARY_PATH:-}" ]; then
-    LIBRARY_PATH="$(pwd)/target/release:${LIBRARY_PATH}"
-  else
-    LIBRARY_PATH="$(pwd)/target/release"
-  fi
-  export LIBRARY_PATH
-fi
-
-run_component_build "bash" build_bash_component
-run_component_build "libcap" build_libcap_component
-run_component_build "libcrypt" build_libcrypt_component
-run_component_build "libblkid" build_libblkid_component
-run_component_build "libgcrypt" build_libgcrypt_component
-run_component_build "libzstd" build_libzstd_component
-run_component_build "systemd" build_systemd_component
-
-if (( BUILD_FAILURE_COUNT > 0 )); then
-  echo "One or more external component builds failed; skipping remaining build steps."
-  if [[ -z "${BUILD_RESULTS[lsb_root]+set}" ]]; then
-    if should_build_component "lsb_root"; then
-      BUILD_RESULTS["lsb_root"]="skipped"
-      BUILD_NOTES["lsb_root"]="skipped (previous failures)"
-    else
-      BUILD_RESULTS["lsb_root"]="skipped"
-      BUILD_NOTES["lsb_root"]="not selected"
-    fi
-  fi
-else
-  echo "######### EXTERNAL BUILD DONE ###############"
-
-  # Build the tree including libc, Leo, and Rust crates
-  gmake
-
-  run_component_build "lsb_root" build_lsb_root_component
-
   # Collect key build artifacts
   stage_bootable_images() {
     local source_root="obj/l4"
     local distribution_dir="distribution"
     local distribution_images_dir="$distribution_dir/images"
-    local staged_rootfs_source="${ARTIFACTS_DIR:-out}/images/lsb_root.img"
-    local staged_rootfs_dest="$distribution_images_dir/lsb_root.img"
 
     mkdir -p "$distribution_images_dir"
 
@@ -1690,25 +1093,12 @@ else
       return
     fi
 
-    if [ -f "$staged_rootfs_source" ]; then
-      if [ "$staged_rootfs_source" -ef "$staged_rootfs_dest" ]; then
-        :
-      else
-        echo "Staging root filesystem $(basename "$staged_rootfs_source") into $distribution_images_dir"
-        cp -f "$staged_rootfs_source" "$staged_rootfs_dest"
-      fi
-    else
-      echo "Warning: root filesystem image not found at $staged_rootfs_source; skipping staging" >&2
-    fi
-
     local -a images=()
     while IFS= read -r -d '' image; do
       images+=("$image")
-    done < <(find "$source_root" \
-      -path '*/images/*' \
+    done < <(find "$source_root" -type f \
       \( -name '*.elf' -o -name '*.uimage' \) \
-      \( -type f -o -type l \) \
-      -print0 2>/dev/null)
+      -path '*/images/*' -print0 2>/dev/null)
 
     if (( ${#images[@]} == 0 )); then
       return
@@ -1727,29 +1117,15 @@ else
       done | sort -n -k1,1 -k2
     )
 
-    local entry file source_path resolved base dest_path
+    local entry file base dest_path
     for entry in "${sorted_entries[@]}"; do
       file="${entry#*$'\t'}"
       [ -n "$file" ] || continue
-      source_path="$file"
-      if [ -L "$file" ]; then
-        if resolved=$(resolve_path "$file" 2>/dev/null); then
-          source_path="$resolved"
-        else
-          echo "Warning: unable to resolve symlink $file; skipping"
-          continue
-        fi
-      fi
-
-      base="$(basename "$source_path")"
+      base="$(basename "$file")"
       dest_path="$distribution_images_dir/$base"
 
-      if [ "$source_path" != "$file" ]; then
-        echo "Staging image $base from $source_path (via $file) into $distribution_images_dir"
-      else
-        echo "Staging image $base from $source_path into $distribution_images_dir"
-      fi
-      cp -f "$source_path" "$dest_path"
+      echo "Staging image $base from $file into $distribution_images_dir"
+      cp -f "$file" "$dest_path"
     done
   }
 

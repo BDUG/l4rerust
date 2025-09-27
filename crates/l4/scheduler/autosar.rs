@@ -58,7 +58,8 @@ impl AutosarScheduler {
         let prio = self.tasks[&id].current_priority;
         let pos = self
             .ready
-            .partition_point(|tid| self.tasks[tid].current_priority > prio);
+            .binary_search_by_key(&prio, |tid| self.tasks[tid].current_priority)
+            .unwrap_or_else(|e| e);
         self.ready.insert(pos, id);
     }
 
@@ -86,7 +87,8 @@ impl AutosarScheduler {
     }
 
     fn run_next(&mut self) {
-        if let Some(next_id) = self.ready.pop() {
+        if let Some(next_id) = self.ready.first().cloned() {
+            self.ready.remove(0);
             self.current = Some(next_id);
             #[cfg(not(test))]
             unsafe {
@@ -116,7 +118,8 @@ impl AutosarScheduler {
             let prio = self.tasks[&task].current_priority;
             let pos = m
                 .waiters
-                .partition_point(|tid| self.tasks[tid].current_priority > prio);
+                .binary_search_by_key(&prio, |tid| self.tasks[tid].current_priority)
+                .unwrap_or_else(|e| e);
             m.waiters.insert(pos, task);
             let owner = m.owner.unwrap();
             {
@@ -137,7 +140,8 @@ impl AutosarScheduler {
     pub fn unlock_mutex(&mut self, task: usize, mutex: usize) {
         if let Some(m) = self.mutexes.get_mut(&mutex) {
             if m.owner == Some(task) {
-                if let Some(next) = m.waiters.pop() {
+                if let Some(next) = m.waiters.first().cloned() {
+                    m.waiters.remove(0);
                     m.owner = Some(next);
                     self.tasks
                         .get_mut(&next)
@@ -157,7 +161,7 @@ impl AutosarScheduler {
                     self.tasks[&task].base_priority,
                     |p, &m_id| {
                         if let Some(mstate) = self.mutexes.get(&m_id) {
-                            if let Some(waiter) = mstate.waiters.last() {
+                            if let Some(waiter) = mstate.waiters.first() {
                                 min(p, self.tasks[waiter].current_priority)
                             } else {
                                 p
@@ -175,7 +179,7 @@ impl AutosarScheduler {
                     self.ready.retain(|&tid| tid != task);
                     self.insert_ready_sorted(task);
                 } else if self.current == Some(task) {
-                    if let Some(&next_id) = self.ready.last() {
+                    if let Some(&next_id) = self.ready.first() {
                         let next_prio = self.tasks[&next_id].current_priority;
                         if next_prio < self.tasks[&task].current_priority {
                             self.preempt();

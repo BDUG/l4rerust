@@ -8,10 +8,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/common_build.sh
 source "$SCRIPT_DIR/common_build.sh"
-REPO_ROOT="$(resolve_path "$SCRIPT_DIR/..")"
-cd "$REPO_ROOT"
-
-sync_cross_compile_variables
 
 # Handle optional non-interactive mode which runs both config and setup in
 # one go. When invoked as `scripts/setup.sh --non-interactive` the script will skip
@@ -27,7 +23,7 @@ if [ "$cmd" != "clean" ]; then
   "$SCRIPT_DIR/setup_l4re_env.sh"
 
   if ! command -v ham >/dev/null 2>&1; then
-    HAM_BIN="$(resolve_path "$SCRIPT_DIR/../ham/ham")"
+    HAM_BIN="$(resolve_path "$SCRIPT_DIR/ham/ham")"
     if [ -x "$HAM_BIN" ]; then
       PATH="$(dirname "$HAM_BIN"):$PATH"
       export PATH
@@ -38,14 +34,8 @@ if [ "$cmd" != "clean" ]; then
   fi
 
   (
-    cd "$SCRIPT_DIR/../src" || exit 1
-
-    if [ ! -d .ham ] || [ ! -f .ham/manifests_json ]; then
-      ham init -u https://github.com/kernkonzept/manifest.git
-    else
-      echo "ham manifest already initialized, skipping init"
-    fi
-
+    cd "$SCRIPT_DIR/../src" &&
+    ham init -u https://github.com/kernkonzept/manifest.git &&
     if ham sync l4re-core fiasco; then
       :
     else
@@ -54,61 +44,10 @@ if [ "$cmd" != "clean" ]; then
       l4_dir="l4"
       l4re_core_dir="l4re-core"
       if [ -d "$fiasco_dir" ] && { [ -d "$l4_dir" ] || [ -d "$l4re_core_dir" ]; }; then
-        missing_artifacts=()
-
-        if [ ! -f "$fiasco_dir/Makefile" ]; then
-          missing_artifacts+=("src/$fiasco_dir/Makefile")
-        fi
-
-        l4_root=""
-        if [ -d "$l4_dir" ]; then
-          l4_root="$l4_dir"
-        elif [ -d "$l4re_core_dir/src/l4" ]; then
-          l4_root="$l4re_core_dir/src/l4"
-        fi
-
-        if [ -n "$l4_root" ]; then
-          for artifact in Makefile conf/Makeconf mk/Makeconf; do
-            if [ ! -e "$l4_root/$artifact" ]; then
-              missing_artifacts+=("src/$l4_root/$artifact")
-            fi
-          done
-        else
-          missing_artifacts+=("src/$l4_dir")
-        fi
-
-        if [ ${#missing_artifacts[@]} -eq 0 ]; then
-          echo "ham sync reported failure but components already installed, skipping."
-        else
-          echo "ERROR: ham sync failed and required artifacts are missing:" >&2
-          for artifact in "${missing_artifacts[@]}"; do
-            echo "  - $artifact" >&2
-          done
-          echo "The previous ham run did not finish successfully. Please resolve the sync issue and rerun ham." >&2
-          exit "$sync_status"
-        fi
+        echo "ham sync reported failure but components already installed, skipping."
       else
         exit "$sync_status"
       fi
-    fi
-
-    fiasco_patch_dir="$SCRIPT_DIR/patches/fiasco"
-    if [ -d "$fiasco_patch_dir" ] && [ -d fiasco ]; then
-      (
-        cd fiasco
-        for patch_file in "$fiasco_patch_dir"/*.patch; do
-          [ -e "$patch_file" ] || continue
-
-          if patch -p1 -N --dry-run -s <"$patch_file"; then
-            patch -p1 -N <"$patch_file"
-          elif patch -p1 -R --dry-run -s <"$patch_file"; then
-            echo "Patch already applied, skipping: $(basename "$patch_file")"
-          else
-            echo "Failed to apply patch: $patch_file" >&2
-            exit 1
-          fi
-        done
-      )
     fi
   )
 fi
@@ -133,8 +72,6 @@ if [ "$cmd" != "clean" ] && [ "$non_interactive" -eq 0 ]; then
   fi
 fi
 
-sync_cross_compile_variables
-
 export CROSS_COMPILE=${CROSS_COMPILE:-}
 CC=${CC:-${CROSS_COMPILE}g++}
 CXX=${CXX:-${CROSS_COMPILE}g++}
@@ -151,10 +88,13 @@ write_config()
   mkdir -p obj
   echo '# snapshot build configuration' > obj/.config
 
-  for c in CONF_DO_ARM64 \
+  for c in CONF_DO_ARM \
+           CONF_DO_ARM_VIRT_PL2 \
+           CONF_DO_ARM64 \
            CONF_DO_ARM64_VIRT_EL2 \
+           CONF_FAILED_ARM \
            CONF_FAILED_ARM64 \
-           CROSS_COMPILE \
+           CROSS_COMPILE_ARM \
            CROSS_COMPILE_ARM64 \
   ; do
     local v=$(eval echo \$$c)
@@ -164,170 +104,24 @@ write_config()
   return 0
 }
 
-clean_directory_except()
-{
-  local dir="$1"
-  shift
-
-  if [ ! -d "$dir" ]; then
-    return 0
-  fi
-
-  local nullglob_was_set=0
-  local dotglob_was_set=0
-  if shopt -q nullglob; then
-    nullglob_was_set=1
-  fi
-  if shopt -q dotglob; then
-    dotglob_was_set=1
-  fi
-  shopt -s nullglob dotglob
-
-  local entry
-  local base
-  local preserve
-  local should_preserve
-  for entry in "$dir"/*; do
-    base="$(basename "$entry")"
-    should_preserve=false
-    for preserve in "$@"; do
-      if [ "$base" = "$preserve" ]; then
-        should_preserve=true
-        break
-      fi
-    done
-    if [ "$should_preserve" = false ]; then
-      rm -rf "$entry"
-    fi
-  done
-
-  if [ "$nullglob_was_set" -eq 0 ]; then
-    shopt -u nullglob
-  fi
-  if [ "$dotglob_was_set" -eq 0 ]; then
-    shopt -u dotglob
-  fi
-}
-
-clean_lsb_root_directory()
-{
-  local lsb_root_dir="config/lsb_root"
-
-  if [ ! -d "$lsb_root_dir" ]; then
-    return
-  fi
-
-  # Remove any top-level entries other than the README placeholder and the
-  # tracked lib directory that holds service definitions.
-  clean_directory_except "$lsb_root_dir" README lib
-
-  local lib_dir="$lsb_root_dir/lib"
-  if [ ! -d "$lib_dir" ]; then
-    return
-  fi
-
-  # Drop everything under lib/ except for the systemd hierarchy we keep under
-  # version control.
-  clean_directory_except "$lib_dir" systemd
-
-  local systemd_dir="$lib_dir/systemd"
-  if [ ! -d "$systemd_dir" ]; then
-    return
-  fi
-
-  # Prune entries under lib/systemd that are not part of the tracked
-  # lib/systemd/system subtree.
-  clean_directory_except "$systemd_dir" system
-
-  local systemd_units_dir="$systemd_dir/system"
-  if [ ! -d "$systemd_units_dir" ]; then
-    return
-  fi
-
-  local -a preserved_units=()
-  if [ -d "config/systemd" ]; then
-    local unit_path
-    local unit_name
-    for unit_path in config/systemd/*; do
-      [ -e "$unit_path" ] || continue
-      unit_name="$(basename "$unit_path")"
-      local already_present=false
-      local existing
-      for existing in "${preserved_units[@]}"; do
-        if [ "$existing" = "$unit_name" ]; then
-          already_present=true
-          break
-        fi
-      done
-      if [ "$already_present" = false ]; then
-        preserved_units+=("$unit_name")
-      fi
-    done
-  fi
-
-  if command -v git >/dev/null 2>&1 &&
-     git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    local tracked_path
-    local tracked_name
-    while IFS= read -r tracked_path; do
-      [ -n "$tracked_path" ] || continue
-      tracked_name="$(basename "$tracked_path")"
-      local already_present=false
-      local existing
-      for existing in "${preserved_units[@]}"; do
-        if [ "$existing" = "$tracked_name" ]; then
-          already_present=true
-          break
-        fi
-      done
-      if [ "$already_present" = false ]; then
-        preserved_units+=("$tracked_name")
-      fi
-    done < <(git ls-files -- "$systemd_units_dir" 2>/dev/null || true)
-  fi
-
-  clean_directory_except "$systemd_units_dir" "${preserved_units[@]}"
-}
-
-clean_rust_artifacts()
-{
-  local repo_root="${REPO_ROOT:-$(pwd)}"
-  local -a search_roots=(
-    "$repo_root/src"
-    "$repo_root/crates"
-    "$repo_root/tools"
-  )
-
-  local root
-  for root in "${search_roots[@]}"; do
-    [ -d "$root" ] || continue
-
-    while IFS= read -r -d '' lock_file; do
-      if [ "$lock_file" != "$repo_root/Cargo.lock" ]; then
-        rm -f "$lock_file"
-      fi
-    done < <(find "$root" -type f -name Cargo.lock -print0)
-
-    while IFS= read -r -d '' target_dir; do
-      rm -rf "$target_dir"
-    done < <(find "$root" -type d -name target -print0)
-  done
-}
-
 do_clean()
 {
-  # Remove build artifacts and staged directories created by the build scripts
+  # same as in Makefile
   rm -rf obj
-  rm -rf out distribution
-  rm -rf config/pkg_staging
-  clean_rust_artifacts
-  clean_lsb_root_directory
 }
 
 do_config()
 {
   if [ -n "$SETUP_CONFIG_ALL" ]; then
+    CONF_DO_ARM=1
     CONF_DO_ARM64=1
+
+    CONF_DO_ARM_VIRT_PL2=1
+    CONF_DO_ARM_RPIZ=0
+    CONF_DO_ARM_RPI3=0
+    CONF_DO_ARM_RPI4=0
+    CONF_DO_ARM_IMX6UL_PL1=0
+    CONF_DO_ARM_IMX6UL_PL2=0
     CONF_DO_ARM64_VIRT_EL2=0
     CONF_DO_ARM64_RCAR3=0
     CONF_DO_ARM64_RPI3=0
@@ -355,6 +149,7 @@ do_config()
 	 5 60 \
       --and-widget --begin 9 10 \
         --checklist "Select Targets to build:" 12 60 5 \
+         arm       "ARM (platform selection follows)"          off \
          arm64     "ARM64 / AARCH64"                           off \
          mips      "MIPS"                                      off \
          2> $tmpfile
@@ -374,9 +169,43 @@ do_config()
       # fixup for older dialogs
       [ "${e#\"}" = "$e" ] && e="\"$e\""
       case "$e" in
-        \"arm64\") CONF_DO_ARM64=1 ;;
+	\"arm\") CONF_DO_ARM=1 ;;
+	\"arm64\") CONF_DO_ARM64=1 ;;
       esac
     done
+
+    if [ -n "$CONF_DO_ARM" ]; then
+      dialog \
+	--visit-items \
+	--begin 2 10 \
+	  --infobox \
+	   "The list of choices represents a popular set of target platforms. Many more are available." \
+	   5 60 \
+	--and-widget --begin 9 10 \
+	  --checklist "Select ARM Targets to build:" 12 60 5 \
+	   arm-virt-pl2    "QEMU Virt Platform"  on \
+	   arm-rpiz        "Raspberry Pi Zero"   off \
+	   arm-rpi3        "Raspberry Pi 3"      off \
+	   arm-rpi4        "Raspberry Pi 4"      off \
+	   arm-imx6ul-pl1  "NXP i.MX6UL/ULL"     off \
+	   arm-imx6ul-pl2  "NXP i.MX6UL/ULL Virtualization" off \
+	   2> $tmpfile
+
+      result=$(cat $tmpfile)
+
+      for e in $result; do
+	# fixup for older dialogs
+	[ "${e#\"}" = "$e" ] && e="\"$e\""
+	case "$e" in
+	  \"arm-virt-pl2\")   CONF_DO_ARM_VIRT_PL2=1 ;;
+	  \"arm-rpiz\")       CONF_DO_ARM_RPIZ=1 ;;
+	  \"arm-rpi3\")       CONF_DO_ARM_RPI3=1 ;;
+	  \"arm-rpi4\")       CONF_DO_ARM_RPI4=1 ;;
+	  \"arm-imx6ul-pl1\") CONF_DO_ARM_IMX6UL_PL1=1 ;;
+	  \"arm-imx6ul-pl2\") CONF_DO_ARM_IMX6UL_PL2=1 ;;
+	esac
+      done
+    fi
 
     if [ -n "$CONF_DO_ARM64" ]; then
       dialog \
@@ -385,8 +214,8 @@ do_config()
 	  --infobox \
 	   "The list of choices represents a popular set of target platforms. Many more are available." \
 	   5 60 \
-        --and-widget --begin 9 10 \
-          --checklist "Select ARM64 Targets to build:" 11 60 4 \
+	--and-widget --begin 9 10 \
+	  --checklist "Select ARM Targets to build:" 11 60 4 \
 	   arm64-virt-el2  "QEMU Virt Platform"  on \
 	   arm64-rpi3      "Raspberry Pi 3"      off \
 	   arm64-rpi4      "Raspberry Pi 4"      off \
@@ -437,13 +266,18 @@ do_config()
       done
     fi
 
-    if [ -n "$CONF_DO_ARM64" ]; then
-      local default_cross_dialog="${CROSS_COMPILE:-aarch64-linux-gnu-}"
+    if [ -n "$CONF_DO_ARM" ]; then
       dialog --no-mouse --visit-items \
-        --inputbox "Cross compiler prefix (CROSS_COMPILE)" 8 70 "$default_cross_dialog" \
-        2> $tmpfile
-      CROSS_COMPILE=$(cat $tmpfile)
-      sync_cross_compile_variables
+	--inputbox "ARM cross compiler prefix (CROSS_COMPILE)" 8 70 "arm-linux-gnueabihf-" \
+	2> $tmpfile
+      CROSS_COMPILE_ARM=$(cat $tmpfile)
+    fi
+
+    if [ -n "$CONF_DO_ARM64" ]; then
+      dialog --no-mouse --visit-items \
+	--inputbox "AARCH64 cross compiler prefix (CROSS_COMPILE)" 8 70 "aarch64-elf-" \
+	2> $tmpfile
+      CROSS_COMPILE_ARM64=$(cat $tmpfile)
     fi
 
     if [ -n "$CONF_DO_MIPS32R2" ]; then
@@ -492,11 +326,21 @@ load_config()
   fi
 
   . obj/.config
-  sync_cross_compile_variables
 }
 
 redo_config()
 {
+  if [ -n "$CONF_FAILED_ARM" ]; then
+    unset CONF_DO_ARM
+    add_to_config "unset CONF_DO_ARM"
+    unset CONF_DO_ARM_VIRT_PL2
+    unset CONF_DO_ARM_RPIZ
+    unset CONF_DO_ARM_RPI3
+    unset CONF_DO_ARM_RPI4
+    unset CONF_DO_ARM_IMX6UL_PL1
+    unset CONF_DO_ARM_IMX6UL_PL2
+  fi
+
   if [ -n "$CONF_FAILED_UX" ]; then
     unset CONF_DO_UX
     add_to_config "unset CONF_DO_UX"
@@ -619,26 +463,12 @@ add_gen()
   Makeconf_added_gen+=("$1")
 }
 
-append_qemu_option()
-{
-  local file="$1"
-  local option="$2"
-
-  if [ -f "$file" ] && grep -F -q -- "$option" "$file"; then
-    return
-  fi
-
-  echo "QEMU_OPTIONS += $option" >> "$file"
-}
-
 add_std_qemu_options()
 {
   for f in "${Makeconf_added_qemu_std[@]}"; do
     [ "$f" = "$1" ] && { add_gen "$1"; return; }
   done
-  append_qemu_option "$1" "-display none"
-  append_qemu_option "$1" "-serial stdio"
-  append_qemu_option "$1" "-monitor none"
+  echo "QEMU_OPTIONS += -serial stdio" >> "$1"
   Makeconf_added_qemu_std+=("$1")
 
   add_gen "$1"
@@ -697,6 +527,7 @@ check_tools()
     exit 1
   fi
 
+  check_cross_tools "ARM"      "$CONF_DO_ARM"      CONF_FAILED_ARM      "$CROSS_COMPILE_ARM"
   check_cross_tools "ARM64"    "$CONF_DO_ARM64"    CONF_FAILED_ARM64    "$CROSS_COMPILE_ARM64"
 
   if [ -n "$CONF_DO_UX" ]; then
@@ -714,6 +545,7 @@ check_tools()
 # Optional tools
   echo "Checking optional programs and tools"
   tools_optional="doxygen"
+  [ "$CONF_DO_ARM" ] && tools_needed="$tools_needed qemu-system-arm"
   for t in $tools_optional; do
     result="ok"
     if ! check_tool $t; then
@@ -732,12 +564,14 @@ check_tools()
 
 do_setup()
 {
+  [ "$CONF_DO_ARM_VIRT_PL2" ] && fiasco_configs="$fiasco_configs arm-virt-pl2"
   [ "$CONF_DO_ARM64_VIRT_EL2" ] && fiasco_configs="$fiasco_configs arm64-virt-el2"
 
   get_fiasco_dir()
   {
     case "$1" in
       arm64-virt-el2) echo "arm64-virt-el2" ;;
+      arm-virt-pl2) echo "arm-virt-pl2" ;;
       *) return 1 ;;
     esac
   }
@@ -747,6 +581,8 @@ do_setup()
     case "$1" in
       arm64-virt-el2|arm64-rcar3|arm64-rpi3|arm64-rpi4|arm64-s32|arm64-zynqmp)
         echo "$CROSS_COMPILE_ARM64" ;;
+      arm-virt-pl2|arm-rpiz|arm-rpi3|arm-rpi4|arm-imx6ul|arm-imx6ul-pl2)
+        echo "$CROSS_COMPILE_ARM" ;;
       *) return 1 ;;
     esac
   }
@@ -757,11 +593,8 @@ do_setup()
   mkdir -p obj/l4
   mkdir -p obj/l4linux
 
-  echo "Linux directory"
-  
   [ -e src/l4linux ] && l4lx_avail=1
 
-  echo "Fiasco build dirs"
   # Fiasco build dirs
   for b in $fiasco_configs; do
     fiasco_dir=$(get_fiasco_dir "$b") || {
@@ -774,62 +607,111 @@ do_setup()
       echo "Internal error: No cross compiler given for config '$b'"
       exit 1
     fi
-
-    build_dir="obj/fiasco/$fiasco_dir"
-    makeconf_local="$build_dir/Makeconf.local"
-
-    if [ -d "$build_dir" ]; then
-      if [ -f "$build_dir/Makefile" ]; then
-        echo "Fiasco build dir '$build_dir' already exists, skipping creation."
-      else
-        echo "Fiasco build dir '$build_dir' exists but is incomplete, recreating it."
-        rm -rf "$build_dir"
-      fi
-    fi
-
-    if [ ! -d "$build_dir" ]; then
-      (cd src/fiasco && gmake B=../../"$build_dir" T="$b")
-    fi
-
-    if [ ! -d "$build_dir" ]; then
-      echo "ERROR: Failed to prepare Fiasco build directory '$build_dir'" >&2
-      exit 1
-    fi
-
-    if [ -f "$makeconf_local" ]; then
-      sed -i \
-        -e '/^CROSS_COMPILE=/d' \
-        -e '/^CONFIG_HOST_CC=/d' \
-        -e '/^CONFIG_HOST_CXX=/d' \
-        -e '/^HOST_CC[[:space:]]*:?=/d' \
-        -e '/^HOST_CXX[[:space:]]*:?=/d' \
-        "$makeconf_local"
-    fi
-
-    host_cc=${HOST_CC:-$(command -v cc || command -v gcc || true)}
-    host_cxx=${HOST_CXX:-$(command -v c++ || command -v g++ || true)}
-
-    if [ -z "$host_cc" ] || [ -z "$host_cxx" ]; then
-      echo "Missing host compiler toolchain (cc/c++) required for Fiasco build" >&2
-      exit 1
-    fi
-
-    {
-      printf 'CROSS_COMPILE="%s"\n' "$cross_compile"
-      printf 'CONFIG_HOST_CC="%s"\n' "$host_cc"
-      printf 'CONFIG_HOST_CXX="%s"\n' "$host_cxx"
-    } >> "$makeconf_local"
+    (cd src/fiasco && gmake B=../../obj/fiasco/"$fiasco_dir" T="$b")
+    echo CROSS_COMPILE="$cross_compile" >> obj/fiasco/"$fiasco_dir"/Makeconf.local
   done
 
-  echo "Default dirs"
+  # some config tweaking
+  if [ "$CONF_DO_MIPS32R2" ]; then
+    echo '# CONFIG_MP is not set' >> obj/fiasco/mips32-malta/globalconfig.out
+  fi
+
+
+
+
+  # L4Re build dirs with default configs
+  if [ "$CONF_DO_ARM" ]; then
+    gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM \
+      DEFCONFIG=mk/defconfig/config.arm-rv-v7a B=../../obj/l4/arm-v7
+    gmake -C obj/l4/arm-v7 CROSS_COMPILE=$CROSS_COMPILE_ARM oldconfig
+    ARM_L4_DIR_FOR_LX_MP=obj/l4/arm-v7
+    echo CROSS_COMPILE=$CROSS_COMPILE_ARM >> obj/l4/arm-v7/Makeconf.local
+  fi
 
   if [ "$CONF_DO_ARM64" ]; then
     gmake -C src/l4 CROSS_COMPILE=$CROSS_COMPILE_ARM64 DEFCONFIG=mk/defconfig/config.arm64-rv-v8a B=../../obj/l4/arm64
   fi
 
+  if [ "$CONF_DO_MIPS32R2" ]; then
+    cp src/l4/mk/defconfig/config.mips .tmp1
+    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+    echo CONFIG_CPU_MIPS_32R2=y >> .tmp1
+    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 B=../../obj/l4/mips32r2
+    rm .tmp1
+    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R2 >> obj/l4/mips32r2/Makeconf.local
+  fi
+  if [ "$CONF_DO_MIPS32R6" ]; then
+    cp src/l4/mk/defconfig/config.mips .tmp1
+    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+    echo CONFIG_CPU_MIPS_32R6=y >> .tmp1
+    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+      CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 B=../../obj/l4/mips32r6
+    rm .tmp1
+    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS32R6 >> obj/l4/mips32r6/Makeconf.local
+  fi
+  if [ "$CONF_DO_MIPS64R2" ]; then
+    cp src/l4/mk/defconfig/config.mips .tmp1
+    echo CONFIG_PLATFORM_TYPE_malta=y >> .tmp1
+    echo CONFIG_CPU_MIPS_64R2=y >> .tmp1
+    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 B=../../obj/l4/mips64r2
+    rm .tmp1
+    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R2 >> obj/l4/mips64r2/Makeconf.local
+  fi
+  if [ "$CONF_DO_MIPS64R6" ]; then
+    cp src/l4/mk/defconfig/config.mips .tmp1
+    echo CONFIG_PLATFORM_TYPE_boston=y >> .tmp1
+    echo CONFIG_CPU_MIPS_64R6=y >> .tmp1
+    gmake -C src/l4 DEFCONFIG=../../.tmp1 \
+      CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 B=../../obj/l4/mips64r6
+    rm .tmp1
+    echo CROSS_COMPILE=$CROSS_COMPILE_MIPS64R6 >> obj/l4/mips64r6/Makeconf.local
+  fi
+
+  # L4Linux build setup
+  [ -z "$ARM_L4_DIR_FOR_LX_UP" ] && ARM_L4_DIR_FOR_LX_UP=$ARM_L4_DIR_FOR_LX_MP
+
+  if [ -n "$ARM_L4_DIR_FOR_LX_UP" -a -n "$l4lx_avail" ]; then
+
+    mkdir -p obj/l4linux/arm-up
+
+    if [ "$ARM_L4_DIR_FOR_LX_MP" ]; then
+      mkdir -p obj/l4linux/arm-mp
+    fi
+
+    if ! check_eabi_gxx ${CROSS_COMPILE_ARM}g++; then
+      echo "WARNING: L4Linux has been disabled due to a detected old OABI compiler"
+      echo "WARNING: Please update your compiler to an EABI version"
+      add_to_config SKIP_L4LINUX_ARM_BUILD=1
+    fi
+  fi
+
   common_paths=$(pwd)/config:$(pwd)/config/cfg:$(pwd)/src/l4/conf:$(pwd)/src/l4/conf/examples
 
-  echo "ABC ##############"
+  if [ "$CONF_DO_ARM" ]; then
+    local odir=obj/l4/arm-v7
+    local Mboot=$odir/conf/Makeconf.boot
+    mkdir -p $odir/conf
+
+    if [ "$CONF_DO_ARM_VIRT_PL2" ]; then
+      echo "MODULE_SEARCH_PATH+=$(pwd)/obj/fiasco/arm-virt-pl2:$(pwd)/obj/l4linux/arm-mp:$common_paths" >> $Mboot
+      cat<<EOF >> $Mboot
+QEMU_OPTIONS-arm_virt += -M virt,virtualization=true -m 1024 -cpu cortex-a15 -smp 2
+EOF
+      echo "ENTRY=hello        BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=bash         BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=hello-shared BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-basic     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+      echo "ENTRY=vm-multi     BOOTSTRAP_IMAGE_SUFFIX=arm_virt PT=arm_virt PATH_FIASCO=$(pwd)/obj/fiasco/arm-virt-pl2" >> $odir/.imagebuilds
+    fi
+
+    add_std_qemu_options $Mboot
+    add_nonx86_qemu_options $Mboot
+  fi # ARM
+
+
+
 
   if [ "$CONF_DO_ARM64" ]; then
     local odir=obj/l4/arm64
@@ -878,6 +760,7 @@ case "$cmd" in
      ;;
   clean)
      do_clean
+     rm -rf out distribution
      ;;
   *)
      echo "Call $0 [config|setup|clean|--non-interactive]"

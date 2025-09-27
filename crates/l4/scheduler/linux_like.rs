@@ -55,7 +55,8 @@ impl LinuxLikeScheduler {
         let vr = self.tasks[&id].vruntime;
         let pos = self
             .ready
-            .partition_point(|tid| self.tasks[tid].vruntime > vr);
+            .binary_search_by(|tid| self.tasks[tid].vruntime.cmp(&vr))
+            .unwrap_or_else(|e| e);
         self.ready.insert(pos, id);
     }
 
@@ -81,7 +82,8 @@ impl LinuxLikeScheduler {
     }
 
     fn run_next(&mut self) {
-        if let Some(next) = self.ready.pop() {
+        if let Some(next) = self.ready.first().cloned() {
+            self.ready.remove(0);
             let task = self.tasks.get_mut(&next).unwrap();
             task.remaining = task.slice;
             self.current = Some(next);

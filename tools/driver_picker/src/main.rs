@@ -54,53 +54,7 @@ struct DriverInfo {
     kconfig: PathBuf,
 }
 
-#[derive(Debug, Clone)]
-struct DriverCatalog {
-    by_subsystem: HashMap<String, Vec<DriverInfo>>,
-    by_driver: HashMap<String, Vec<DriverLocation>>,
-}
-
-#[derive(Debug, Clone)]
-struct DriverLocation {
-    subsystem: String,
-    index: usize,
-}
-
-impl DriverCatalog {
-    fn new(by_subsystem: HashMap<String, Vec<DriverInfo>>) -> Self {
-        let mut catalog = DriverCatalog {
-            by_driver: HashMap::new(),
-            by_subsystem,
-        };
-        catalog.rebuild_driver_index();
-        catalog
-    }
-
-    fn rebuild_driver_index(&mut self) {
-        self.by_driver.clear();
-        for (subsystem, drivers) in &self.by_subsystem {
-            for (index, info) in drivers.iter().enumerate() {
-                self.by_driver
-                    .entry(info.symbol.clone())
-                    .or_default()
-                    .push(DriverLocation {
-                        subsystem: subsystem.clone(),
-                        index,
-                    });
-            }
-        }
-    }
-
-    fn by_subsystem(&self) -> &HashMap<String, Vec<DriverInfo>> {
-        &self.by_subsystem
-    }
-
-    fn by_driver(&self) -> &HashMap<String, Vec<DriverLocation>> {
-        &self.by_driver
-    }
-}
-
-fn collect_drivers(linux_src: &Path) -> Result<DriverCatalog> {
+fn collect_drivers(linux_src: &Path) -> Result<HashMap<String, Vec<DriverInfo>>> {
     let drivers_dir = linux_src.join("drivers");
     let mut map: HashMap<String, Vec<DriverInfo>> = HashMap::new();
     let re = Regex::new(r"^config\\s+(\\w+)")?;
@@ -128,21 +82,16 @@ fn collect_drivers(linux_src: &Path) -> Result<DriverCatalog> {
             }
         }
     }
-    Ok(DriverCatalog::new(map))
+    Ok(map)
 }
 
-fn emit_catalog(catalog: &DriverCatalog, format: CatalogFormat) -> Result<()> {
-    let mut subsystems: Vec<&String> = catalog.by_subsystem().keys().collect();
+fn emit_catalog(map: &HashMap<String, Vec<DriverInfo>>, format: CatalogFormat) -> Result<()> {
+    let mut subsystems: Vec<&String> = map.keys().collect();
     subsystems.sort_unstable();
     match format {
         CatalogFormat::Tsv => {
             for subsystem in &subsystems {
-                let mut drivers: Vec<&DriverInfo> = catalog
-                    .by_subsystem()
-                    .get(*subsystem)
-                    .unwrap()
-                    .iter()
-                    .collect();
+                let mut drivers: Vec<&DriverInfo> = map.get(*subsystem).unwrap().iter().collect();
                 drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
                 for driver in drivers {
                     println!("{}\t{}", subsystem, driver.symbol);
@@ -158,12 +107,7 @@ fn emit_catalog(catalog: &DriverCatalog, format: CatalogFormat) -> Result<()> {
 
             let mut entries = Vec::new();
             for subsystem in &subsystems {
-                let mut drivers: Vec<&DriverInfo> = catalog
-                    .by_subsystem()
-                    .get(*subsystem)
-                    .unwrap()
-                    .iter()
-                    .collect();
+                let mut drivers: Vec<&DriverInfo> = map.get(*subsystem).unwrap().iter().collect();
                 drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
                 for driver in drivers {
                     entries.push(CatalogEntry {
@@ -179,13 +123,12 @@ fn emit_catalog(catalog: &DriverCatalog, format: CatalogFormat) -> Result<()> {
 }
 
 fn resolve_driver<'a>(
-    catalog: &'a DriverCatalog,
-    subsystem: Option<&'a str>,
+    map: &'a HashMap<String, Vec<DriverInfo>>,
+    subsystem: Option<&'a String>,
     driver: &str,
 ) -> Result<(&'a str, &'a DriverInfo)> {
     if let Some(subsystem_name) = subsystem {
-        let drivers = catalog
-            .by_subsystem()
+        let drivers = map
             .get(subsystem_name)
             .with_context(|| format!("Subsystem '{}' not found", subsystem_name))?;
         let driver_info = drivers
@@ -197,33 +140,19 @@ fn resolve_driver<'a>(
                     driver, subsystem_name
                 )
             })?;
-        return Ok((subsystem_name, driver_info));
+        return Ok((subsystem_name.as_str(), driver_info));
     }
 
-    let mut found: Option<(&str, &DriverInfo)> = None;
-    let mut count = 0usize;
-    if let Some(locations) = catalog.by_driver().get(driver) {
-        for location in locations {
-            if let Some((subsystem_key, drivers)) = catalog
-                .by_subsystem()
-                .get_key_value(location.subsystem.as_str())
-            {
-                if let Some(driver_info) = drivers.get(location.index) {
-                    if count == 0 {
-                        found = Some((subsystem_key.as_str(), driver_info));
-                    }
-                    count += 1;
-                    if count > 1 {
-                        break;
-                    }
-                }
-            }
+    let mut matches: Vec<(&str, &DriverInfo)> = Vec::new();
+    for (subsystem_name, drivers) in map.iter() {
+        if let Some(driver_info) = drivers.iter().find(|d| d.symbol == driver) {
+            matches.push((subsystem_name.as_str(), driver_info));
         }
     }
 
-    match (found, count) {
-        (Some(entry), 1) => Ok(entry),
-        (_, 0) => bail!("Driver '{}' not found", driver),
+    match matches.len() {
+        0 => bail!("Driver '{}' not found", driver),
+        1 => Ok(matches.remove(0)),
         _ => bail!(
             "Driver '{}' exists in multiple subsystems, please specify --subsystem",
             driver
@@ -325,19 +254,19 @@ fn run_make_depend(linux_src: &Path, driver_dir: &Path) -> Result<Vec<PathBuf>> 
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let catalog = collect_drivers(&args.linux_src)?;
+    let map = collect_drivers(&args.linux_src)?;
 
     if args.list {
-        emit_catalog(&catalog, args.format)?;
+        emit_catalog(&map, args.format)?;
         return Ok(());
     }
 
     if let Some(driver) = &args.driver {
-        let (subsystem, driver_info) = resolve_driver(&catalog, args.subsystem.as_deref(), driver)?;
+        let (subsystem, driver_info) = resolve_driver(&map, args.subsystem.as_ref(), driver)?;
         return extract_driver(&args.linux_src, subsystem, driver_info);
     }
 
-    let mut subsystems: Vec<&String> = catalog.by_subsystem().keys().collect();
+    let mut subsystems: Vec<&String> = map.keys().collect();
     subsystems.sort_unstable();
     let subsystem_labels: Vec<_> = subsystems.iter().map(|s| s.as_str()).collect();
     let subsystem_choice = Select::with_theme(&ColorfulTheme::default())
@@ -346,12 +275,7 @@ fn main() -> Result<()> {
         .default(0)
         .interact()?;
     let subsystem = subsystems[subsystem_choice];
-    let mut drivers: Vec<&DriverInfo> = catalog
-        .by_subsystem()
-        .get(subsystem)
-        .unwrap()
-        .iter()
-        .collect();
+    let mut drivers: Vec<&DriverInfo> = map.get(subsystem).unwrap().iter().collect();
     drivers.sort_unstable_by(|a, b| a.symbol.cmp(&b.symbol));
     let driver_symbols: Vec<_> = drivers.iter().map(|d| d.symbol.as_str()).collect();
     let driver_choice = Select::with_theme(&ColorfulTheme::default())

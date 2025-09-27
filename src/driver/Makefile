@@ -1,3 +1,4 @@
+CROSS_COMPILE ?= $(CROSS_COMPILE_ARM64)
 CROSS_COMPILE ?= aarch64-linux-gnu-
 
 CC := $(CROSS_COMPILE)g++

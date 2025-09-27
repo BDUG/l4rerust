@@ -1,6 +1,4 @@
-.DEFAULT_GOAL := all
-
-all:
+all: 
 	@if [ -d obj ]; then                                           \
 	  $(MAKE) build_all;                                           \
 	else                                                           \
@@ -25,7 +23,7 @@ setup:
 	  echo will take some time \(depending on the speed of your host system, of;    \
 	  echo course\).;                                                               \
 	  echo ;                                                                        \
-          echo Boot-images for ARM64 targets will be placed into obj/l4/arm64/images.;    \
+	  echo Boot-images for ARM targets will be placed into obj/l4/arm-*/images.;    \
 	  echo Boot-images for MIPS targets will be placed into obj/l4/mips32/images.;    \
 	  echo Check obj/l4/.../conf/Makeconf.boot for path configuration during image builds.; \
 	  echo ;                                                                        \
@@ -46,8 +44,24 @@ $(addsuffix /fiasco,$(wildcard obj/fiasco/*)):
 $(addsuffix /l4defs.mk.inc,$(wildcard obj/l4/*)):
 	$(MAKE) -C $(@D)
 
+obj/l4linux/arm-mp/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
+	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
+	                          O=$(abspath $(@D)) arm-mp_defconfig
+	src/l4linux/scripts/config --file $(@D)/.config \
+	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+
+obj/l4linux/arm-up/vmlinux: obj/l4/arm-v7/l4defs.mk.inc
+	+. obj/.config && $(MAKE) -C src/l4linux L4ARCH=arm \
+	                          CROSS_COMPILE=$$CROSS_COMPILE_ARM \
+	                          O=$(abspath $(@D)) arm_defconfig
+	src/l4linux/scripts/config --file $(@D)/.config \
+	                           --set-str L4_OBJ_TREE $(abspath obj/l4/arm-v7)
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM
+
 obj/l4linux/arm64/vmlinux: obj/l4/arm64/l4defs.mk.inc
-        +. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE
+	+. obj/.config && $(MAKE) -C $(@D) CROSS_COMPILE=$$CROSS_COMPILE_ARM64
 
 build_images: build_l4linux build_l4re build_fiasco
 	@echo "=============== Building Images ==============================="
@@ -62,14 +76,14 @@ build_images: build_l4linux build_l4re build_fiasco
 	done	
 	@echo "=============== Build done ===================================="
 
-BASH_ARCHES := arm64
+BASH_ARCHES := arm arm64
 
 bash-image: $(addprefix obj/bash/,$(addsuffix /bash,$(BASH_ARCHES))) build_images
 
 obj/bash/%/bash:
 	@echo "NOT RUN @scripts/build.sh --no-clean"
 
-SYSTEMD_ARCHES := arm64
+SYSTEMD_ARCHES := arm arm64
 
 systemd-image: $(addprefix obj/systemd/,$(addsuffix /systemd,$(SYSTEMD_ARCHES))) build_images
 

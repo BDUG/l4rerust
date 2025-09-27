@@ -63,23 +63,3 @@ EXTERN int l4_sndfpage_add_wu(l4_fpage_t const snd_fpage, unsigned long snd_base
                 l4_msgtag_t *tag, l4_utcb_t *u) {
     return l4_sndfpage_add_u(snd_fpage, snd_base, tag, u);
 }
-
-EXTERN l4_msgtag_t l4_ipc_call_current(l4_cap_idx_t object,
-        l4_msgtag_t tag, l4_timeout_t timeout) {
-    return l4_ipc_call(object, l4_utcb(), tag, timeout);
-}
-
-EXTERN l4_msgtag_t l4_ipc_send_current(l4_cap_idx_t object,
-        l4_msgtag_t tag, l4_timeout_t timeout) {
-    return l4_ipc_send(object, l4_utcb(), tag, timeout);
-}
-
-EXTERN l4_msgtag_t l4_ipc_wait_current(l4_umword_t *label,
-        l4_timeout_t timeout) {
-    return l4_ipc_wait(l4_utcb(), label, timeout);
-}
-
-EXTERN l4_msgtag_t l4_ipc_reply_and_wait_current(l4_msgtag_t tag,
-        l4_umword_t *src, l4_timeout_t timeout) {
-    return l4_ipc_reply_and_wait(l4_utcb(), tag, src, timeout);
-}

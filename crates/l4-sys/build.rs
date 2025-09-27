@@ -1,15 +1,7 @@
-use std::{env, fs};
+use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os != "l4re" {
-        let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-        fs::write(out_path.join("bindings.rs"), "// l4_sys stubs for non-L4Re targets\n")
-            .expect("failed to write stub bindings");
-        return;
-    }
-
     let mut bindings = bindgen::Builder::default()
         .header("bindgen.h")
         .use_core()
