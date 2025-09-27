@@ -148,6 +148,10 @@ main() {
     if [ "$host" != "$build_machine" ]; then
       configure_env+=(
         "ac_cv_exeext="
+        "ac_cv_prog_cc_cross=yes"
+        "ac_cv_prog_cc_works=yes"
+        "ac_cv_prog_cxx_cross=yes"
+        "ac_cv_prog_cxx_works=yes"
       )
     fi
 
