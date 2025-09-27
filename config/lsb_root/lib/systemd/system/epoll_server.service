@@ -1,0 +1,12 @@
+[Unit]
+Description=L4Re Epoll Server
+
+[Service]
+ExecStart=/boot/epoll_server
+Environment="L4_CAP_GLOBAL_EPOLL=global_epoll"
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
