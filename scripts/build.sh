@@ -62,7 +62,7 @@ readonly -a BUILD_COMPONENT_IDS=(
   libzstd
   systemd
   fiasco
-  l4re
+  l4
   image
 )
 
@@ -75,9 +75,18 @@ declare -A BUILD_COMPONENT_LABELS=(
   [libzstd]="Zstandard compression library"
   [systemd]="systemd"
   [fiasco]="Fiasco.OC microkernel"
-  [l4re]="Build the L4Re tree"
+  [l4]="Build the L4Re tree"
   [image]="Generate bootable images"
 )
+
+declare -A BUILD_COMPONENT_ALIASES=(
+  [l4re]=l4
+)
+
+canonical_component() {
+  local component="$1"
+  echo "${BUILD_COMPONENT_ALIASES[$component]:-$component}"
+}
 
 run_component_build() {
   local component="$1"
@@ -140,7 +149,9 @@ EOF
 }
 
 is_valid_component() {
-  local candidate="$1" component
+  local candidate
+  candidate="$(canonical_component "$1")"
+  local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
     if [ "$component" = "$candidate" ]; then
       return 0
@@ -152,6 +163,7 @@ is_valid_component() {
 clear_component_selection() {
   local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    component="$(canonical_component "$component")"
     SHOULD_BUILD["$component"]=0
   done
 }
@@ -159,12 +171,14 @@ clear_component_selection() {
 set_all_components_selected() {
   local component
   for component in "${BUILD_COMPONENT_IDS[@]}"; do
+    component="$(canonical_component "$component")"
     SHOULD_BUILD["$component"]=1
   done
 }
 
 should_build_component() {
   local component="$1"
+  component="$(canonical_component "$component")"
   [[ "${SHOULD_BUILD["$component"]:-0}" == 1 ]]
 }
 
@@ -216,6 +230,7 @@ prompt_component_selection() {
     entry="${entry%\"}"
     entry="${entry#\"}"
     if [ -n "$entry" ]; then
+      entry="$(canonical_component "$entry")"
       _result+=("$entry")
     fi
   done
@@ -323,6 +338,7 @@ if [ "$component_arg_set" = true ]; then
       usage >&2
       exit 1
     fi
+    component="$(canonical_component "$component")"
     if [[ -n "${seen_components["$component"]-}" ]]; then
       continue
     fi
@@ -1205,5 +1221,5 @@ if (( BUILD_FAILURE_COUNT == 0 )); then
   echo "######### EXTERNAL BUILD DONE ###############"
 fi
 
-run_component_build "l4re" build_l4re_component
+run_component_build "l4" build_l4re_component
 run_component_build "image" build_image_component
